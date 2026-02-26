@@ -6,8 +6,10 @@ Drei Scopes mit separaten Qdrant-Collections:
   bob_memory   – Bobs persönliche Erinnerungen
   bnd_memory    – gemeinsamer Haushaltskontext
 
-Schreib- und Leseberechtigungen sind pro Instanz definiert.
-Alle Memory-Operationen werden geloggt (Scope, Ergebnis).
+LLM für Memory-Extraktion: Ollama (kein API-Key nötig).
+Embedder: Ollama bge-m3, Fallback HuggingFace wenn OLLAMA_URL fehlt.
+
+Wenn kein Ollama verfügbar: Memory deaktiviert mit Warn-Log.
 """
 
 import os
@@ -44,60 +46,62 @@ def _get_qdrant_host_port() -> tuple[str, int]:
     return host, port
 
 
-def _build_mem0_config(collection_name: str) -> tuple[dict, int]:
+def _build_mem0_config(collection_name: str) -> Optional[dict]:
     """
     Erstellt vollständige Mem0-Konfiguration für einen Scope.
-    Gibt (config_dict, embedding_dims) zurück.
+    Gibt None zurück wenn keine LLM-Backend verfügbar ist.
+
+    Kein API-Key nötig: LLM und Embeddings laufen über Ollama.
+    Fallback Embedder: HuggingFace (kein LLM-Fallback – ohne LLM kein Memory).
     """
     host, port = _get_qdrant_host_port()
     ollama_url = os.environ.get("OLLAMA_URL", "").strip()
 
-    if ollama_url:
-        embedding_dims = 1024  # bge-m3
-        embedder_cfg = {
+    if not ollama_url:
+        logger.warning(
+            f"[{collection_name}] OLLAMA_URL nicht gesetzt. "
+            "Memory-Extraktion erfordert ein lokales LLM. "
+            "Memory für diesen Scope deaktiviert."
+        )
+        return None
+
+    # Modell für Memory-Extraktion (kleines schnelles Modell reicht)
+    memory_llm = os.environ.get("HAANA_MEMORY_MODEL", "qwen2.5:1.5b")
+
+    config = {
+        "llm": {
+            "provider": "ollama",
+            "config": {
+                "model": memory_llm,
+                "ollama_base_url": ollama_url,
+                "temperature": 0.1,
+            },
+        },
+        "embedder": {
             "provider": "ollama",
             "config": {
                 "model": "bge-m3",
                 "ollama_base_url": ollama_url,
-                "embedding_dims": embedding_dims,
-            },
-        }
-        logger.info(f"[{collection_name}] Embedder: Ollama bge-m3 @ {ollama_url}")
-    else:
-        embedding_dims = 384  # bge-small-en-v1.5
-        embedder_cfg = {
-            "provider": "huggingface",
-            "config": {
-                "model": "BAAI/bge-small-en-v1.5",
-            },
-        }
-        logger.warning(
-            f"[{collection_name}] OLLAMA_URL nicht gesetzt – "
-            "verwende HuggingFace bge-small-en-v1.5 (lokal, langsamer)"
-        )
-
-    config = {
-        "llm": {
-            "provider": "anthropic",
-            "config": {
-                "model": os.environ.get("HAANA_MODEL", "claude-haiku-4-5-20251001"),
-                "temperature": 0.1,
-                "max_tokens": 2000,
+                "embedding_dims": 1024,
             },
         },
-        "embedder": embedder_cfg,
         "vector_store": {
             "provider": "qdrant",
             "config": {
                 "collection_name": collection_name,
                 "host": host,
                 "port": port,
-                "embedding_model_dims": embedding_dims,
+                "embedding_model_dims": 1024,
             },
         },
     }
 
-    return config, embedding_dims
+    logger.debug(
+        f"[{collection_name}] Mem0 config: "
+        f"LLM={memory_llm} @ {ollama_url}, "
+        f"Embedder=bge-m3, Qdrant={host}:{port}"
+    )
+    return config
 
 
 class HaanaMemory:
@@ -106,7 +110,7 @@ class HaanaMemory:
         self.write_scopes = _WRITE_SCOPES.get(instance_name, set())
         self.read_scopes = _READ_SCOPES.get(instance_name, set())
 
-        # Lazy-loaded Memory-Instanzen pro Scope
+        # Lazy-loaded Mem0-Instanzen pro Scope (None = nicht verfügbar)
         self._memories: dict[str, object] = {}
 
         logger.info(
@@ -118,14 +122,18 @@ class HaanaMemory:
     def _get_memory(self, scope: str):
         """Lazy-load einer Mem0 Memory-Instanz für einen Scope."""
         if scope not in self._memories:
+            config = _build_mem0_config(scope)
+            if config is None:
+                self._memories[scope] = None
+                return None
+
             try:
                 from mem0 import Memory
-                config, _ = _build_mem0_config(scope)
                 self._memories[scope] = Memory.from_config(config)
-                logger.info(f"[{self.instance}] Memory-Instanz '{scope}' initialisiert.")
+                logger.info(f"[{self.instance}] Memory-Instanz '{scope}' bereit.")
             except Exception as e:
                 logger.error(
-                    f"[{self.instance}] Memory-Initialisierung '{scope}' fehlgeschlagen: {e}",
+                    f"[{self.instance}] Memory-Init '{scope}' fehlgeschlagen: {e}",
                     exc_info=True,
                 )
                 self._memories[scope] = None
@@ -153,22 +161,23 @@ class HaanaMemory:
                 continue
 
             try:
-                # user_id = scope-Name ohne "_memory" Suffix
                 user_id = scope.replace("_memory", "")
                 results = mem.search(query=query, user_id=user_id, limit=5)
                 for r in results.get("results", []):
-                    # Mem0 v1.0+: Schlüssel ist "memory"
+                    # Mem0 v1.0+: Text unter Schlüssel "memory"
                     content = r.get("memory") or r.get("content", "")
                     score = float(r.get("score", 0))
                     if content:
                         all_results.append((score, scope, content))
             except Exception as e:
-                logger.error(f"[{self.instance}] Memory-Suche in '{scope}' fehlgeschlagen: {e}")
+                logger.error(
+                    f"[{self.instance}] Memory-Suche in '{scope}' fehlgeschlagen: {e}"
+                )
 
         if not all_results:
             return ""
 
-        # Sortiert nach Score (höchster zuerst), maximal 10 Treffer
+        # Nach Score sortieren, maximal 10 Treffer
         all_results.sort(reverse=True)
         lines = [f"[{scope}] {content}" for _, scope, content in all_results[:10]]
         return "\n".join(lines)
@@ -182,7 +191,7 @@ class HaanaMemory:
         """
         Speichert Konversation in einem Scope.
 
-        messages: Liste von {"role": "user"|"assistant", "content": "..."}
+        messages: [{"role": "user"|"assistant", "content": "..."}]
         scope: muss in write_scopes liegen
         Gibt True zurück wenn erfolgreich.
         """
@@ -193,7 +202,7 @@ class HaanaMemory:
         if scope not in self.write_scopes:
             logger.error(
                 f"[{self.instance}] Schreibzugriff auf '{scope}' verweigert "
-                f"(write_scopes={sorted(self.write_scopes)})"
+                f"(erlaubt: {sorted(self.write_scopes)})"
             )
             return False
 
@@ -209,8 +218,8 @@ class HaanaMemory:
                 metadata=metadata or {},
             )
             logger.info(
-                f"[{self.instance}] Memory gespeichert | scope={scope} | "
-                f"user_id={user_id} | result={result}"
+                f"[{self.instance}] Memory gespeichert | "
+                f"scope={scope} | user_id={user_id} | result={result}"
             )
             return True
         except Exception as e:
@@ -227,16 +236,14 @@ class HaanaMemory:
         scope: Optional[str] = None,
     ):
         """
-        Speichert eine abgeschlossene Konversation in Memory.
-
-        scope=None → automatisch den persönlichen Scope der Instanz wählen.
+        Speichert eine abgeschlossene Konversation.
+        scope=None → persönlichen Scope der Instanz automatisch wählen.
         ha-assist und ha-advanced schreiben nie (write_scopes leer).
         """
         if not self.write_scopes:
             return
 
         if scope is None:
-            # Persönlichen Scope bevorzugen (nicht bnd_memory)
             personal = {s for s in self.write_scopes if s != "bnd_memory"}
             scope = next(iter(personal), next(iter(self.write_scopes)))
 

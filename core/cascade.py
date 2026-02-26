@@ -1,64 +1,54 @@
 """
-HAANA LLM-Kaskade – Phase 1 Stub
+HAANA LLM-Kaskade – Stub
 
-Verwaltet LLM-Provider und Failover-Logik.
-Phase 1: nur Anthropic als Primary. Fallback-Logik ist vorbereitet aber inaktiv.
+Der Agent selbst läuft über claude_agent_sdk (Claude Code CLI).
+Diese Datei ist für Komponenten vorgesehen, die direkt eine LLM-API
+brauchen (z.B. zukünftige Fallback-Logik, Anonymisierer-Integration).
+
+Phase 1: nur Logging-Stub, noch nicht in Verwendung.
 
 Erweiterung in späteren Phasen:
-  - Fallback auf MiniMax oder Custom Provider
-  - Anonymisierer vor Cloud-Calls
+  - Fallback auf MiniMax oder Custom Provider (OpenAI-kompatibel)
+  - Anonymisierer vor Cloud-Calls einhängen
   - Tracking von Provider-Fehlern
 """
 
 import os
 import logging
 
-from anthropic import Anthropic
-
 logger = logging.getLogger(__name__)
 
 
-def get_anthropic_client() -> Anthropic:
-    """
-    Gibt einen konfigurierten Anthropic-Client zurück.
-    Phase 1: direkt, kein Failover.
-    """
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise EnvironmentError(
-            "ANTHROPIC_API_KEY ist nicht gesetzt. "
-            "Bitte .env befüllen oder Umgebungsvariable setzen."
-        )
+def get_ollama_base_url() -> str | None:
+    """Gibt die Ollama-URL zurück wenn konfiguriert, sonst None."""
+    url = os.environ.get("OLLAMA_URL", "").strip()
+    return url or None
 
-    # Fallback-Provider geloggt wenn konfiguriert (aber noch nicht aktiv)
-    fallback_url = os.environ.get("FALLBACK_LLM_BASE_URL", "").strip()
-    if fallback_url:
-        logger.info(
-            f"Fallback-LLM konfiguriert: {fallback_url} "
-            "(Phase 1: noch nicht aktiv)"
-        )
-
-    return Anthropic(api_key=api_key)
-
-
-# ── Für spätere Phasen vorbereitet ───────────────────────────────────────────
 
 class LLMCascade:
     """
-    Phase 2+: Failover zwischen mehreren Providern.
+    Phase 2+: Failover zwischen mehreren LLM-Providern.
+
+    Für Komponenten die kein Claude Code SDK nutzen können
+    (z.B. Memory-Extraktion, Embedding, Anonymisierer).
 
     Reihenfolge:
       1. Lokales Ollama (wenn OLLAMA_URL gesetzt)
-      2. Anthropic API (Primary)
-      3. Fallback-LLM (wenn FALLBACK_LLM_* gesetzt)
+      2. Fallback-LLM (wenn FALLBACK_LLM_* gesetzt, OpenAI-kompatibel)
 
     Aktuell: Stub, noch nicht verwendet.
     """
 
     def __init__(self):
-        self.primary = get_anthropic_client()
-        logger.debug("LLMCascade initialisiert (Phase 1: nur Primary aktiv)")
+        self.ollama_url = get_ollama_base_url()
+        fallback_url = os.environ.get("FALLBACK_LLM_BASE_URL", "").strip()
 
-    def create_message(self, **kwargs):
-        """Wrapper um client.messages.create() mit Failover-Hook."""
-        return self.primary.messages.create(**kwargs)
+        if self.ollama_url:
+            logger.info(f"LLMCascade: Ollama @ {self.ollama_url}")
+        if fallback_url:
+            logger.info(f"LLMCascade: Fallback-LLM @ {fallback_url} (noch nicht aktiv)")
+        if not self.ollama_url and not fallback_url:
+            logger.warning(
+                "LLMCascade: Weder OLLAMA_URL noch FALLBACK_LLM_BASE_URL gesetzt. "
+                "Memory-Features benötigen einen lokalen LLM-Provider."
+            )

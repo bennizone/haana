@@ -1,15 +1,30 @@
 """
-HAANA Agent – Phase 1 Basis
+HAANA Agent – Claude Agent SDK Basis
 
-Einfacher Agent-Loop: Nachricht eingehend → Memory → LLM → Tool-Aufruf oder Antwort.
-System-Prompt kommt aus CLAUDE.md der jeweiligen Instanz.
+Verwendet claude_agent_sdk.query() für den Agent-Loop.
+Authentifizierung läuft über die gebundelte Claude Code CLI
+(Claude.ai Subscription oder API-Key in der CLI konfiguriert).
+Kein direkt eingelegter API-Key im Code.
+
+Custom Tools werden als MCP-Server eingebunden (Phase 2+).
 """
 
 import os
+import asyncio
 import logging
 from pathlib import Path
+from typing import Optional
 
-from anthropic import Anthropic
+from claude_agent_sdk import (
+    query,
+    ClaudeAgentOptions,
+    AssistantMessage,
+    ResultMessage,
+    TextBlock,
+    CLINotFoundError,
+    ProcessError,
+    CLIJSONDecodeError,
+)
 from core.memory import HaanaMemory
 
 logger = logging.getLogger(__name__)
@@ -18,159 +33,155 @@ logger = logging.getLogger(__name__)
 class HaanaAgent:
     def __init__(self, instance_name: str):
         self.instance = instance_name
-        self.model = os.environ.get("HAANA_MODEL", "claude-haiku-4-5-20251001")
+        # None → CLI-Default-Modell (abhängig von Subscription/Konfiguration)
+        self.model: Optional[str] = os.environ.get("HAANA_MODEL") or None
+        self.session_id: Optional[str] = None
 
-        # Anthropic-Client
-        self.client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-
-        # System-Prompt aus CLAUDE.md laden
-        # Im Container: /app/CLAUDE.md (via Volume gemountet)
-        # Lokal: instanzen/{name}/CLAUDE.md
+        # Arbeitsverzeichnis = Verzeichnis mit CLAUDE.md der Instanz.
+        # Claude Code CLI lädt CLAUDE.md automatisch als Projektkontext.
         for candidate in [
-            Path("/app/CLAUDE.md"),
-            Path(f"instanzen/{instance_name}/CLAUDE.md"),
+            Path("/app"),                         # Container: CLAUDE.md via Volume
+            Path(f"instanzen/{instance_name}"),   # Lokal: direktes Instanzverzeichnis
         ]:
-            if candidate.exists():
-                self.system_prompt = candidate.read_text(encoding="utf-8")
-                logger.info(f"[{instance_name}] CLAUDE.md geladen: {candidate}")
+            if (candidate / "CLAUDE.md").exists():
+                self.cwd = candidate
+                logger.info(f"[{instance_name}] cwd={self.cwd.resolve()}")
                 break
         else:
             raise FileNotFoundError(
                 f"CLAUDE.md nicht gefunden für Instanz '{instance_name}'. "
-                "Erwartet: /app/CLAUDE.md oder instanzen/{name}/CLAUDE.md"
+                "Erwartet: /app/CLAUDE.md (Container) oder "
+                f"instanzen/{instance_name}/CLAUDE.md (lokal)."
             )
 
-        # Memory
+        # Memory-Layer (Mem0 + Qdrant)
         self.memory = HaanaMemory(instance_name)
 
-        # Tool-Registry: name → callable
-        self.tools: dict[str, callable] = {}
-        self._tool_schemas: list[dict] = []
+        # MCP-Server für Custom Tools (Phase 2+: HA, Trilium, Kalender, ...)
+        # Format: {"server-name": McpServerConfig oder SdkMcpServer}
+        self._mcp_servers: dict = {}
 
-        # Ping-Tool als Strukturtest (Phase 1)
-        self.register_tool(
-            name="ping",
-            fn=lambda message="pong": f"pong: {message}",
-            schema={
-                "description": "Einfaches Test-Tool. Gibt eine Pong-Antwort zurück.",
-                "input_schema": {
-                    "type": "object",
-                    "properties": {
-                        "message": {
-                            "type": "string",
-                            "description": "Optionale Nachricht",
-                        }
-                    },
-                    "required": [],
-                },
-            },
-        )
+        # Erlaubte Built-in-Tools (Phase 1: Basis)
+        self._allowed_tools: list[str] = [
+            "Read",
+            "Write",
+            "Bash",
+            "Glob",
+            "Grep",
+        ]
 
-    def register_tool(self, name: str, fn: callable, schema: dict):
+    # ── Tool-Verwaltung ───────────────────────────────────────────────────────
+
+    def register_mcp_server(self, name: str, server_config: object):
         """
-        Registriert ein Tool.
+        Registriert einen MCP-Server mit Custom Tools.
 
-        schema muss enthalten:
-          - "description": str
-          - "input_schema": dict (JSON Schema)
+        server_config: externes MCP-Server-Dict ({"type": "stdio", ...})
+                       oder In-Process SdkMcpServer (via create_sdk_mcp_server).
         """
-        self.tools[name] = fn
-        self._tool_schemas.append({"name": name, **schema})
-        logger.debug(f"[{self.instance}] Tool registriert: {name}")
+        self._mcp_servers[name] = server_config
+        logger.info(f"[{self.instance}] MCP-Server registriert: {name}")
 
-    def run(
-        self,
-        user_message: str,
-        conversation_history: list[dict] | None = None,
-    ) -> str:
+    def allow_tools(self, tools: list[str]):
+        """Fügt weitere erlaubte Tools hinzu (z.B. MCP-Tools)."""
+        self._allowed_tools.extend(tools)
+        logger.debug(f"[{self.instance}] Tools erweitert: {tools}")
+
+    # ── Haupt-Loop ────────────────────────────────────────────────────────────
+
+    async def run_async(self, user_message: str) -> str:
         """
-        Haupt-Einstiegspunkt.
+        Führt einen Agent-Turn aus.
 
-        1. Relevante Memories suchen
-        2. System-Prompt + Memory-Kontext aufbauen
-        3. Agent-Loop (Tool-Use oder direkte Antwort)
-        4. Konversation in Memory speichern
-        5. Antwort-Text zurückgeben
+        1. Relevante Memories aus Qdrant suchen
+        2. Memory-Kontext dem Prompt voranstellen
+        3. claude_agent_sdk.query() streamen
+        4. Text aus AssistantMessage-Blöcken sammeln
+        5. Session-ID für Kontinuität merken
+        6. Konversation in Memory speichern
         """
-        if conversation_history is None:
-            conversation_history = []
-
         # Memory: relevanten Kontext laden
         memory_context = self.memory.search(user_message)
 
-        system = self.system_prompt
+        # Prompt aufbauen: Memory als getaggter Block voranstellen
         if memory_context:
-            system += f"\n\n## Relevante Erinnerungen\n{memory_context}"
-            logger.debug(f"[{self.instance}] Memory-Kontext angehängt ({len(memory_context)} Zeichen)")
+            prompt = (
+                f"<relevante_erinnerungen>\n{memory_context}\n</relevante_erinnerungen>\n\n"
+                f"{user_message}"
+            )
+            logger.debug(
+                f"[{self.instance}] Memory-Kontext: {len(memory_context)} Zeichen"
+            )
+        else:
+            prompt = user_message
 
-        messages = conversation_history + [{"role": "user", "content": user_message}]
+        # Optionen aufbauen
+        options = ClaudeAgentOptions(
+            cwd=self.cwd,
+            model=self.model,
+            max_turns=20,
+            allowed_tools=self._allowed_tools,
+            permission_mode="acceptEdits",
+            # Session-Kontinuität: vorherigen Turn fortsetzen wenn vorhanden
+            resume=self.session_id,
+            # MCP-Server für Custom Tools
+            mcp_servers=self._mcp_servers if self._mcp_servers else {},
+            # Nur Projekteinstellungen laden (CLAUDE.md in cwd)
+            setting_sources=["project"],
+        )
 
-        response_text = self._agent_loop(system, messages)
+        # Agent-Loop: Messages streamen
+        response_parts: list[str] = []
+
+        try:
+            async for message in query(prompt=prompt, options=options):
+                if isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            response_parts.append(block.text)
+                            logger.debug(
+                                f"[{self.instance}] TextBlock: {block.text[:80]}..."
+                            )
+                elif isinstance(message, ResultMessage):
+                    # Session-ID für nächsten Turn merken
+                    if message.session_id:
+                        self.session_id = message.session_id
+                        logger.debug(
+                            f"[{self.instance}] Session: {self.session_id}"
+                        )
+                    if message.is_error:
+                        logger.error(
+                            f"[{self.instance}] ResultMessage Fehler: "
+                            f"{message.result}"
+                        )
+
+        except CLINotFoundError:
+            logger.error(
+                "Claude Code CLI nicht gefunden. "
+                "Bitte `claude` installieren oder in PATH legen."
+            )
+            return (
+                "Fehler: Claude Code CLI nicht gefunden. "
+                "Bitte installieren: curl -fsSL https://claude.ai/install.sh | bash"
+            )
+        except ProcessError as e:
+            logger.error(f"[{self.instance}] CLI-Prozess Fehler (exit {e.exit_code}): {e}")
+            return f"Fehler: Agent-Prozess beendet mit Code {e.exit_code}."
+        except CLIJSONDecodeError as e:
+            logger.error(f"[{self.instance}] JSON-Parse-Fehler: {e}")
+            return "Fehler: Ungültige Antwort vom Agent."
+
+        response_text = "".join(response_parts)
 
         # Memory: Konversation speichern
-        self.memory.add_conversation(user_message, response_text)
+        if response_text:
+            self.memory.add_conversation(user_message, response_text)
 
-        return response_text
+        return response_text or "[Keine Antwort]"
 
-    def _agent_loop(self, system: str, messages: list[dict]) -> str:
-        """
-        Tool-Use-Loop: läuft bis stop_reason == "end_turn".
-        Bei "tool_use": Tool ausführen, Ergebnis zurückschicken, weiter.
-        """
-        while True:
-            kwargs: dict = {
-                "model": self.model,
-                "max_tokens": 4096,
-                "system": system,
-                "messages": messages,
-            }
-            if self._tool_schemas:
-                kwargs["tools"] = self._tool_schemas
-
-            response = self.client.messages.create(**kwargs)
-            logger.debug(f"[{self.instance}] stop_reason={response.stop_reason}, tokens={response.usage}")
-
-            if response.stop_reason == "end_turn":
-                for block in response.content:
-                    if hasattr(block, "text"):
-                        return block.text
-                return ""
-
-            elif response.stop_reason == "tool_use":
-                messages.append({"role": "assistant", "content": response.content})
-
-                tool_results = []
-                for block in response.content:
-                    if block.type == "tool_use":
-                        result = self._execute_tool(block.name, block.input)
-                        logger.info(
-                            f"[{self.instance}] Tool '{block.name}' "
-                            f"inputs={block.input} → {result!r}"
-                        )
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": str(result),
-                        })
-
-                messages.append({"role": "user", "content": tool_results})
-
-            else:
-                logger.warning(f"[{self.instance}] Unbekannter stop_reason: {response.stop_reason}")
-                break
-
-        return "[Keine Antwort]"
-
-    def _execute_tool(self, name: str, inputs: dict) -> str:
-        """Führt ein registriertes Tool aus."""
-        if name not in self.tools:
-            return f"Fehler: Tool '{name}' ist nicht registriert."
-        try:
-            result = self.tools[name](**inputs)
-            return str(result)
-        except Exception as e:
-            logger.error(f"[{self.instance}] Tool '{name}' Fehler: {e}", exc_info=True)
-            return f"Fehler beim Ausführen von '{name}': {e}"
+    def run(self, user_message: str) -> str:
+        """Synchroner Wrapper für run_async() – für einfache Skripte."""
+        return asyncio.run(self.run_async(user_message))
 
 
 # ── CLI / REPL für lokale Tests ───────────────────────────────────────────────
@@ -183,23 +194,11 @@ def _setup_logging():
     )
 
 
-def main():
-    _setup_logging()
-
-    # .env laden wenn vorhanden
-    try:
-        from dotenv import load_dotenv
-        load_dotenv()
-    except ImportError:
-        pass
-
-    instance = os.environ.get("HAANA_INSTANCE", "alice")
-    agent = HaanaAgent(instance)
-
-    print(f"\nHAANA [{instance}] – REPL (Phase 1)")
+async def _repl(agent: HaanaAgent):
+    """Einfache REPL-Schleife für lokale Tests."""
+    print(f"\nHAANA [{agent.instance}] – REPL (Phase 1)")
+    print(f"cwd: {agent.cwd.resolve()}")
     print("Beenden mit Ctrl+C oder 'exit'\n")
-
-    history: list[dict] = []
 
     while True:
         try:
@@ -211,12 +210,29 @@ def main():
         if not user_input or user_input.lower() in ("exit", "quit"):
             break
 
-        response = agent.run(user_input, history)
+        response = await agent.run_async(user_input)
         print(f"HAANA: {response}\n")
 
-        history.append({"role": "user", "content": user_input})
-        history.append({"role": "assistant", "content": response})
+
+async def _main():
+    _setup_logging()
+
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass
+
+    instance = os.environ.get("HAANA_INSTANCE", "alice")
+
+    try:
+        agent = HaanaAgent(instance)
+    except FileNotFoundError as e:
+        print(f"Fehler: {e}")
+        return
+
+    await _repl(agent)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(_main())
