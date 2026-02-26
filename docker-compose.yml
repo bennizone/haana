@@ -1,72 +1,89 @@
 services:
 
-  # ── Agent-Instanzen ────────────────────────────────────────────────────────
+  # ── Infrastruktur (startet immer) ─────────────────────────────────────────
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    volumes:
+      - haana-qdrant:/qdrant/storage
+    ports:
+      - "6333:6333"   # REST API + Dashboard
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:6333/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Agent-Instanzen (Profile: agents) ─────────────────────────────────────
+  # Starten mit: docker compose --profile agents up -d
 
   instanz-alice:
+    profiles: [agents]
     build: .
-    # image: haana:latest
     env_file: .env
     environment:
       HAANA_INSTANCE: alice
     volumes:
       - ./instanzen/alice/CLAUDE.md:/app/CLAUDE.md:ro
       - ./skills:/app/skills:ro
-      - ./core:/app/core:ro
       - haana-data:/data
     restart: unless-stopped
     depends_on:
-      - qdrant
+      qdrant:
+        condition: service_healthy
 
   instanz-bob:
+    profiles: [agents]
     build: .
-    # image: haana:latest
     env_file: .env
     environment:
       HAANA_INSTANCE: bob
     volumes:
       - ./instanzen/bob/CLAUDE.md:/app/CLAUDE.md:ro
       - ./skills:/app/skills:ro
-      - ./core:/app/core:ro
       - haana-data:/data
     restart: unless-stopped
     depends_on:
-      - qdrant
+      qdrant:
+        condition: service_healthy
 
   instanz-ha-assist:
+    profiles: [agents]
     build: .
-    # image: haana:latest
     env_file: .env
     environment:
       HAANA_INSTANCE: ha-assist
     volumes:
       - ./instanzen/ha-assist/CLAUDE.md:/app/CLAUDE.md:ro
       - ./skills:/app/skills:ro
-      - ./core:/app/core:ro
       - haana-data:/data
     restart: unless-stopped
     depends_on:
-      - qdrant
+      qdrant:
+        condition: service_healthy
 
   instanz-ha-advanced:
+    profiles: [agents]
     build: .
-    # image: haana:latest
     env_file: .env
     environment:
       HAANA_INSTANCE: ha-advanced
     volumes:
       - ./instanzen/ha-advanced/CLAUDE.md:/app/CLAUDE.md:ro
       - ./skills:/app/skills:ro
-      - ./core:/app/core:ro
       - haana-data:/data
     restart: unless-stopped
     depends_on:
-      - qdrant
+      qdrant:
+        condition: service_healthy
 
-  # ── Admin-Interface ────────────────────────────────────────────────────────
+  # ── Admin-Interface (Profil: agents) ──────────────────────────────────────
 
   admin-interface:
+    profiles: [agents]
     build: ./admin-interface
-    # image: haana-admin:latest
     env_file: .env
     ports:
       - "8080:8080"
@@ -74,25 +91,18 @@ services:
       - ./instanzen:/app/instanzen
       - haana-data:/data
     restart: unless-stopped
+    depends_on:
+      qdrant:
+        condition: service_healthy
 
-  # ── WhatsApp-Bridge ────────────────────────────────────────────────────────
+  # ── WhatsApp-Bridge (Profil: agents) ──────────────────────────────────────
 
   whatsapp-bridge:
+    profiles: [agents]
     build: ./whatsapp-bridge
-    # image: haana-whatsapp:latest
     env_file: .env
     volumes:
       - haana-whatsapp-session:/app/session
-    restart: unless-stopped
-
-  # ── Memory & Vector Store ──────────────────────────────────────────────────
-
-  qdrant:
-    image: qdrant/qdrant:latest
-    volumes:
-      - haana-qdrant:/qdrant/storage
-    ports:
-      - "6333:6333"   # REST API (intern)
     restart: unless-stopped
 
   # ── Optionale Dienste (auskommentiert bis konfiguriert) ───────────────────
