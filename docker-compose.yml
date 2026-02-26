@@ -1,0 +1,129 @@
+services:
+
+  # ── Agent-Instanzen ────────────────────────────────────────────────────────
+
+  instanz-alice:
+    build: .
+    # image: haana:latest
+    env_file: .env
+    environment:
+      HAANA_INSTANCE: alice
+    volumes:
+      - ./instanzen/alice/CLAUDE.md:/app/CLAUDE.md:ro
+      - ./skills:/app/skills:ro
+      - ./core:/app/core:ro
+      - haana-data:/data
+    restart: unless-stopped
+    depends_on:
+      - qdrant
+
+  instanz-bob:
+    build: .
+    # image: haana:latest
+    env_file: .env
+    environment:
+      HAANA_INSTANCE: bob
+    volumes:
+      - ./instanzen/bob/CLAUDE.md:/app/CLAUDE.md:ro
+      - ./skills:/app/skills:ro
+      - ./core:/app/core:ro
+      - haana-data:/data
+    restart: unless-stopped
+    depends_on:
+      - qdrant
+
+  instanz-ha-assist:
+    build: .
+    # image: haana:latest
+    env_file: .env
+    environment:
+      HAANA_INSTANCE: ha-assist
+    volumes:
+      - ./instanzen/ha-assist/CLAUDE.md:/app/CLAUDE.md:ro
+      - ./skills:/app/skills:ro
+      - ./core:/app/core:ro
+      - haana-data:/data
+    restart: unless-stopped
+    depends_on:
+      - qdrant
+
+  instanz-ha-advanced:
+    build: .
+    # image: haana:latest
+    env_file: .env
+    environment:
+      HAANA_INSTANCE: ha-advanced
+    volumes:
+      - ./instanzen/ha-advanced/CLAUDE.md:/app/CLAUDE.md:ro
+      - ./skills:/app/skills:ro
+      - ./core:/app/core:ro
+      - haana-data:/data
+    restart: unless-stopped
+    depends_on:
+      - qdrant
+
+  # ── Admin-Interface ────────────────────────────────────────────────────────
+
+  admin-interface:
+    build: ./admin-interface
+    # image: haana-admin:latest
+    env_file: .env
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./instanzen:/app/instanzen
+      - haana-data:/data
+    restart: unless-stopped
+
+  # ── WhatsApp-Bridge ────────────────────────────────────────────────────────
+
+  whatsapp-bridge:
+    build: ./whatsapp-bridge
+    # image: haana-whatsapp:latest
+    env_file: .env
+    volumes:
+      - haana-whatsapp-session:/app/session
+    restart: unless-stopped
+
+  # ── Memory & Vector Store ──────────────────────────────────────────────────
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    volumes:
+      - haana-qdrant:/qdrant/storage
+    ports:
+      - "6333:6333"   # REST API (intern)
+    restart: unless-stopped
+
+  # ── Optionale Dienste (auskommentiert bis konfiguriert) ───────────────────
+
+  # trilium:
+  #   image: triliumnext/notes:latest
+  #   volumes:
+  #     - haana-trilium:/home/node/trilium-data
+  #   ports:
+  #     - "8888:8888"
+  #   restart: unless-stopped
+
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   volumes:
+  #     - haana-ollama:/root/.ollama
+  #   ports:
+  #     - "11434:11434"
+  #   restart: unless-stopped
+  #   # GPU-Support:
+  #   # deploy:
+  #   #   resources:
+  #   #     reservations:
+  #   #       devices:
+  #   #         - driver: nvidia
+  #   #           count: 1
+  #   #           capabilities: [gpu]
+
+volumes:
+  haana-data:
+  haana-qdrant:
+  haana-whatsapp-session:
+  # haana-trilium:
+  # haana-ollama:
