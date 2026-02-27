@@ -115,6 +115,12 @@ class HaanaAgent:
         else:
             prompt = user_message
 
+        # CLAUDECODE aus dem laufenden Prozess entfernen damit der Subprocess-Agent
+        # starten kann. Das SDK prüft CLAUDECODE im Parent-Prozess und blockiert
+        # sonst verschachtelte Sessions. In Produktion (Docker) ist es nicht gesetzt.
+        os.environ.pop("CLAUDECODE", None)
+        subprocess_env = {k: v for k, v in os.environ.items()}
+
         # Optionen aufbauen
         options = ClaudeAgentOptions(
             cwd=self.cwd,
@@ -128,6 +134,8 @@ class HaanaAgent:
             mcp_servers=self._mcp_servers if self._mcp_servers else {},
             # Nur Projekteinstellungen laden (CLAUDE.md in cwd)
             setting_sources=["project"],
+            # Bereinigtes Env ohne CLAUDECODE
+            env=subprocess_env,
         )
 
         # Agent-Loop: Messages streamen
