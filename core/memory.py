@@ -65,8 +65,9 @@ def _build_mem0_config(collection_name: str) -> Optional[dict]:
         )
         return None
 
-    # Modell für Memory-Extraktion (kleines schnelles Modell reicht)
-    memory_llm = os.environ.get("HAANA_MEMORY_MODEL", "qwen2.5:1.5b")
+    # Modell für Memory-Extraktion (8B+ empfohlen – kleinere Modelle liefern oft
+    # keine validen Strings für Mem0s Extraktions-Schema)
+    memory_llm = os.environ.get("HAANA_MEMORY_MODEL", "ministral-3:8b")
 
     config = {
         "llm": {
@@ -212,14 +213,13 @@ class HaanaMemory:
 
         try:
             user_id = scope.replace("_memory", "")
-            # infer=False: LLM-Extraktion überspringen und Konversation direkt
-            # embedden + speichern. qwen2.5:1.5b liefert keine validen Strings
-            # für Mem0s Extraktions-Schema (gibt Listen statt Strings zurück).
-            # Phase 3+: infer=True mit besserem Modell (Ministral-3b o.ä.) aktivieren.
+            # infer=True: LLM (ministral-3:8b) extrahiert kompakte Fakten aus der
+            # Konversation bevor sie embedded werden. 8B-Modelle liefern valide Strings
+            # für Mem0s Extraktions-Schema (im Gegensatz zu qwen2.5:1.5b).
             result = mem.add(
                 messages=messages,
                 user_id=user_id,
-                infer=False,
+                infer=True,
                 metadata=metadata or {},
             )
             logger.info(
