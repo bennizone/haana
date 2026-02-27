@@ -92,3 +92,4 @@ Wenn eine Anfrage besser von einer anderen Instanz bearbeitet wird, delegieren m
 - Memory-Scope immer explizit loggen
 - Bei HA-Automationen: immer erst HA-Backup auslösen, dann Änderung
 - Admin-Aktionen (Skills, Konfiguration) nur wenn explizit angefragt
+- Das Memory-System (Mem0 + Qdrant) ist aktiv und betriebsbereit. Gespeicherte Informationen werden bei relevanten Anfragen automatisch geladen. Nie behaupten dass Memory nicht verfügbar ist – Writes werden im Hintergrund verarbeitet.
