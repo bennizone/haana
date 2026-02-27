@@ -212,9 +212,14 @@ class HaanaMemory:
 
         try:
             user_id = scope.replace("_memory", "")
+            # infer=False: LLM-Extraktion überspringen und Konversation direkt
+            # embedden + speichern. qwen2.5:1.5b liefert keine validen Strings
+            # für Mem0s Extraktions-Schema (gibt Listen statt Strings zurück).
+            # Phase 3+: infer=True mit besserem Modell (Ministral-3b o.ä.) aktivieren.
             result = mem.add(
                 messages=messages,
                 user_id=user_id,
+                infer=False,
                 metadata=metadata or {},
             )
             logger.info(
