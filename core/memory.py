@@ -242,15 +242,33 @@ class HaanaMemory:
     ):
         """
         Speichert eine abgeschlossene Konversation.
-        scope=None → persönlichen Scope der Instanz automatisch wählen.
+        scope=None → Scope aus Agentenantwort lesen (Agent benennt ihn explizit),
+                     Fallback: persönlicher Scope der Instanz.
         ha-assist und ha-advanced schreiben nie (write_scopes leer).
         """
         if not self.write_scopes:
             return
 
         if scope is None:
-            personal = {s for s in self.write_scopes if s != "bnd_memory"}
-            scope = next(iter(personal), next(iter(self.write_scopes)))
+            import re
+            # Agent benennt den Scope explizit in seiner Antwort
+            # ("→ bnd_memory", "in alice_memory gespeichert", …)
+            match = re.search(
+                r"\b(alice_memory|bob_memory|bnd_memory)\b",
+                assistant_response,
+            )
+            if match and match.group(1) in self.write_scopes:
+                scope = match.group(1)
+                logger.debug(
+                    f"[{self.instance}] Scope aus Agentenantwort: '{scope}'"
+                )
+            else:
+                # Fallback: persönlicher Scope (kein bnd_memory)
+                personal = {s for s in self.write_scopes if s != "bnd_memory"}
+                scope = next(iter(personal), next(iter(self.write_scopes)))
+                logger.debug(
+                    f"[{self.instance}] Scope nicht erkannt, Fallback: '{scope}'"
+                )
 
         messages = [
             {"role": "user", "content": user_message},
