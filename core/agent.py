@@ -204,9 +204,9 @@ class HaanaAgent:
 
         response_text = "".join(response_parts)
 
-        # Memory: Konversation speichern
+        # Memory: Konversation async im Hintergrund speichern (non-blocking)
         if response_text:
-            self.memory.add_conversation(user_message, response_text)
+            await self.memory.add_conversation_async(user_message, response_text)
 
         return response_text or "[Keine Antwort]"
 

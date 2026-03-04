@@ -8,12 +8,24 @@ Drei Scopes mit separaten Qdrant-Collections:
 
 LLM für Memory-Extraktion: Ollama (kein API-Key nötig).
 Embedder: Ollama bge-m3, Fallback HuggingFace wenn OLLAMA_URL fehlt.
-
 Wenn kein Ollama verfügbar: Memory deaktiviert mit Warn-Log.
+
+Sliding Window:
+  Letzte N Nachrichten / M Minuten bleiben im lokalen Window-Buffer.
+  Einträge die das Window verlassen werden async zu Qdrant extrahiert.
+  Bei Extraktions-Fehler bleibt der Eintrag im Window (kein Datenverlust).
+
+Konfiguration via Env:
+  HAANA_WINDOW_SIZE     – max Nachrichten im Window (Standard: 20)
+  HAANA_WINDOW_MINUTES  – max Alter in Minuten (Standard: 60)
 """
 
+import asyncio
 import os
 import logging
+import time
+import re
+from dataclasses import dataclass, field
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -49,10 +61,7 @@ def _get_qdrant_host_port() -> tuple[str, int]:
 def _build_mem0_config(collection_name: str) -> Optional[dict]:
     """
     Erstellt vollständige Mem0-Konfiguration für einen Scope.
-    Gibt None zurück wenn keine LLM-Backend verfügbar ist.
-
-    Kein API-Key nötig: LLM und Embeddings laufen über Ollama.
-    Fallback Embedder: HuggingFace (kein LLM-Fallback – ohne LLM kein Memory).
+    Gibt None zurück wenn kein LLM-Backend verfügbar ist.
     """
     host, port = _get_qdrant_host_port()
     ollama_url = os.environ.get("OLLAMA_URL", "").strip()
@@ -65,7 +74,6 @@ def _build_mem0_config(collection_name: str) -> Optional[dict]:
         )
         return None
 
-    # Modell für Memory-Extraktion
     memory_llm = os.environ.get("HAANA_MEMORY_MODEL", "ministral-3-32k:3b")
 
     config = {
@@ -104,6 +112,91 @@ def _build_mem0_config(collection_name: str) -> Optional[dict]:
     return config
 
 
+# ── Sliding Window ─────────────────────────────────────────────────────────────
+
+@dataclass
+class _WindowEntry:
+    user: str
+    assistant: str
+    scope: str
+    timestamp: float = field(default_factory=time.monotonic)
+    extracting: bool = False  # True = Hintergrund-Extraktion läuft gerade
+
+
+class ConversationWindow:
+    """
+    Sliding Window für die lokale Konversationshistorie.
+
+    Regeln:
+      - Mindestens min_messages Einträge bleiben immer im Window
+      - Einträge die weder in den letzten max_messages noch in den letzten
+        max_age_minutes liegen → Overflow → async zu Qdrant extrahieren
+      - Bei Extraktions-Fehler: Eintrag bleibt (kein Datenverlust)
+    """
+
+    def __init__(
+        self,
+        max_messages: int = 20,
+        max_age_minutes: int = 60,
+        min_messages: int = 5,
+    ):
+        self.max_messages = max_messages
+        self.max_age_minutes = max_age_minutes
+        self.min_messages = min_messages
+        self._entries: list[_WindowEntry] = []
+
+    def add(self, user: str, assistant: str, scope: str) -> list[_WindowEntry]:
+        """Fügt Eintrag hinzu. Gibt Overflow-Kandidaten zurück."""
+        self._entries.append(_WindowEntry(user=user, assistant=assistant, scope=scope))
+        return self._get_overflow()
+
+    def _get_overflow(self) -> list[_WindowEntry]:
+        """
+        Bestimmt Einträge die das Window verlassen sollen.
+        Ein Eintrag verlässt das Window wenn er KEINER der drei Bedingungen entspricht:
+          - in_count: unter den letzten max_messages
+          - in_time:  jünger als max_age_minutes
+          - in_min:   unter den letzten min_messages (Safety-Floor)
+        """
+        now = time.monotonic()
+        max_age_sec = self.max_age_minutes * 60
+        n = len(self._entries)
+        overflow = []
+
+        for i, entry in enumerate(self._entries):
+            if entry.extracting:
+                continue
+
+            # Abstand vom neuesten Eintrag (0 = neuester)
+            pos_from_newest = n - 1 - i
+
+            in_count = pos_from_newest < self.max_messages
+            in_time  = (now - entry.timestamp) <= max_age_sec
+            in_min   = pos_from_newest < self.min_messages
+
+            if not (in_count or in_time or in_min):
+                entry.extracting = True
+                overflow.append(entry)
+
+        return overflow
+
+    def mark_extracted(self, entry: _WindowEntry):
+        """Entfernt erfolgreich extrahierten Eintrag."""
+        try:
+            self._entries.remove(entry)
+        except ValueError:
+            pass
+
+    def mark_failed(self, entry: _WindowEntry):
+        """Extraktion fehlgeschlagen – Eintrag bleibt im Window."""
+        entry.extracting = False
+
+    def size(self) -> int:
+        return len(self._entries)
+
+
+# ── HaanaMemory ────────────────────────────────────────────────────────────────
+
 class HaanaMemory:
     def __init__(self, instance_name: str):
         self.instance = instance_name
@@ -113,10 +206,19 @@ class HaanaMemory:
         # Lazy-loaded Mem0-Instanzen pro Scope (None = nicht verfügbar)
         self._memories: dict[str, object] = {}
 
+        # Sliding Window (Konfiguration aus Env)
+        self._window = ConversationWindow(
+            max_messages=int(os.environ.get("HAANA_WINDOW_SIZE", "20")),
+            max_age_minutes=int(os.environ.get("HAANA_WINDOW_MINUTES", "60")),
+            min_messages=5,
+        )
+
         logger.info(
             f"[{instance_name}] Memory init | "
             f"write={sorted(self.write_scopes)} | "
-            f"read={sorted(self.read_scopes)}"
+            f"read={sorted(self.read_scopes)} | "
+            f"window={self._window.max_messages}msg / "
+            f"{self._window.max_age_minutes}min / min=5"
         )
 
     def _get_memory(self, scope: str):
@@ -139,6 +241,28 @@ class HaanaMemory:
                 self._memories[scope] = None
 
         return self._memories[scope]
+
+    def _resolve_scope(self, assistant_response: str, scope: Optional[str]) -> str:
+        """
+        Bestimmt den Ziel-Scope für einen Memory-Write.
+        Liest Scope aus Agentenantwort oder fällt auf persönlichen Scope zurück.
+        """
+        if scope is not None:
+            return scope
+
+        match = re.search(
+            r"\b(alice_memory|bob_memory|bnd_memory)\b",
+            assistant_response,
+        )
+        if match and match.group(1) in self.write_scopes:
+            scope = match.group(1)
+            logger.debug(f"[{self.instance}] Scope aus Agentenantwort: '{scope}'")
+        else:
+            personal = {s for s in self.write_scopes if s != "bnd_memory"}
+            scope = next(iter(personal), next(iter(self.write_scopes)))
+            logger.debug(f"[{self.instance}] Scope nicht erkannt, Fallback: '{scope}'")
+
+        return scope
 
     def search(self, query: str, scopes: Optional[list[str]] = None) -> str:
         """
@@ -164,7 +288,6 @@ class HaanaMemory:
                 user_id = scope.replace("_memory", "")
                 results = mem.search(query=query, user_id=user_id, limit=5)
                 for r in results.get("results", []):
-                    # Mem0 v1.0+: Text unter Schlüssel "memory"
                     content = r.get("memory") or r.get("content", "")
                     score = float(r.get("score", 0))
                     if content:
@@ -177,7 +300,6 @@ class HaanaMemory:
         if not all_results:
             return ""
 
-        # Nach Score sortieren, maximal 10 Treffer
         all_results.sort(reverse=True)
         lines = [f"[{scope}] {content}" for _, scope, content in all_results[:10]]
         return "\n".join(lines)
@@ -189,11 +311,8 @@ class HaanaMemory:
         metadata: Optional[dict] = None,
     ) -> bool:
         """
-        Speichert Konversation in einem Scope.
-
-        messages: [{"role": "user"|"assistant", "content": "..."}]
-        scope: muss in write_scopes liegen
-        Gibt True zurück wenn erfolgreich.
+        Schreibt Konversation synchron in Mem0/Qdrant.
+        Wird vom async Extraktions-Task im Thread-Executor aufgerufen.
         """
         if scope not in VALID_SCOPES:
             logger.error(f"[{self.instance}] Ungültiger Scope: '{scope}'")
@@ -212,8 +331,6 @@ class HaanaMemory:
 
         try:
             user_id = scope.replace("_memory", "")
-            # infer=True: LLM (ministral-3-32k:3b) extrahiert kompakte Fakten aus der
-            # Konversation bevor sie embedded werden.
             result = mem.add(
                 messages=messages,
                 user_id=user_id,
@@ -232,44 +349,59 @@ class HaanaMemory:
             )
             return False
 
-    def add_conversation(
+    async def _extract_entry(self, entry: _WindowEntry):
+        """
+        Extrahiert einen Window-Eintrag async zu Qdrant.
+        Läuft im Thread-Executor → blockiert den Event-Loop nicht.
+        Bei Fehler: Eintrag bleibt im Window (kein Datenverlust).
+        """
+        messages = [
+            {"role": "user",      "content": entry.user},
+            {"role": "assistant", "content": entry.assistant},
+        ]
+        loop = asyncio.get_event_loop()
+        try:
+            success = await loop.run_in_executor(None, self.add, messages, entry.scope)
+            if success:
+                self._window.mark_extracted(entry)
+                logger.debug(
+                    f"[{self.instance}] Async-Extraktion OK | "
+                    f"scope={entry.scope} | window={self._window.size()}"
+                )
+            else:
+                self._window.mark_failed(entry)
+                logger.warning(
+                    f"[{self.instance}] Async-Extraktion fehlgeschlagen | "
+                    f"scope={entry.scope} | Eintrag bleibt im Window"
+                )
+        except Exception as e:
+            self._window.mark_failed(entry)
+            logger.error(f"[{self.instance}] Async-Extraktion Fehler: {e}", exc_info=True)
+
+    async def add_conversation_async(
         self,
         user_message: str,
         assistant_response: str,
         scope: Optional[str] = None,
     ):
         """
-        Speichert eine abgeschlossene Konversation.
-        scope=None → Scope aus Agentenantwort lesen (Agent benennt ihn explizit),
-                     Fallback: persönlicher Scope der Instanz.
-        ha-assist und ha-advanced schreiben nie (write_scopes leer).
+        Fügt Konversation zum Sliding Window hinzu und extrahiert Overflow async.
+
+        Non-blocking: kehrt sofort zurück. Mem0-Write (LLM-Inferenz + Embedding)
+        läuft als asyncio.Task im Hintergrund, ohne den Event-Loop zu blockieren.
+        ha-assist / ha-advanced (keine write_scopes) → no-op.
         """
         if not self.write_scopes:
             return
 
-        if scope is None:
-            import re
-            # Agent benennt den Scope explizit in seiner Antwort
-            # ("→ bnd_memory", "in alice_memory gespeichert", …)
-            match = re.search(
-                r"\b(alice_memory|bob_memory|bnd_memory)\b",
-                assistant_response,
-            )
-            if match and match.group(1) in self.write_scopes:
-                scope = match.group(1)
-                logger.debug(
-                    f"[{self.instance}] Scope aus Agentenantwort: '{scope}'"
-                )
-            else:
-                # Fallback: persönlicher Scope (kein bnd_memory)
-                personal = {s for s in self.write_scopes if s != "bnd_memory"}
-                scope = next(iter(personal), next(iter(self.write_scopes)))
-                logger.debug(
-                    f"[{self.instance}] Scope nicht erkannt, Fallback: '{scope}'"
-                )
+        scope = self._resolve_scope(assistant_response, scope)
+        overflow = self._window.add(user_message, assistant_response, scope)
 
-        messages = [
-            {"role": "user", "content": user_message},
-            {"role": "assistant", "content": assistant_response},
-        ]
-        self.add(messages, scope)
+        for entry in overflow:
+            asyncio.create_task(self._extract_entry(entry))
+
+        logger.debug(
+            f"[{self.instance}] Window +1 | "
+            f"scope={scope} | size={self._window.size()} | "
+            f"overflow={len(overflow)}"
+        )
