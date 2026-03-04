@@ -25,6 +25,7 @@ from claude_agent_sdk import (
     AssistantMessage,
     ResultMessage,
     TextBlock,
+    ToolUseBlock,
     CLINotFoundError,
     CLIConnectionError,
     ProcessError,
@@ -180,8 +181,9 @@ class HaanaAgent:
         5. Session-ID für Kontinuität merken
         6. Konversation non-blocking ins Sliding Window schreiben
         """
-        # Memory: relevanten Kontext laden
-        memory_context = self.memory.search(user_message)
+        # Memory: relevanten Kontext laden (in Executor – blockiert Event-Loop nicht)
+        loop = asyncio.get_running_loop()
+        memory_context = await loop.run_in_executor(None, self.memory.search, user_message)
         if memory_context:
             prompt = (
                 f"<relevante_erinnerungen>\n{memory_context}\n</relevante_erinnerungen>\n\n"
@@ -215,6 +217,14 @@ class HaanaAgent:
                             response_parts.append(block.text)
                             logger.debug(
                                 f"[{self.instance}] TextBlock: {block.text[:80]}..."
+                            )
+                        elif isinstance(block, ToolUseBlock):
+                            # Sichtbar loggen: wenn Claude Tools nutzt, ist das
+                            # oft ein Hinweis auf falsches Verhalten (z.B. Memory
+                            # via Bash statt via HAANA-Infrastruktur schreiben)
+                            logger.info(
+                                f"[{self.instance}] Tool-Aufruf: {block.name} "
+                                f"| input={str(block.input)[:120]}"
                             )
                 elif isinstance(message, ResultMessage):
                     if message.session_id:
