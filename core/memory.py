@@ -494,6 +494,30 @@ class HaanaMemory:
         """Anzahl laufender Extraktions-Tasks."""
         return len(self._pending_tasks)
 
+    async def flush_all(self, timeout: float = 60.0) -> int:
+        """
+        Extrahiert ALLE Window-Einträge zu Qdrant (für sauberes Shutdown).
+
+        Nicht nur Overflow-Kandidaten, sondern wirklich alles was noch im
+        Window sitzt → danach ist das Window leer und Qdrant vollständig.
+        Gibt Anzahl der Tasks zurück die nach timeout abgebrochen wurden.
+        """
+        if not self.write_scopes:
+            return 0
+
+        # Alle Einträge die noch nicht extrahiert werden, jetzt einplanen
+        to_extract = [e for e in self._window._entries if not e.extracting]
+        for entry in to_extract:
+            entry.extracting = True
+            self._schedule_extraction(entry)
+
+        if to_extract:
+            logger.info(
+                f"[{self.instance}] flush_all: {len(to_extract)} Einträge → Qdrant"
+            )
+
+        return await self.flush_pending(timeout=timeout)
+
     async def flush_pending(self, timeout: float = 30.0) -> int:
         """
         Wartet auf alle laufenden Extraktions-Tasks.
