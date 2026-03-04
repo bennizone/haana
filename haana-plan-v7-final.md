@@ -44,18 +44,23 @@ Langfristiges Ziel: Home Assistant Add-on das jeder mit ein paar Klicks installi
 
 ### GPU-Server (läuft, Ollama bereit)
 
+**Hardware:** Lenovo Tiny, Intel i5 8th Gen (T), 32 GB RAM, GTX 1080Ti (11 GB VRAM), Ubuntu 24.04 LTS, IP: 10.83.1.110/23
+
+
 | Modell | VRAM | Aufgabe | Ladestrategie |
 |---|---|---|---|
 | bge-m3 | ~1.2 GB | Embeddings (Deutsch + Englisch) | KEEP_ALIVE=-1 (dauerhaft) |
-| ministral-3:3b | ~3.0 GB | Voice Backend + Memory-Extraktion + Traumprozess | KEEP_ALIVE=-1 |
-| ministral-3:8b | ~6.0 GB | Vision + komplexe Tasks + optionaler Traumprozess | on-demand |
-| qwen3-vl:8b | ~6.1 GB | Vision-Alternative (Evaluation im Betrieb) | on-demand |
+| ministral-3-32k:3b | ~7.7 GB | Voice Backend + Memory-Extraktion + Traumprozess | KEEP_ALIVE=-1 (dauerhaft) |
+| ministral-3:8b | ~6.0 GB | Vision + komplexe Traumprozess-Läufe | on-demand (nicht parallel zu ministral-3-32k:3b) |
+| qwen3-vl:8b | ~6.1 GB | Vision-Alternative (Evaluation im Betrieb) | on-demand (nicht parallel zu ministral-3-32k:3b) |
 
-> **ministral-3:3b als unified Modell:** Voice Backend, Memory-Extraktion (infer=True), Traumprozess (Deduplizierung, einfache Muster). Kann auch Vision. Ob bge-m3 + ministral-3:3b als vollständiger lokaler Stack reichen, zeigt der echte Betrieb.
+> **ministral-3-32k:3b** ist das gewählte unified Modell: Voice Backend, Memory-Extraktion (infer=True), Traumprozess. Benchmark: 10/10 Tests, 276ms TTFT, 98–104 t/s, 32k Kontext. Erstellt via Ollama Modelfile aus ministral-3b-32k:latest.
 
-> **ministral-3:8b und qwen3-vl:8b** können nicht gleichzeitig geladen sein (~12 GB > 11 GB VRAM). Ollama lädt immer nur das gerade benötigte. Für komplexe Traumprozess-Läufe (Widersprüche auflösen) kann temporär auf ministral-3:8b oder Sonnet umgeschaltet werden.
+> **VRAM-Budget:** bge-m3 (1.2 GB) + ministral-3-32k:3b (7.7 GB) = 9.1 GB von 11 GB. Kein Headroom für ein zweites großes Modell gleichzeitig – ministral-3:8b und qwen3-vl:8b werden on-demand geladen und ersetzen dabei ministral-3-32k:3b temporär im VRAM.
 
-> **qwen2.5:1.5b:** gelöscht, nicht mehr im Einsatz.
+> **Ollama-Konfiguration:** KEEP_ALIVE=-1, NUM_PARALLEL=1, MAX_LOADED_MODELS=2, FLASH_ATTENTION=1. Preload-Service lädt beide Dauermodelle nach jedem Boot automatisch.
+
+> **Energieverbrauch:** ~11W idle (GPU P8-State), bis 280W unter Last. NVIDIA Persistence Mode aktiv.
 
 ### Bestehende Infrastruktur
 
@@ -116,7 +121,7 @@ response = agent.run(message, context=memory.get_relevant(message))
 |---|---|---|---|---|
 | Alice (Admin) | Sonnet / Haiku | WhatsApp + Webchat + HA App | Voll + Skill-Management + Konfigurator | alice_memory + bnd_memory |
 | Bob (User) | Sonnet / Haiku | WhatsApp + HA App | Eingeschränkt, kein System-Zugriff | bob_memory + bnd_memory |
-| HA Voice Backend | ministral-3:3b lokal | HA Assist Pipeline | Schlanker Endpunkt, kein Agent | bnd_memory lesen (Qdrant) |
+| HA Voice Backend | ministral-3-32k:3b lokal | HA Assist Pipeline | Schlanker Endpunkt, kein Agent | bnd_memory lesen (Qdrant) |
 
 ### Warum diese Aufteilung?
 
@@ -146,7 +151,7 @@ Tier 1: HA interner Parser
         │
         ▼ (wenn kein Match)
 
-Tier 2: HAANA Voice Backend (ministral-3:3b)
+Tier 2: HAANA Voice Backend (ministral-3-32k:3b)
         → HA schickt Anfrage + alle verfügbaren Entities + Status + Presence mit
         → HAANA holt top 3–5 bnd_memory Einträge aus Qdrant (~50ms, lokal)
         → ministral-3:3b kennt Entities + Vorlieben → antwortet im HA-Format
@@ -256,7 +261,7 @@ Fallback: täglich um 03:00 Uhr (auch wenn Subscription nicht ausgelöst hat)
 ```
 1. Qdrant liefert thematische Cluster (ähnliche Einträge gruppiert)
 2. Pro Cluster (~20–50 Einträge):
-   → ministral-3:3b (oder konfiguriertes LLM) analysiert
+   → ministral-3-32k:3b (oder konfiguriertes LLM) analysiert
    → Duplikate zusammenführen
      ("Alice mag keinen Kaffee" + "morgens kein Kaffee für Alice" → ein Eintrag)
    → Muster benennen
@@ -379,13 +384,13 @@ Dropdowns dynamisch befüllt – Ollama API beim Start abgefragt, kombiniert mit
 | Use Case | Standard | Fallback |
 |---|---|---|
 | Chat WhatsApp / Webchat | Sonnet | Haiku |
-| HA Voice Tier 2 | ministral-3:3b lokal | ministral-3:8b lokal |
+| HA Voice Tier 2 | ministral-3-32k:3b lokal | ministral-3:8b lokal |
 | HA Voice Tier 3 (Delegation) | Haiku | Sonnet |
-| Vision (Rezept-Fotos) | ministral-3:3b oder ministral-3:8b (wählbar) | Sonnet |
+| Vision (Rezept-Fotos) | ministral-3:8b oder qwen3-vl:8b (wählbar) | Sonnet |
 | Memory-Extraktion (infer=True) | ministral-3:8b lokal | – |
-| Traumprozess | ministral-3:3b lokal | ministral-3:8b / Sonnet (konfigurierbar) |
+| Traumprozess | ministral-3-32k:3b lokal | ministral-3:8b / Sonnet (konfigurierbar) |
 | Embeddings | bge-m3 lokal | OpenAI text-embedding-3-small |
-| Daily Brief | Haiku | ministral-3:3b lokal |
+| Daily Brief | Haiku | ministral-3-32k:3b lokal |
 
 ### LLM-Kaskade (= Failover, kein Routing)
 
@@ -783,7 +788,6 @@ Schritt 7: Privacy
 - Telegram als Fallback-Kanal bei WhatsApp-Sperre
 - Radarr/Sonarr Skills
 - Graph-Memory (Neo4j) für komplexere Zusammenhänge zwischen Erinnerungen
-- LFM 8B A1B evaluieren: 140 t/s, wenn Instruktionstreue passt als Voice-Alternative
 - Wyoming Whisper + Piper einrichten als HA-Fallback STT/TTS
 
 **Infrastruktur:**
@@ -793,9 +797,9 @@ Schritt 7: Privacy
 - HA Add-on Store Veröffentlichung (Phase 7)
 
 **Evaluation:**
-- Reicht bge-m3 + ministral-3:3b als vollständiger lokaler Stack? (zeigt sich im Betrieb)
-- Vision-Qualität: ministral-3:3b vs ministral-3:8b vs qwen3-vl:8b
-- Traumprozess-Qualität: ministral-3:3b ausreichend oder größeres Modell nötig?
+- bge-m3 + ministral-3-32k:3b als lokaler Stack: Extraktion und Voice bestätigt, Vision noch zu evaluieren
+- Vision-Qualität: ministral-3-32k:3b vs ministral-3:8b vs qwen3-vl:8b im echten Betrieb
+- Traumprozess-Qualität: ministral-3-32k:3b ausreichend oder größeres Modell nötig?
 
 ---
 
