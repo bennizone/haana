@@ -15,17 +15,24 @@ Sliding Window:
   Einträge die das Window verlassen werden async zu Qdrant extrahiert.
   Bei Extraktions-Fehler bleibt der Eintrag im Window (kein Datenverlust).
 
+Persistenz:
+  Window wird nach jeder Nachricht als JSON gespeichert (data/context/).
+  Beim Start: JSON laden → pending Einträge sofort extrahieren.
+  Bei Absturz: maximal die letzte Nachricht geht verloren.
+
 Konfiguration via Env:
   HAANA_WINDOW_SIZE     – max Nachrichten im Window (Standard: 20)
   HAANA_WINDOW_MINUTES  – max Alter in Minuten (Standard: 60)
 """
 
 import asyncio
+import json
 import os
 import logging
 import time
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -119,8 +126,9 @@ class _WindowEntry:
     user: str
     assistant: str
     scope: str
-    timestamp: float = field(default_factory=time.monotonic)
-    extracting: bool = False  # True = Hintergrund-Extraktion läuft gerade
+    # Wall-clock (time.time()) für Persistenz über Neustarts hinweg
+    timestamp: float = field(default_factory=time.time)
+    extracting: bool = False  # True = Hintergrund-Task läuft gerade
 
 
 class ConversationWindow:
@@ -158,7 +166,7 @@ class ConversationWindow:
           - in_time:  jünger als max_age_minutes
           - in_min:   unter den letzten min_messages (Safety-Floor)
         """
-        now = time.monotonic()
+        now = time.time()
         max_age_sec = self.max_age_minutes * 60
         n = len(self._entries)
         overflow = []
@@ -194,6 +202,61 @@ class ConversationWindow:
     def size(self) -> int:
         return len(self._entries)
 
+    # ── Persistenz ────────────────────────────────────────────────────────────
+
+    def to_dict(self) -> dict:
+        """Serialisiert Window-Zustand als dict (JSON-kompatibel)."""
+        return {
+            "version": 1,
+            "saved_at": time.time(),
+            "config": {
+                "max_messages": self.max_messages,
+                "max_age_minutes": self.max_age_minutes,
+                "min_messages": self.min_messages,
+            },
+            "entries": [
+                {
+                    "user": e.user,
+                    "assistant": e.assistant,
+                    "scope": e.scope,
+                    "timestamp": e.timestamp,
+                    # War der Task aktiv als gespeichert wurde? → pending auf nächsten Start
+                    "pending_extraction": e.extracting,
+                }
+                for e in self._entries
+            ],
+        }
+
+    def from_dict(self, d: dict) -> list[_WindowEntry]:
+        """
+        Stellt Window-Zustand aus dict wieder her.
+        Gibt Liste der Einträge zurück die sofort extrahiert werden sollen:
+          - Einträge die beim letzten Speichern extracting=True waren
+          - Einträge die jetzt durch Overflow das Window verlassen würden
+        """
+        self._entries.clear()
+        immediately_pending: list[_WindowEntry] = []
+
+        for item in d.get("entries", []):
+            entry = _WindowEntry(
+                user=item["user"],
+                assistant=item["assistant"],
+                scope=item["scope"],
+                timestamp=item["timestamp"],
+                extracting=False,
+            )
+            self._entries.append(entry)
+            if item.get("pending_extraction", False):
+                entry.extracting = True
+                immediately_pending.append(entry)
+
+        # Zusätzlich: Overflow aus aktuellem Stand neu berechnen
+        # (z.B. wenn max_messages seit letztem Start verkleinert wurde)
+        new_overflow = self._get_overflow()
+        immediately_pending.extend(new_overflow)
+
+        return immediately_pending
+
 
 # ── HaanaMemory ────────────────────────────────────────────────────────────────
 
@@ -212,6 +275,9 @@ class HaanaMemory:
             max_age_minutes=int(os.environ.get("HAANA_WINDOW_MINUTES", "60")),
             min_messages=5,
         )
+
+        # Tracking laufender Extraktions-Tasks (für flush_pending / shutdown)
+        self._pending_tasks: set[asyncio.Task] = set()
 
         logger.info(
             f"[{instance_name}] Memory init | "
@@ -264,6 +330,8 @@ class HaanaMemory:
 
         return scope
 
+    # ── Lesen ─────────────────────────────────────────────────────────────────
+
     def search(self, query: str, scopes: Optional[list[str]] = None) -> str:
         """
         Sucht in allen lesbaren Scopes nach relevantem Kontext.
@@ -303,6 +371,8 @@ class HaanaMemory:
         all_results.sort(reverse=True)
         lines = [f"[{scope}] {content}" for _, scope, content in all_results[:10]]
         return "\n".join(lines)
+
+    # ── Schreiben (synchron, für Thread-Executor) ──────────────────────────────
 
     def add(
         self,
@@ -349,6 +419,13 @@ class HaanaMemory:
             )
             return False
 
+    # ── Async Extraktion ───────────────────────────────────────────────────────
+
+    def _track_task(self, task: asyncio.Task):
+        """Registriert einen Task und entfernt ihn automatisch bei Abschluss."""
+        self._pending_tasks.add(task)
+        task.add_done_callback(self._pending_tasks.discard)
+
     async def _extract_entry(self, entry: _WindowEntry):
         """
         Extrahiert einen Window-Eintrag async zu Qdrant.
@@ -359,7 +436,7 @@ class HaanaMemory:
             {"role": "user",      "content": entry.user},
             {"role": "assistant", "content": entry.assistant},
         ]
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             success = await loop.run_in_executor(None, self.add, messages, entry.scope)
             if success:
@@ -377,6 +454,11 @@ class HaanaMemory:
         except Exception as e:
             self._window.mark_failed(entry)
             logger.error(f"[{self.instance}] Async-Extraktion Fehler: {e}", exc_info=True)
+
+    def _schedule_extraction(self, entry: _WindowEntry):
+        """Erstellt und trackt einen Extraktions-Task."""
+        task = asyncio.create_task(self._extract_entry(entry))
+        self._track_task(task)
 
     async def add_conversation_async(
         self,
@@ -398,10 +480,92 @@ class HaanaMemory:
         overflow = self._window.add(user_message, assistant_response, scope)
 
         for entry in overflow:
-            asyncio.create_task(self._extract_entry(entry))
+            self._schedule_extraction(entry)
 
         logger.debug(
             f"[{self.instance}] Window +1 | "
             f"scope={scope} | size={self._window.size()} | "
-            f"overflow={len(overflow)}"
+            f"overflow={len(overflow)} | pending_tasks={len(self._pending_tasks)}"
         )
+
+    # ── Task-Verwaltung ────────────────────────────────────────────────────────
+
+    def pending_count(self) -> int:
+        """Anzahl laufender Extraktions-Tasks."""
+        return len(self._pending_tasks)
+
+    async def flush_pending(self, timeout: float = 30.0) -> int:
+        """
+        Wartet auf alle laufenden Extraktions-Tasks.
+        Gibt Anzahl der Tasks zurück die nach timeout abgebrochen wurden.
+        """
+        if not self._pending_tasks:
+            return 0
+
+        tasks = set(self._pending_tasks)
+        logger.info(f"[{self.instance}] Warte auf {len(tasks)} Extraktions-Tasks...")
+
+        done, still_pending = await asyncio.wait(tasks, timeout=timeout)
+
+        for task in still_pending:
+            task.cancel()
+
+        if still_pending:
+            logger.warning(
+                f"[{self.instance}] {len(still_pending)} Tasks nach {timeout}s abgebrochen"
+            )
+
+        return len(still_pending)
+
+    # ── Persistenz ─────────────────────────────────────────────────────────────
+
+    def save_context(self, path: Path):
+        """
+        Schreibt den aktuellen Window-Zustand als JSON.
+        Wird nach jeder Nachricht aufgerufen → bei Absturz geht max. 1 Nachricht verloren.
+        """
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            data = self._window.to_dict()
+            # Atomares Schreiben via temp-Datei → kein korruptes JSON bei Absturz
+            tmp = path.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+            tmp.replace(path)
+            logger.debug(
+                f"[{self.instance}] Context gespeichert | "
+                f"{self._window.size()} Einträge → {path}"
+            )
+        except Exception as e:
+            logger.error(f"[{self.instance}] Context-Speichern fehlgeschlagen: {e}")
+
+    async def load_context(self, path: Path) -> int:
+        """
+        Lädt Window-Zustand aus JSON und plant pending Einträge zur Extraktion ein.
+        Gibt Anzahl der sofort gestarteten Extraktions-Tasks zurück.
+        Kein Fehler wenn Datei nicht existiert (erster Start).
+        """
+        if not path.exists():
+            logger.info(f"[{self.instance}] Kein gespeicherter Context gefunden ({path})")
+            return 0
+
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as e:
+            logger.error(f"[{self.instance}] Context-Laden fehlgeschlagen: {e}")
+            return 0
+
+        pending_entries = self._window.from_dict(data)
+
+        for entry in pending_entries:
+            self._schedule_extraction(entry)
+
+        saved_at = data.get("saved_at", 0)
+        age_min = (time.time() - saved_at) / 60
+
+        logger.info(
+            f"[{self.instance}] Context geladen | "
+            f"{self._window.size()} Einträge | "
+            f"gespeichert vor {age_min:.1f}min | "
+            f"{len(pending_entries)} pending → sofortige Extraktion"
+        )
+        return len(pending_entries)

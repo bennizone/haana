@@ -14,6 +14,7 @@ Custom Tools werden als MCP-Server eingebunden (Phase 2+).
 import os
 import asyncio
 import logging
+import signal
 import time
 from pathlib import Path
 from typing import Optional
@@ -58,8 +59,11 @@ class HaanaAgent:
                 f"instanzen/{instance_name}/CLAUDE.md (lokal)."
             )
 
-        # Memory-Layer (Mem0 + Qdrant)
+        # Memory-Layer (Mem0 + Qdrant + Sliding Window)
         self.memory = HaanaMemory(instance_name)
+
+        # Pfad für Window-Persistenz
+        self._context_path = Path("data") / "context" / f"{instance_name}.json"
 
         # MCP-Server für Custom Tools (Phase 2+: HA, Trilium, Kalender, ...)
         self._mcp_servers: dict = {}
@@ -115,7 +119,7 @@ class HaanaAgent:
             logger.info(f"[{self.instance}] Claude subprocess gestartet")
 
     async def close(self):
-        """Schließt den persistenten Subprocess sauber."""
+        """Schließt nur den persistenten Subprocess (kein Memory-Flush)."""
         if self._client is not None:
             try:
                 await self._client.disconnect()
@@ -124,6 +128,44 @@ class HaanaAgent:
             finally:
                 self._client = None
             logger.info(f"[{self.instance}] Claude subprocess geschlossen")
+
+    # ── Startup / Shutdown ────────────────────────────────────────────────────
+
+    async def startup(self):
+        """
+        Startet den Agenten:
+        1. Gespeicherten Window-Context laden
+        2. Pending Extraktionen vom letzten Lauf sofort nachextrahieren
+        """
+        pending = await self.memory.load_context(self._context_path)
+        if pending > 0:
+            logger.info(
+                f"[{self.instance}] {pending} Einträge aus letzter Session "
+                "werden nachträglich extrahiert..."
+            )
+            await self.memory.flush_pending(timeout=60.0)
+            # Context nach Extraktion aktualisieren
+            self.memory.save_context(self._context_path)
+
+    async def shutdown(self, timeout: float = 30.0):
+        """
+        Sauberes Shutdown:
+        1. Laufende Extraktions-Tasks abwarten (max timeout Sekunden)
+        2. Window-Context final speichern
+        3. Subprocess schließen
+        """
+        pending = self.memory.pending_count()
+        if pending > 0:
+            print(f"  Extrahiere noch {pending} Einträge...")
+            cancelled = await self.memory.flush_pending(timeout=timeout)
+            if cancelled > 0:
+                logger.warning(
+                    f"[{self.instance}] {cancelled} Extraktionen nach "
+                    f"{timeout}s abgebrochen und im Context-File gespeichert."
+                )
+
+        self.memory.save_context(self._context_path)
+        await self.close()
 
     # ── Haupt-Loop ────────────────────────────────────────────────────────────
 
@@ -136,7 +178,7 @@ class HaanaAgent:
         3. Prompt an persistenten Subprocess senden (kein neuer Prozess!)
         4. Text aus AssistantMessage-Blöcken sammeln
         5. Session-ID für Kontinuität merken
-        6. Konversation in Memory speichern
+        6. Konversation non-blocking ins Sliding Window schreiben
         """
         # Memory: relevanten Kontext laden
         memory_context = self.memory.search(user_message)
@@ -226,28 +268,72 @@ def _setup_logging():
 
 
 async def _repl(agent: HaanaAgent):
-    """Einfache REPL-Schleife für lokale Tests mit Latenz-Messung."""
+    """
+    REPL-Schleife für lokale Tests.
+
+    Befehle:
+      /exit       – Sauberes Shutdown (pending Extraktionen abwarten, dann beenden)
+      exit / quit – wie /exit
+      Ctrl+C      – wie /exit
+
+    Signal-Handler:
+      SIGTERM / SIGINT → setzt shutdown_event → REPL beendet sich sauber
+    """
     print(f"\nHAANA [{agent.instance}] – REPL (ClaudeSDKClient, persistenter Subprocess)")
-    print(f"cwd: {agent.cwd.resolve()}")
-    print("Beenden mit Ctrl+C oder 'exit'\n")
+    print(f"cwd:     {agent.cwd.resolve()}")
+    print(f"context: {agent._context_path}")
+    print("Beenden mit /exit, exit, quit oder Ctrl+C\n")
+
+    shutdown_event = asyncio.Event()
+
+    # Signal-Handler: SIGTERM + SIGINT → setzt shutdown_event
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            loop.add_signal_handler(sig, shutdown_event.set)
+        except (NotImplementedError, OSError):
+            # Windows unterstützt add_signal_handler nicht
+            pass
+
+    async def _do_shutdown():
+        """Shutdown-Sequenz mit Status-Output."""
+        pending = agent.memory.pending_count()
+        if pending > 0:
+            print(f"\n  Extrahiere noch {pending} Einträge...", flush=True)
+        await agent.shutdown(timeout=30.0)
+        print("Tschüss!")
 
     try:
-        while True:
+        while not shutdown_event.is_set():
+            # Non-blocking input: gibt den Event-Loop frei für pending async Tasks
             try:
-                user_input = input("Du: ").strip()
-            except (KeyboardInterrupt, EOFError):
-                print("\nBeendet.")
+                user_input = await asyncio.to_thread(input, "Du: ")
+                user_input = user_input.strip()
+            except (EOFError, KeyboardInterrupt):
                 break
 
-            if not user_input or user_input.lower() in ("exit", "quit"):
+            # Shutdown-Signal kam während input() lief
+            if shutdown_event.is_set():
+                break
+
+            # Leere Eingabe → ignorieren
+            if not user_input:
+                continue
+
+            # /exit Befehl
+            if user_input.lower() in ("/exit", "exit", "quit"):
                 break
 
             t0 = time.monotonic()
             response = await agent.run_async(user_input)
             elapsed = time.monotonic() - t0
             print(f"HAANA ({elapsed:.2f}s): {response}\n")
+
+            # Context nach jeder Nachricht persistieren (atomares JSON-Write)
+            agent.memory.save_context(agent._context_path)
+
     finally:
-        await agent.close()
+        await _do_shutdown()
 
 
 async def _main():
@@ -266,6 +352,9 @@ async def _main():
     except FileNotFoundError as e:
         print(f"Fehler: {e}")
         return
+
+    # Startup: Context laden, pending Einträge aus letzter Session extrahieren
+    await agent.startup()
 
     await _repl(agent)
 
