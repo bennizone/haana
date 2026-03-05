@@ -26,12 +26,14 @@ services:
     environment:
       HAANA_INSTANCE: alice
       HAANA_API_PORT: 8001
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
     ports:
       - "8001:8001"
     volumes:
       - ./instanzen/alice/CLAUDE.md:/app/CLAUDE.md:ro
       - ./skills:/app/skills:ro
       - haana-data:/data
+      - /root/.claude:/root/.claude:ro
     restart: unless-stopped
     depends_on:
       qdrant:
@@ -44,12 +46,14 @@ services:
     environment:
       HAANA_INSTANCE: bob
       HAANA_API_PORT: 8002
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
     ports:
       - "8002:8002"
     volumes:
       - ./instanzen/bob/CLAUDE.md:/app/CLAUDE.md:ro
       - ./skills:/app/skills:ro
       - haana-data:/data
+      - /root/.claude:/root/.claude:ro
     restart: unless-stopped
     depends_on:
       qdrant:

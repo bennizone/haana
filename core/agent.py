@@ -387,9 +387,9 @@ async def _main():
     # Startup: Context laden, pending Einträge aus letzter Session extrahieren
     await agent.startup()
 
-    # Wenn HAANA_API_PORT gesetzt: HTTP-API parallel zum REPL starten
     api_port = int(os.environ.get("HAANA_API_PORT", "0"))
     if api_port:
+        # API-Modus: nur HTTP-Server starten (kein REPL – kein TTY im Container)
         import uvicorn
         from core.api import create_api
         api_app = create_api(agent)
@@ -400,7 +400,26 @@ async def _main():
         )
         server = uvicorn.Server(config)
         logger.info(f"[{instance}] API-Server startet auf {api_host}:{api_port}")
-        await asyncio.gather(server.serve(), _repl(agent))
+
+        # Graceful shutdown bei SIGTERM/SIGINT
+        loop = asyncio.get_running_loop()
+        stop_event = asyncio.Event()
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            try:
+                loop.add_signal_handler(sig, stop_event.set)
+            except (NotImplementedError, OSError):
+                pass
+
+        async def _run_server():
+            await server.serve()
+            stop_event.set()
+
+        async def _wait_for_stop():
+            await stop_event.wait()
+            server.should_exit = True
+
+        await asyncio.gather(_run_server(), _wait_for_stop())
+        await agent.shutdown(timeout=30.0)
     else:
         await _repl(agent)
 
