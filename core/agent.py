@@ -116,7 +116,7 @@ class HaanaAgent:
             model=self.model,
             max_turns=20,
             allowed_tools=self._allowed_tools,
-            permission_mode="acceptEdits",
+            permission_mode="bypassPermissions",
             mcp_servers=self._mcp_servers if self._mcp_servers else {},
             setting_sources=["project"],
             env=subprocess_env,

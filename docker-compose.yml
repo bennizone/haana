@@ -33,7 +33,7 @@ services:
       - ./instanzen/alice/CLAUDE.md:/app/CLAUDE.md:ro
       - ./skills:/app/skills:ro
       - haana-data:/data
-      - /root/.claude:/root/.claude:ro
+      - /root/.claude:/home/haana/.claude:ro
     restart: unless-stopped
     depends_on:
       qdrant:
@@ -53,7 +53,7 @@ services:
       - ./instanzen/bob/CLAUDE.md:/app/CLAUDE.md:ro
       - ./skills:/app/skills:ro
       - haana-data:/data
-      - /root/.claude:/root/.claude:ro
+      - /root/.claude:/home/haana/.claude:ro
     restart: unless-stopped
     depends_on:
       qdrant:
