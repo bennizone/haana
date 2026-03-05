@@ -117,9 +117,15 @@ services:
     profiles: [agents]
     build: ./whatsapp-bridge
     env_file: .env
+    environment:
+      AGENT_URL_BENNI:   http://instanz-alice:8001
+      BRIDGE_OWNER_JID:  ${BRIDGE_OWNER_JID:-}
+      BRIDGE_LOG_LEVEL:  ${BRIDGE_LOG_LEVEL:-info}
     volumes:
       - haana-whatsapp-session:/app/session
     restart: unless-stopped
+    depends_on:
+      - instanz-alice
 
   # ── Optionale Dienste (auskommentiert bis konfiguriert) ───────────────────
 
