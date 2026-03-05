@@ -387,7 +387,22 @@ async def _main():
     # Startup: Context laden, pending Einträge aus letzter Session extrahieren
     await agent.startup()
 
-    await _repl(agent)
+    # Wenn HAANA_API_PORT gesetzt: HTTP-API parallel zum REPL starten
+    api_port = int(os.environ.get("HAANA_API_PORT", "0"))
+    if api_port:
+        import uvicorn
+        from core.api import create_api
+        api_app = create_api(agent)
+        api_host = os.environ.get("HAANA_API_HOST", "0.0.0.0")
+        config = uvicorn.Config(
+            api_app, host=api_host, port=api_port,
+            log_level="warning", access_log=False,
+        )
+        server = uvicorn.Server(config)
+        logger.info(f"[{instance}] API-Server startet auf {api_host}:{api_port}")
+        await asyncio.gather(server.serve(), _repl(agent))
+    else:
+        await _repl(agent)
 
 
 if __name__ == "__main__":

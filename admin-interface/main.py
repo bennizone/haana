@@ -45,6 +45,14 @@ INST_DIR   = Path(os.environ.get("HAANA_INST_DIR",  "/app/instanzen"))
 
 INSTANCES = ["alice", "bob", "ha-assist", "ha-advanced"]
 
+# Agent-API URLs (aus Env, Fallback für lokale Entwicklung)
+AGENT_URLS: dict[str, str] = {
+    "alice":       os.environ.get("AGENT_URL_BENNI",       "http://localhost:8001"),
+    "bob":        os.environ.get("AGENT_URL_DOMI",        "http://localhost:8002"),
+    "ha-assist":   os.environ.get("AGENT_URL_HA_ASSIST",   "http://localhost:8003"),
+    "ha-advanced": os.environ.get("AGENT_URL_HA_ADVANCED", "http://localhost:8004"),
+}
+
 # ── Default-Konfiguration ────────────────────────────────────────────────────
 
 DEFAULT_CONFIG = {
@@ -250,6 +258,62 @@ async def get_status():
             }
 
     return status
+
+
+# ── Chat-Proxy (Webchat → Agent-API) ─────────────────────────────────────────
+
+@app.post("/api/chat/{instance}")
+async def chat_proxy(instance: str, request: Request):
+    """
+    Sendet eine Nachricht an eine Agent-Instanz und gibt die Antwort zurück.
+    Proxy zur Agent-API (core/api.py, läuft im Agent-Container).
+    """
+    if instance not in INSTANCES:
+        raise HTTPException(404, f"Instanz '{instance}' nicht gefunden")
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Ungültiges JSON")
+
+    message = (body.get("message") or "").strip()
+    if not message:
+        raise HTTPException(400, "message darf nicht leer sein")
+
+    agent_url = AGENT_URLS.get(instance)
+    if not agent_url:
+        raise HTTPException(503, f"Keine Agent-URL für '{instance}' konfiguriert")
+
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            r = await client.post(
+                f"{agent_url}/chat",
+                json={"message": message, "channel": "webchat"},
+            )
+            r.raise_for_status()
+            return r.json()
+    except httpx.ConnectError:
+        raise HTTPException(503, f"Agent '{instance}' nicht erreichbar (läuft der Container?)")
+    except httpx.TimeoutException:
+        raise HTTPException(504, "Agent hat nicht rechtzeitig geantwortet")
+    except Exception as e:
+        raise HTTPException(502, f"Agent-Fehler: {str(e)[:200]}")
+
+
+@app.get("/api/agent-health/{instance}")
+async def agent_health(instance: str):
+    """Prüft ob ein Agent-Container erreichbar ist."""
+    if instance not in INSTANCES:
+        raise HTTPException(404)
+    agent_url = AGENT_URLS.get(instance, "")
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.get(f"{agent_url}/health")
+            return r.json()
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
 # ── SSE: Echtzeit-Konversationen ──────────────────────────────────────────────

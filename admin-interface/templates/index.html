@@ -244,8 +244,30 @@
     <div class="live-bar">
       <div class="live-dot offline" id="live-dot"></div>
       <span id="live-label">Live</span>
+      <span id="agent-status" style="margin-left:8px;font-size:11px;color:var(--muted);"></span>
     </div>
   </div>
+
+  <!-- Chat-Eingabe -->
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px;">
+    <div style="display:flex;gap:10px;align-items:flex-end;">
+      <textarea id="chat-input"
+        placeholder="Nachricht an HAANA... (Enter senden, Shift+Enter Zeilenumbruch)"
+        rows="2"
+        style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);
+               padding:10px 12px;border-radius:8px;font-family:inherit;font-size:14px;
+               resize:none;line-height:1.4;transition:border-color .15s;"
+        onkeydown="handleChatKey(event)"
+        onfocus="this.style.borderColor='var(--accent2)'"
+        onblur="this.style.borderColor='var(--border)'"
+      ></textarea>
+      <button class="btn btn-primary" id="send-btn" onclick="sendChat()" style="height:44px;padding:0 20px;flex-shrink:0;">
+        Senden ↵
+      </button>
+    </div>
+    <div id="chat-status" style="margin-top:8px;font-size:12px;color:var(--muted);min-height:18px;"></div>
+  </div>
+
   <div id="conv-list">
     <div class="empty-state">
       <div class="icon">⏳</div>
@@ -402,6 +424,7 @@ function selectInstance(inst) {
   document.getElementById('btn-' + inst)?.classList.add('active');
   startSSE(inst);
   loadConversations(inst);
+  checkAgentHealth(inst);
 }
 
 // ── Konversationen laden ───────────────────────────────────────────────────
@@ -801,6 +824,124 @@ async function loadStatus() {
   }
 }
 
+// ── Chat-Eingabe ───────────────────────────────────────────────────────────
+function handleChatKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendChat();
+  }
+}
+
+async function sendChat() {
+  const input  = document.getElementById('chat-input');
+  const status = document.getElementById('chat-status');
+  const btn    = document.getElementById('send-btn');
+  const msg    = input.value.trim();
+  if (!msg) return;
+
+  input.value = '';
+  input.style.borderColor = 'var(--border)';
+  btn.disabled = true;
+  btn.textContent = '...';
+  status.textContent = `⏳ ${currentInstance} denkt nach...`;
+
+  // Optimistisch sofort anzeigen
+  const tempId = 'pending-' + Date.now();
+  prependPendingMessage(msg, tempId);
+
+  try {
+    const r = await fetch(`/api/chat/${currentInstance}`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ message: msg }),
+    });
+
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({detail: r.statusText}));
+      const errMsg = err.detail || 'Unbekannter Fehler';
+      updatePendingMessage(tempId, msg, '❌ ' + errMsg, true);
+      status.textContent = '❌ ' + errMsg;
+    } else {
+      const data = await r.json();
+      updatePendingMessage(tempId, msg, data.response, false);
+      status.textContent = '';
+    }
+  } catch(e) {
+    updatePendingMessage(tempId, msg, '❌ Verbindungsfehler: ' + e.message, true);
+    status.textContent = '❌ ' + e.message;
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Senden ↵';
+  input.focus();
+}
+
+function prependPendingMessage(userMsg, cardId) {
+  const list = document.getElementById('conv-list');
+  const empty = list.querySelector('.empty-state');
+  if (empty) list.innerHTML = '';
+
+  const now = new Date().toLocaleString('de-DE', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  const html = `
+  <div class="conv-card" id="${cardId}" style="border-color:var(--accent2);opacity:0.7;">
+    <div class="conv-header" style="cursor:default;">
+      <div class="conv-meta">
+        <span class="conv-time">${now}</span>
+        <span class="channel-badge ch-webchat">Webchat</span>
+      </div>
+      <div class="conv-messages">
+        <div class="conv-user"><strong>Du:</strong> ${escHtml(userMsg)}</div>
+        <div class="conv-assistant" id="${cardId}-resp" style="color:var(--muted);">
+          <span style="animation:pulse 1s infinite;">…</span>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  list.insertAdjacentHTML('afterbegin', html);
+}
+
+function updatePendingMessage(cardId, userMsg, response, isError) {
+  const card = document.getElementById(cardId);
+  if (!card) return;
+  card.style.opacity = '1';
+  card.style.borderColor = isError ? 'var(--red)' : 'var(--border)';
+  const respEl = document.getElementById(cardId + '-resp');
+  if (respEl) {
+    respEl.style.color = isError ? 'var(--red)' : '';
+    respEl.innerHTML = `<em>${escHtml(response)}</em>`;
+  }
+  // Expandierbar machen
+  const header = card.querySelector('.conv-header');
+  if (header && !isError) {
+    header.style.cursor = 'pointer';
+    header.onclick = () => card.classList.toggle('expanded');
+    card.insertAdjacentHTML('beforeend', `
+      <div class="conv-details">
+        <div class="detail-grid">
+          <div class="detail-box"><div class="detail-label">User (vollständig)</div><div class="detail-value">${escHtml(userMsg)}</div></div>
+          <div class="detail-box"><div class="detail-label">HAANA Antwort</div><div class="detail-value">${escHtml(response)}</div></div>
+        </div>
+      </div>`);
+    const expandIcon = document.createElement('div');
+    expandIcon.className = 'expand-icon';
+    expandIcon.textContent = '›';
+    header.appendChild(expandIcon);
+  }
+}
+
+async function checkAgentHealth(inst) {
+  const el = document.getElementById('agent-status');
+  try {
+    const r = await fetch(`/api/agent-health/${inst}`);
+    const d = await r.json();
+    el.textContent = d.ok ? '● Agent online' : '● Agent offline';
+    el.style.color  = d.ok ? 'var(--green)' : 'var(--red)';
+  } catch {
+    el.textContent = '● Agent nicht erreichbar';
+    el.style.color = 'var(--red)';
+  }
+}
+
 // ── Utilities ─────────────────────────────────────────────────────────────
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -820,6 +961,7 @@ function toast(msg, type = 'ok') {
 document.addEventListener('DOMContentLoaded', () => {
   loadConversations(currentInstance);
   startSSE(currentInstance);
+  checkAgentHealth(currentInstance);
   loadStatus();
   loadClaudeMd(currentMdInst);
 });

@@ -25,6 +25,9 @@ services:
     env_file: .env
     environment:
       HAANA_INSTANCE: alice
+      HAANA_API_PORT: 8001
+    ports:
+      - "8001:8001"
     volumes:
       - ./instanzen/alice/CLAUDE.md:/app/CLAUDE.md:ro
       - ./skills:/app/skills:ro
@@ -40,6 +43,9 @@ services:
     env_file: .env
     environment:
       HAANA_INSTANCE: bob
+      HAANA_API_PORT: 8002
+    ports:
+      - "8002:8002"
     volumes:
       - ./instanzen/bob/CLAUDE.md:/app/CLAUDE.md:ro
       - ./skills:/app/skills:ro
@@ -85,10 +91,12 @@ services:
     build: ./admin-interface
     env_file: .env
     environment:
-      HAANA_LOG_DIR:   /data/logs
-      HAANA_DATA_DIR:  /data
-      HAANA_CONF_FILE: /data/config/config.json
-      HAANA_INST_DIR:  /app/instanzen
+      HAANA_LOG_DIR:        /data/logs
+      HAANA_DATA_DIR:       /data
+      HAANA_CONF_FILE:      /data/config/config.json
+      HAANA_INST_DIR:       /app/instanzen
+      AGENT_URL_BENNI:      http://instanz-alice:8001
+      AGENT_URL_DOMI:       http://instanz-bob:8002
     ports:
       - "8080:8080"
     volumes:
