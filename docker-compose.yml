@@ -79,16 +79,20 @@ services:
       qdrant:
         condition: service_healthy
 
-  # ── Admin-Interface (Profil: agents) ──────────────────────────────────────
+  # ── Admin-Interface (immer aktiv – kein Profil) ────────────────────────────
 
   admin-interface:
-    profiles: [agents]
     build: ./admin-interface
     env_file: .env
+    environment:
+      HAANA_LOG_DIR:   /data/logs
+      HAANA_DATA_DIR:  /data
+      HAANA_CONF_FILE: /data/config/config.json
+      HAANA_INST_DIR:  /app/instanzen
     ports:
       - "8080:8080"
     volumes:
-      - ./instanzen:/app/instanzen
+      - ./instanzen:/app/instanzen:ro
       - haana-data:/data
     restart: unless-stopped
     depends_on:
