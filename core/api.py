@@ -32,7 +32,12 @@ def create_api(agent) -> FastAPI:
 
     @api.get("/health")
     async def health():
-        return {"ok": True, "instance": agent.instance}
+        return {
+            "ok": True,
+            "instance": agent.instance,
+            "window_size": agent.memory._window.size(),
+            "pending_extractions": agent.memory.pending_count(),
+        }
 
     @api.post("/chat")
     async def chat(request: Request):

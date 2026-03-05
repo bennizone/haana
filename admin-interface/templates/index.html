@@ -382,6 +382,68 @@
     <button class="btn btn-secondary" onclick="loadConfig()">↺ Zurücksetzen</button>
   </div>
 
+  <!-- Embedding-Modell -->
+  <div class="config-section">
+    <div class="config-section-header">🔢 Embedding-Modell</div>
+    <div class="config-section-body">
+      <div class="form-row three">
+        <div class="form-group">
+          <label>Provider</label>
+          <select id="embed-provider">
+            <option value="ollama">Ollama (lokal)</option>
+            <option value="huggingface">HuggingFace</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Modell</label>
+          <select id="embed-model" onchange="updateEmbedDims()">
+            <option value="bge-m3">bge-m3 (1024 dims) – empfohlen</option>
+            <option value="nomic-embed-text">nomic-embed-text (768 dims)</option>
+            <option value="bge-small-en-v1.5">bge-small-en-v1.5 (384 dims)</option>
+            <option value="__custom__">Manuell eingeben…</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Dimensions</label>
+          <input type="number" id="embed-dims" value="1024" min="64" max="4096">
+        </div>
+      </div>
+      <div id="embed-custom-row" class="form-group" style="display:none;margin-top:4px;">
+        <label>Modell-Name (manuell)</label>
+        <input type="text" id="embed-model-custom" placeholder="z.B. mxbai-embed-large">
+      </div>
+      <p style="font-size:12px;color:var(--yellow);margin-top:10px;">
+        ⚠ Beim Wechsel des Embedding-Modells müssen alle Qdrant-Collections neu aufgebaut werden
+        (andere Dimensionen sind nicht kompatibel).
+      </p>
+    </div>
+  </div>
+
+  <!-- Log-Retention -->
+  <div class="config-section">
+    <div class="config-section-header">🗂 Log-Retention</div>
+    <div class="config-section-body">
+      <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
+        Konversations-Logs werden <strong style="color:var(--green)">niemals gelöscht</strong> (Source of Truth für Memory-Rebuild).
+        Operative Logs (LLM-Calls, Tools, Memory) werden nach konfigurierbaren Tagen bereinigt.
+      </p>
+      <div class="form-row three">
+        <div class="form-group">
+          <label>LLM-Calls (Tage)</label>
+          <input type="number" id="ret-llm-calls" min="1" max="365" value="30">
+        </div>
+        <div class="form-group">
+          <label>Tool-Calls (Tage)</label>
+          <input type="number" id="ret-tool-calls" min="1" max="365" value="30">
+        </div>
+        <div class="form-group">
+          <label>Memory-Ops (Tage)</label>
+          <input type="number" id="ret-memory-ops" min="1" max="365" value="30">
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Traumprozess (Placeholder) -->
   <div class="config-section" style="opacity:0.6;">
     <div class="config-section-header">🌙 Traumprozess <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:8px;">Phase 3+</span></div>
@@ -695,13 +757,18 @@ async function loadConfig() {
 function renderConfig(c) {
   // Provider Slots
   const slots = c.llm_providers || [];
+  const slotNums = slots.map(s => s.slot);
   document.getElementById('provider-slots').innerHTML = slots.map((s, i) => `
-    <div class="provider-slot">
-      <div class="slot-header">Slot ${s.slot}</div>
+    <div class="provider-slot" id="provslot-${i}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <span class="slot-header" style="margin-bottom:0;">Slot ${s.slot} – <span id="prov-${i}-label">${escHtml(s.name||'Slot '+s.slot)}</span></span>
+        <button class="btn btn-danger" style="font-size:11px;padding:3px 10px;" onclick="removeLlmSlot(${i})">✕ Entfernen</button>
+      </div>
       <div class="form-row">
         <div class="form-group">
           <label>Name</label>
-          <input type="text" id="prov-${i}-name" value="${escAttr(s.name||'')}">
+          <input type="text" id="prov-${i}-name" value="${escAttr(s.name||'')}"
+            oninput="document.getElementById('prov-${i}-label').textContent=this.value||'Slot ${s.slot}'">
         </div>
         <div class="form-group">
           <label>Typ</label>
@@ -710,7 +777,7 @@ function renderConfig(c) {
           </select>
         </div>
       </div>
-      <div class="form-row three">
+      <div class="form-row">
         <div class="form-group">
           <label>URL (leer = Standard)</label>
           <input type="url" id="prov-${i}-url" value="${escAttr(s.url||'')}">
@@ -719,9 +786,15 @@ function renderConfig(c) {
           <label>API Key</label>
           <input type="password" id="prov-${i}-key" value="${escAttr(s.key||'')}">
         </div>
-        <div class="form-group">
-          <label>Modell</label>
-          <input type="text" id="prov-${i}-model" value="${escAttr(s.model||'')}">
+      </div>
+      <div class="form-group" style="margin-bottom:10px;">
+        <label>Modell</label>
+        <div style="display:flex;gap:6px;">
+          <input type="text" id="prov-${i}-model" value="${escAttr(s.model||'')}" list="models-${i}" style="flex:1;">
+          <datalist id="models-${i}"></datalist>
+          <button class="btn btn-secondary" style="font-size:11px;padding:4px 10px;flex-shrink:0;"
+            onclick="fetchModels(${i})">📋 Modelle</button>
+          <span id="prov-${i}-models-status" style="font-size:11px;color:var(--muted);align-self:center;"></span>
         </div>
       </div>
       <div style="display:flex;gap:10px;align-items:center;">
@@ -730,22 +803,28 @@ function renderConfig(c) {
         <span id="prov-${i}-test" style="font-size:12px;color:var(--muted);"></span>
       </div>
     </div>
-  `).join('');
+  `).join('') + `
+    <div style="margin-top:12px;">
+      <button class="btn btn-secondary" onclick="addLlmSlot()">+ Slot hinzufügen</button>
+    </div>`;
 
-  // Use Cases
+  // Use Cases – Slot-Optionen dynamisch aus aktuellen Slots
   const uc = c.use_cases || {};
+  const slotOptions = slots.map(s =>
+    `<option value="${s.slot}">Slot ${s.slot} – ${escHtml(s.name||'')}</option>`
+  ).join('');
   document.getElementById('use-cases').innerHTML = `
     <div class="use-case-row" style="font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;">
-      <span>Use Case</span><span>Primär (Slot)</span><span>Fallback (Slot)</span>
+      <span>Use Case</span><span>Primär</span><span>Fallback</span>
     </div>
     ${Object.entries(uc).map(([key, val]) => `
     <div class="use-case-row">
       <span class="use-case-label">${escHtml(val.label||key)}</span>
       <select id="uc-${key}-primary">
-        ${[1,2,3,4].map(n => `<option value="${n}" ${val.primary===n?'selected':''}>Slot ${n}</option>`).join('')}
+        ${slots.map(s => `<option value="${s.slot}" ${val.primary===s.slot?'selected':''}>Slot ${s.slot} – ${escHtml(s.name||'')}</option>`).join('')}
       </select>
       <select id="uc-${key}-fallback">
-        ${[1,2,3,4].map(n => `<option value="${n}" ${val.fallback===n?'selected':''}>Slot ${n}</option>`).join('')}
+        ${slots.map(s => `<option value="${s.slot}" ${val.fallback===s.slot?'selected':''}>Slot ${s.slot} – ${escHtml(s.name||'')}</option>`).join('')}
       </select>
     </div>`).join('')}
   `;
@@ -756,34 +835,50 @@ function renderConfig(c) {
   document.getElementById('mem-window-minutes').value = m.window_minutes ?? 60;
   document.getElementById('mem-min-messages').value   = m.min_messages   ?? 5;
 
+  // Embedding
+  const em = c.embedding || {};
+  document.getElementById('embed-model').value = em.model || 'bge-m3';
+  document.getElementById('embed-dims').value  = em.dims  ?? 1024;
+  document.getElementById('embed-provider').value = em.provider || 'ollama';
+
+  // Log Retention
+  const lr = c.log_retention || {};
+  document.getElementById('ret-llm-calls').value    = lr['llm-calls']   ?? 30;
+  document.getElementById('ret-tool-calls').value   = lr['tool-calls']  ?? 30;
+  document.getElementById('ret-memory-ops').value   = lr['memory-ops']  ?? 30;
+
   // Services
-  const s = c.services || {};
-  document.getElementById('svc-ha-url').value    = s.ha_url    || '';
-  document.getElementById('svc-ha-token').value  = s.ha_token  || '';
-  document.getElementById('svc-ollama-url').value = s.ollama_url || '';
-  document.getElementById('svc-qdrant-url').value = s.qdrant_url || '';
+  const sv = c.services || {};
+  document.getElementById('svc-ha-url').value    = sv.ha_url    || '';
+  document.getElementById('svc-ha-token').value  = sv.ha_token  || '';
+  document.getElementById('svc-ollama-url').value = sv.ollama_url || '';
+  document.getElementById('svc-qdrant-url').value = sv.qdrant_url || '';
 }
 
 async function saveConfig() {
   if (!cfg) return;
-  // Lese Werte aus Formular
+  // Lese Slots dynamisch aus DOM (Anzahl kann sich geändert haben)
   const slots = cfg.llm_providers.map((s, i) => ({
     ...s,
-    name:  document.getElementById(`prov-${i}-name`)?.value  || s.name,
-    type:  document.getElementById(`prov-${i}-type`)?.value  || s.type,
-    url:   document.getElementById(`prov-${i}-url`)?.value   || s.url,
-    key:   document.getElementById(`prov-${i}-key`)?.value   || s.key,
-    model: document.getElementById(`prov-${i}-model`)?.value || s.model,
+    name:  document.getElementById(`prov-${i}-name`)?.value  ?? s.name,
+    type:  document.getElementById(`prov-${i}-type`)?.value  ?? s.type,
+    url:   document.getElementById(`prov-${i}-url`)?.value   ?? s.url,
+    key:   document.getElementById(`prov-${i}-key`)?.value   ?? s.key,
+    model: document.getElementById(`prov-${i}-model`)?.value ?? s.model,
   }));
 
   const uc = {};
   Object.entries(cfg.use_cases || {}).forEach(([key, val]) => {
     uc[key] = {
       ...val,
-      primary:  parseInt(document.getElementById(`uc-${key}-primary`)?.value  || val.primary),
-      fallback: parseInt(document.getElementById(`uc-${key}-fallback`)?.value || val.fallback),
+      primary:  parseInt(document.getElementById(`uc-${key}-primary`)?.value  ?? val.primary),
+      fallback: parseInt(document.getElementById(`uc-${key}-fallback`)?.value ?? val.fallback),
     };
   });
+
+  const retLlm   = parseInt(document.getElementById('ret-llm-calls').value)  || null;
+  const retTool  = parseInt(document.getElementById('ret-tool-calls').value) || null;
+  const retMem   = parseInt(document.getElementById('ret-memory-ops').value) || null;
 
   const newCfg = {
     ...cfg,
@@ -793,6 +888,17 @@ async function saveConfig() {
       window_size:    parseInt(document.getElementById('mem-window-size').value),
       window_minutes: parseInt(document.getElementById('mem-window-minutes').value),
       min_messages:   parseInt(document.getElementById('mem-min-messages').value),
+    },
+    embedding: {
+      provider: document.getElementById('embed-provider').value,
+      model:    document.getElementById('embed-model').value,
+      dims:     parseInt(document.getElementById('embed-dims').value) || 1024,
+    },
+    log_retention: {
+      conversations: null,
+      'llm-calls':   retLlm  || 30,
+      'tool-calls':  retTool || 30,
+      'memory-ops':  retMem  || 30,
     },
     services: {
       ha_url:     document.getElementById('svc-ha-url').value,
@@ -863,6 +969,24 @@ async function loadStatus() {
       `<div class="status-row"><span>${inst}</span><span>${info.days} Tag(e), zuletzt ${info.latest||'–'}</span></div>`
     ).join('');
 
+    // Agent Queue-Status parallel laden
+    const agentHealth = await Promise.all(
+      ['alice','bob','ha-assist','ha-advanced'].map(async inst => {
+        try {
+          const r = await fetch(`/api/agent-health/${inst}`);
+          return { inst, ...(await r.json()) };
+        } catch { return { inst, ok: false }; }
+      })
+    );
+
+    const agentRows = agentHealth.map(a => {
+      const dot = a.ok ? '🟢' : '🔴';
+      const queue = a.ok
+        ? `<span style="font-size:11px;color:var(--muted);">Window: ${a.window_size??'?'} | Pending: ${a.pending_extractions??'?'}</span>`
+        : `<span style="font-size:11px;color:var(--muted);">offline</span>`;
+      return `<div class="status-row"><span>${dot} ${a.inst}</span>${queue}</div>`;
+    }).join('');
+
     grid.innerHTML = `
       <div class="status-card">
         <h3>Qdrant</h3>
@@ -880,7 +1004,11 @@ async function loadStatus() {
         </div>
         ${ollama.ok ? `<div class="status-row"><span>Modelle</span><div style="text-align:right;">${models||'keine'}</div></div>` : ''}
       </div>
-      <div class="status-card" style="grid-column:1/-1;">
+      <div class="status-card">
+        <h3>Agent-Instanzen</h3>
+        ${agentRows}
+      </div>
+      <div class="status-card">
         <h3>Konversations-Logs</h3>
         ${logRows || '<div style="color:var(--muted)">Noch keine Logs</div>'}
       </div>
@@ -1026,6 +1154,64 @@ function toast(msg, type = 'ok') {
   el.className = 'show ' + type;
   if (toastTimer) clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.className = ''; }, 3500);
+}
+
+// ── Embedding-Modell Hilfe ─────────────────────────────────────────────────
+function updateEmbedDims() {
+  const sel = document.getElementById('embed-model');
+  const dims = document.getElementById('embed-dims');
+  const customRow = document.getElementById('embed-custom-row');
+  const presets = { 'bge-m3': 1024, 'nomic-embed-text': 768, 'bge-small-en-v1.5': 384 };
+  if (sel.value === '__custom__') {
+    customRow.style.display = '';
+  } else {
+    customRow.style.display = 'none';
+    if (presets[sel.value]) dims.value = presets[sel.value];
+  }
+}
+
+// ── LLM Slot Management ────────────────────────────────────────────────────
+function addLlmSlot() {
+  if (!cfg) return;
+  const maxSlot = cfg.llm_providers.reduce((m, s) => Math.max(m, s.slot), 0);
+  cfg.llm_providers.push({ slot: maxSlot + 1, name: `Slot ${maxSlot + 1}`, type: 'custom', url: '', key: '', model: '' });
+  renderConfig(cfg);
+}
+
+function removeLlmSlot(i) {
+  if (!cfg) return;
+  if (cfg.llm_providers.length <= 1) { toast('Mindestens ein Slot muss vorhanden sein', 'err'); return; }
+  cfg.llm_providers.splice(i, 1);
+  // Slot-Nummern neu vergeben
+  cfg.llm_providers.forEach((s, idx) => s.slot = idx + 1);
+  renderConfig(cfg);
+}
+
+async function fetchModels(i) {
+  const type = document.getElementById(`prov-${i}-type`)?.value;
+  const url  = document.getElementById(`prov-${i}-url`)?.value?.trim();
+  const key  = document.getElementById(`prov-${i}-key`)?.value?.trim();
+  const st   = document.getElementById(`prov-${i}-models-status`);
+  st.textContent = '…';
+  try {
+    const r = await fetch('/api/fetch-models', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ type, url, key }),
+    });
+    const d = await r.json();
+    if (d.manual || !d.models?.length) {
+      st.textContent = d.error ? `⚠ ${d.error.substring(0,60)}` : '⚠ Keine Modelle – manuell eingeben';
+      st.style.color = 'var(--yellow)';
+      return;
+    }
+    const datalist = document.getElementById(`models-${i}`);
+    datalist.innerHTML = d.models.map(m => `<option value="${escAttr(m)}">`).join('');
+    st.textContent = `✓ ${d.models.length} Modelle`;
+    st.style.color = 'var(--green)';
+  } catch(e) {
+    st.textContent = '✗ ' + e.message.substring(0,40);
+    st.style.color = 'var(--red)';
+  }
 }
 
 // ── Verbindungstest ────────────────────────────────────────────────────────

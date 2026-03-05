@@ -21,6 +21,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+import glob as _glob
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
@@ -35,6 +36,45 @@ except ImportError:
 
 app = FastAPI(title="HAANA Admin", docs_url=None, redoc_url=None)
 templates = Jinja2Templates(directory="templates")
+
+
+# ── Log-Retention Cleanup ─────────────────────────────────────────────────────
+
+def _cleanup_logs_once():
+    """Löscht Log-Dateien die älter als konfigurierte Retention sind."""
+    cfg = load_config()
+    retention: dict = cfg.get("log_retention", {})
+
+    now = time.time()
+    deleted = 0
+    for category, days in retention.items():
+        if days is None:
+            continue  # niemals löschen
+        cutoff = now - int(days) * 86400
+        pattern = str(LOG_ROOT / category / "**" / "*.jsonl")
+        for fpath in _glob.glob(pattern, recursive=True):
+            try:
+                if Path(fpath).stat().st_mtime < cutoff:
+                    Path(fpath).unlink()
+                    deleted += 1
+            except Exception:
+                pass
+    if deleted:
+        import logging as _log
+        _log.getLogger(__name__).info(f"[Cleanup] {deleted} Log-Datei(en) gelöscht")
+
+
+async def _cleanup_loop():
+    """Läuft beim Start und dann täglich."""
+    _cleanup_logs_once()
+    while True:
+        await asyncio.sleep(86400)
+        _cleanup_logs_once()
+
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(_cleanup_loop())
 
 # ── Pfade ────────────────────────────────────────────────────────────────────
 
@@ -78,6 +118,17 @@ DEFAULT_CONFIG = {
         "window_size":    int(os.environ.get("HAANA_WINDOW_SIZE",    "20")),
         "window_minutes": int(os.environ.get("HAANA_WINDOW_MINUTES", "60")),
         "min_messages":   5,
+    },
+    "embedding": {
+        "provider": "ollama",
+        "model":    os.environ.get("HAANA_EMBEDDING_MODEL", "bge-m3"),
+        "dims":     int(os.environ.get("HAANA_EMBEDDING_DIMS", "1024")),
+    },
+    "log_retention": {
+        "conversations": None,   # niemals löschen
+        "llm-calls":     30,
+        "tool-calls":    30,
+        "memory-ops":    30,
     },
     "services": {
         "ha_url":    os.environ.get("HA_URL",    ""),
@@ -338,6 +389,43 @@ async def test_connection(request: Request):
         return {"ok": False, "detail": "Timeout (>5s)"}
     except Exception as e:
         return {"ok": False, "detail": str(e)[:200]}
+
+
+@app.post("/api/fetch-models")
+async def fetch_models(request: Request):
+    """
+    Fragt verfügbare Modelle eines LLM-Providers ab.
+    Body: {"type": "anthropic"|"ollama"|"custom", "url": "...", "key": "..."}
+    Returns: {"models": ["model-id", ...]}
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Ungültiges JSON")
+
+    type_ = (body.get("type") or "").strip()
+    url   = (body.get("url")  or "").strip()
+    key   = (body.get("key")  or "").strip()
+
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            if type_ == "ollama":
+                target = url or "http://localhost:11434"
+                r = await client.get(f"{target}/api/tags")
+                models = [m["name"] for m in r.json().get("models", [])]
+                return {"models": models}
+            elif type_ == "anthropic":
+                headers = {"x-api-key": key, "anthropic-version": "2023-06-01"}
+                r = await client.get("https://api.anthropic.com/v1/models", headers=headers)
+                if r.status_code == 200:
+                    models = [m["id"] for m in r.json().get("data", [])]
+                    return {"models": models}
+                return {"models": [], "error": f"HTTP {r.status_code}"}
+            else:
+                return {"models": [], "manual": True}
+    except Exception as e:
+        return {"models": [], "error": str(e)[:200]}
 
 
 @app.get("/api/agent-health/{instance}")

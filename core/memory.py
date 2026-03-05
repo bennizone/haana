@@ -83,7 +83,9 @@ def _build_mem0_config(collection_name: str) -> Optional[dict]:
         )
         return None
 
-    memory_llm = os.environ.get("HAANA_MEMORY_MODEL", "ministral-3-32k:3b")
+    memory_llm    = os.environ.get("HAANA_MEMORY_MODEL",     "ministral-3-32k:3b")
+    embed_model   = os.environ.get("HAANA_EMBEDDING_MODEL",  "bge-m3")
+    embed_dims    = int(os.environ.get("HAANA_EMBEDDING_DIMS", "1024"))
 
     config = {
         "llm": {
@@ -97,9 +99,9 @@ def _build_mem0_config(collection_name: str) -> Optional[dict]:
         "embedder": {
             "provider": "ollama",
             "config": {
-                "model": "bge-m3",
+                "model": embed_model,
                 "ollama_base_url": ollama_url,
-                "embedding_dims": 1024,
+                "embedding_dims": embed_dims,
             },
         },
         "vector_store": {
@@ -108,7 +110,7 @@ def _build_mem0_config(collection_name: str) -> Optional[dict]:
                 "collection_name": collection_name,
                 "host": host,
                 "port": port,
-                "embedding_model_dims": 1024,
+                "embedding_model_dims": embed_dims,
             },
         },
     }
@@ -116,7 +118,7 @@ def _build_mem0_config(collection_name: str) -> Optional[dict]:
     logger.debug(
         f"[{collection_name}] Mem0 config: "
         f"LLM={memory_llm} @ {ollama_url}, "
-        f"Embedder=bge-m3, Qdrant={host}:{port}"
+        f"Embedder={embed_model} (dims={embed_dims}), Qdrant={host}:{port}"
     )
     return config
 
