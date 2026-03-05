@@ -77,7 +77,7 @@ def create_api(agent) -> FastAPI:
         if scope_req and scope_req in agent.memory.write_scopes:
             scope = scope_req
         else:
-            personal = [s for s in agent.memory.write_scopes if s != "bnd_memory"]
+            personal = [s for s in agent.memory.write_scopes if s != "household_memory"]
             scope = personal[0] if personal else (
                 next(iter(agent.memory.write_scopes), None)
             )

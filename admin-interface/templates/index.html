@@ -588,8 +588,8 @@
             <option value="voice-advanced">Voice-Advanced – HAANA Advanced (Kalender, Skills)</option>
           </select>
         </div>
-        <div class="form-group">
-          <label>HA-User</label>
+        <div class="form-group" id="uf-ha-row">
+          <label>HA-User <span style="color:var(--muted);font-size:11px;">(optional)</span></label>
           <input type="text" id="uf-ha-user" placeholder="Home-Assistant Benutzername">
         </div>
       </div>
@@ -603,7 +603,7 @@
           <select id="uf-extract-llm"></select>
         </div>
       </div>
-      <div class="form-row">
+      <div id="uf-wa-row" class="form-row">
         <div class="form-group">
           <label>WhatsApp JID <span style="color:var(--muted);font-size:11px;">(optional, z.B. 49xxx@s.whatsapp.net)</span></label>
           <input type="text" id="uf-wa-jid" placeholder="">
@@ -1582,6 +1582,11 @@ async function showUserForm(userId) {
   section.style.display = '';
   section.scrollIntoView({ behavior: 'smooth' });
   document.getElementById('uf-status').textContent = '';
+
+  // WhatsApp + HA-User für Voice/System ausblenden
+  const isVoice = ['voice', 'voice-advanced'].includes(document.getElementById('uf-role').value);
+  document.getElementById('uf-wa-row').style.display  = isVoice ? 'none' : '';
+  document.getElementById('uf-ha-row').style.display  = isVoice ? 'none' : '';
 }
 
 function hideUserForm() {
@@ -1593,6 +1598,9 @@ function updateUserFormTemplate() {
   const role = document.getElementById('uf-role').value;
   const tplMap = { 'admin': 'admin', 'voice': 'ha-assist', 'voice-advanced': 'ha-advanced' };
   document.getElementById('uf-template').value = tplMap[role] || 'user';
+  const isVoice = ['voice', 'voice-advanced'].includes(role);
+  document.getElementById('uf-wa-row').style.display  = isVoice ? 'none' : '';
+  document.getElementById('uf-ha-row').style.display  = isVoice ? 'none' : '';
 }
 
 async function submitUserForm() {

@@ -119,15 +119,15 @@ response = agent.run(message, context=memory.get_relevant(message))
 
 | Instanz | Modell | Kanal | Zugriff | Memory |
 |---|---|---|---|---|
-| Alice (Admin) | Sonnet / Haiku | WhatsApp + Webchat + HA App | Voll + Skill-Management + Konfigurator | alice_memory + bnd_memory |
-| Bob (User) | Sonnet / Haiku | WhatsApp + HA App | Eingeschränkt, kein System-Zugriff | bob_memory + bnd_memory |
-| HA Voice Backend | ministral-3-32k:3b lokal | HA Assist Pipeline | Schlanker Endpunkt, kein Agent | bnd_memory lesen (Qdrant) |
+| Alice (Admin) | Sonnet / Haiku | WhatsApp + Webchat + HA App | Voll + Skill-Management + Konfigurator | alice_memory + household_memory |
+| Bob (User) | Sonnet / Haiku | WhatsApp + HA App | Eingeschränkt, kein System-Zugriff | bob_memory + household_memory |
+| HA Voice Backend | ministral-3-32k:3b lokal | HA Assist Pipeline | Schlanker Endpunkt, kein Agent | household_memory lesen (Qdrant) |
 
 ### Warum diese Aufteilung?
 
 **Alice + Bob** kommunizieren per WhatsApp oder HA App. Latenz spielt keine Rolle – das LLM entscheidet vollständig selbst was zu tun ist. Kein separates Routing nötig.
 
-**HA Voice Backend** ist kein eigenständiger HAANA-Agent. Es ist ein schlanker Endpunkt in der HA Assist Pipeline. Einfache HA-Befehle beantwortet es direkt mit Kontext aus bnd_memory. Alles darüber hinaus – Kalender, Einkaufsliste, Wetter, komplexe Fragen – delegiert es an die Chat-Instanz der Person die gerade spricht.
+**HA Voice Backend** ist kein eigenständiger HAANA-Agent. Es ist ein schlanker Endpunkt in der HA Assist Pipeline. Einfache HA-Befehle beantwortet es direkt mit Kontext aus household_memory. Alles darüber hinaus – Kalender, Einkaufsliste, Wetter, komplexe Fragen – delegiert es an die Chat-Instanz der Person die gerade spricht.
 
 ---
 
@@ -136,9 +136,9 @@ response = agent.run(message, context=memory.get_relevant(message))
 HAANA stellt für HA **drei Fake-Modelle** bereit. HA sieht sie wie normale LLM-Endpunkte – in der HA App oder am Voice Satellite wählt man das passende Modell, HAANA weiß sofort welche Instanz und welches Memory aktiv ist:
 
 ```
-HAANA-Alice   → Anfragen von Alicees Geräten → alice_memory + bnd_memory
-HAANA-Bob    → Anfragen von Bobs Geräten   → bob_memory + bnd_memory
-HAANA-HA      → generische HA-Anfragen       → nur bnd_memory
+HAANA-Alice   → Anfragen von Alicees Geräten → alice_memory + household_memory
+HAANA-Bob    → Anfragen von Bobs Geräten   → bob_memory + household_memory
+HAANA-HA      → generische HA-Anfragen       → nur household_memory
 ```
 
 **3-Tier Ablauf:**
@@ -153,7 +153,7 @@ Tier 1: HA interner Parser
 
 Tier 2: HAANA Voice Backend (ministral-3-32k:3b)
         → HA schickt Anfrage + alle verfügbaren Entities + Status + Presence mit
-        → HAANA holt top 3–5 bnd_memory Einträge aus Qdrant (~50ms, lokal)
+        → HAANA holt top 3–5 household_memory Einträge aus Qdrant (~50ms, lokal)
         → ministral-3:3b kennt Entities + Vorlieben → antwortet im HA-Format
         → HA führt selbst aus (HAANA berührt nie die HA API zur Steuerung)
         │
@@ -183,20 +183,20 @@ Tier 3: HAANA Chat-Instanz (Alice oder Bob, async)
 Instanz Alice          Instanz Bob         HA Voice Backend
      │                      │                      │
      ├──► alice_memory       ├──► bob_memory        │
-     ├──► bnd_memory ◄───────┤                      │
+     ├──► household_memory ◄───────┤                      │
      └──────────────────────────────── lesen ───────┘
 ```
 
 Vier Qdrant-Collections:
 - `alice_memory` – Alices persönliche Erinnerungen, Vorlieben, Kontext
 - `bob_memory` – Bobs persönliche Erinnerungen, Vorlieben, Kontext
-- `bnd_memory` – gemeinsamer Haushaltskontext, geteilte Vorlieben, Haushaltswissen
+- `household_memory` – gemeinsamer Haushaltskontext, geteilte Vorlieben, Haushaltswissen
 - `wissensbasis_docs` – Embeddings der Wissensbasis (Phase 6)
 
 ### Kalender-Scopes
 
 ```
-bnd_memory:    Familien-Kalender (Bobs iCloud, geteilt)
+household_memory:    Familien-Kalender (Bobs iCloud, geteilt)
 alice_memory:  Alices persönlicher Kalender
 bob_memory:   Bobs persönlicher Kalender
 ```
@@ -236,8 +236,8 @@ Beim Embedden gleichzeitig:
 ```
 "Ich mag morgens keinen Kaffee"      → alice_memory
 "Bob schläft gerne lange"           → alice_memory (Alicees Aussage über Bob)
-"Wir wollen abends warmweißes Licht" → bnd_memory
-"Unser WLAN-Passwort ist..."         → bnd_memory
+"Wir wollen abends warmweißes Licht" → household_memory
+"Unser WLAN-Passwort ist..."         → household_memory
 "Meine Mutter heißt..."              → alice_memory
 ```
 
@@ -363,7 +363,7 @@ Sinnvoll:                                   Nicht nötig:
 ──────────────────────────────────          ─────────────────────────────────
 Waschmaschine fertig → WhatsApp             Presence → kommt mit HA-Anfrage mit
 Haustür offen > 10min → WhatsApp            Entity-Status → HA schickt mit
-Wassersensor → sofortiger Alert             Vorlieben → kommen aus bnd_memory
+Wassersensor → sofortiger Alert             Vorlieben → kommen aus household_memory
 person.X home → personalisierte Begrüßung
 Alarm aktiv → TTS + WhatsApp
 Beide schlafen > 30min → Traumprozess
@@ -504,10 +504,10 @@ Echter gemeinsamer Chatverlauf über alle Kanäle. Eine Session, mehrere Eingabe
 ```
 ► [10:34] "Mach das Licht im Wohnzimmer warm"    📱 WhatsApp
    ▼ aufklappen:
-   [Memory geladen]     3 Treffer aus bnd_memory: "Wohnzimmer-Vorlieben", ...
+   [Memory geladen]     3 Treffer aus household_memory: "Wohnzimmer-Vorlieben", ...
    [Tool aufgerufen]    ha_control(entity="light.wohnzimmer", color_temp=2700K)
    [HA Antwort]         OK, Zustand: an, 2700K, 80%
-   [Memory gespeichert] bnd_memory: "Abends warmweißes Licht Wohnzimmer"
+   [Memory gespeichert] household_memory: "Abends warmweißes Licht Wohnzimmer"
    [Antwort]            "Wohnzimmer auf warmweiß gedimmt."
 ```
 
@@ -698,7 +698,7 @@ Schritt 7: Privacy
 - Daily Brief Skill: morgens automatisch, Termine des Tages + Wetter
 - Bob-Instanz freischalten: WhatsApp + HA App
 - Multi-Agent Kommunikation: interne `/message` API, beide werden benachrichtigt
-- bnd_memory Feedback-Loop für Kalender
+- household_memory Feedback-Loop für Kalender
 - Admin-Interface: Nutzer-Verwaltung, Bob anlegen, Memory-Einstellungen
 
 **Ergebnis:** Bob hat vom ersten Tag Kalender + Memory + gemeinsamer Kontext. Kein Voice-Zwang – tippen reicht.
@@ -717,7 +717,7 @@ Schritt 7: Privacy
 
 **HAANA Voice Backend:**
 - Drei Fake-Modelle: HAANA-Alice, HAANA-Bob, HAANA-HA
-- Qdrant-Lookup bnd_memory (~50ms) vor jedem Tier-2-Call
+- Qdrant-Lookup household_memory (~50ms) vor jedem Tier-2-Call
 - 3-Tier: HA Parser → HAANA Voice Backend → Chat-Instanz (async mit Zwischenantwort)
 - In HA Assist Pipeline einbinden als externer Conversation Agent
 

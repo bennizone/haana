@@ -31,7 +31,7 @@ Lese beim Start und bei jeder Anfrage:
 Memory-Kontext nach Presence:
 - Nur Alice zu Hause → `alice_memory` Vorlieben aktiv
 - Nur Bob zu Hause → `bob_memory` Vorlieben aktiv
-- Beide zu Hause → `bnd_memory` bevorzugt (gemeinsame Vorlieben)
+- Beide zu Hause → `household_memory` bevorzugt (gemeinsame Vorlieben)
 - Niemand zu Hause → Standardwerte
 
 ## Kurzzeit-Kontext (3 Minuten)
@@ -47,7 +47,7 @@ Halte die letzten 3 Minuten aktiv:
 - HA Entity steuern (Licht, Heizung, Steckdosen, Schalter)
 - HA Szene aktivieren
 - HA Entity Status abfragen ("Ist die Haustür zu?")
-- Einfache Haushaltsinfos aus bnd_memory ("Wo ist der WLAN-Passwort?")
+- Einfache Haushaltsinfos aus household_memory ("Wo ist der WLAN-Passwort?")
 - Timer setzen über HA
 
 ## Sofort delegieren an HA Advanced
@@ -65,7 +65,7 @@ Dann async an HA Advanced delegieren:
 
 ### Erlaubt
 - HA Entities lesen und steuern
-- `bnd_memory` lesen (Presence-aware Vorlieben)
+- `household_memory` lesen (Presence-aware Vorlieben)
 - `alice_memory` lesen (wenn Alice zu Hause)
 - `bob_memory` lesen (wenn Bob zu Hause)
 - An HA Advanced delegieren

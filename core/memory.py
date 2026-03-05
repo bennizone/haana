@@ -4,7 +4,7 @@ HAANA Memory – Mem0 + Qdrant Wrapper
 Drei Scopes mit separaten Qdrant-Collections:
   alice_memory  – Alicees persönliche Erinnerungen
   bob_memory   – Bobs persönliche Erinnerungen
-  bnd_memory    – gemeinsamer Haushaltskontext
+  household_memory    – gemeinsamer Haushaltskontext
 
 LLM für Memory-Extraktion: Ollama (kein API-Key nötig).
 Embedder: Ollama bge-m3, Fallback HuggingFace wenn OLLAMA_URL fehlt.
@@ -39,22 +39,22 @@ import core.logger as haana_log
 
 logger = logging.getLogger(__name__)
 
-VALID_SCOPES = {"alice_memory", "bob_memory", "bnd_memory"}
+VALID_SCOPES = {"alice_memory", "bob_memory", "household_memory"}
 
 # Schreibberechtigungen pro Instanz
 _WRITE_SCOPES: dict[str, set[str]] = {
-    "alice":       {"alice_memory", "bnd_memory"},
-    "bob":        {"bob_memory", "bnd_memory"},
+    "alice":       {"alice_memory", "household_memory"},
+    "bob":        {"bob_memory", "household_memory"},
     "ha-assist":   set(),
     "ha-advanced": set(),
 }
 
 # Leseberechtigungen pro Instanz
 _READ_SCOPES: dict[str, set[str]] = {
-    "alice":       {"alice_memory", "bnd_memory"},
-    "bob":        {"bob_memory", "bnd_memory"},
-    "ha-assist":   {"alice_memory", "bob_memory", "bnd_memory"},
-    "ha-advanced": {"alice_memory", "bob_memory", "bnd_memory"},
+    "alice":       {"alice_memory", "household_memory"},
+    "bob":        {"bob_memory", "household_memory"},
+    "ha-assist":   {"alice_memory", "bob_memory", "household_memory"},
+    "ha-advanced": {"alice_memory", "bob_memory", "household_memory"},
 }
 
 
@@ -344,14 +344,14 @@ class HaanaMemory:
             return scope
 
         match = re.search(
-            r"\b(alice_memory|bob_memory|bnd_memory)\b",
+            r"\b(alice_memory|bob_memory|household_memory)\b",
             assistant_response,
         )
         if match and match.group(1) in self.write_scopes:
             scope = match.group(1)
             logger.debug(f"[{self.instance}] Scope aus Agentenantwort: '{scope}'")
         else:
-            personal = {s for s in self.write_scopes if s != "bnd_memory"}
+            personal = {s for s in self.write_scopes if s != "household_memory"}
             scope = next(iter(personal), next(iter(self.write_scopes)))
             logger.debug(f"[{self.instance}] Scope nicht erkannt, Fallback: '{scope}'")
 

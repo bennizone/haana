@@ -232,21 +232,43 @@ DEFAULT_CONFIG = {
 
 # ── Hilfsfunktionen ──────────────────────────────────────────────────────────
 
+_SYSTEM_USERS = {
+    "ha-assist":   DEFAULT_CONFIG["users"][2],  # HAANA Voice
+    "ha-advanced": DEFAULT_CONFIG["users"][3],  # HAANA Advanced
+}
+_SYSTEM_USER_IDS = set(_SYSTEM_USERS.keys())
+
+
+def _ensure_system_users(cfg: dict) -> None:
+    """Stellt sicher, dass die System-Instanzen immer in users vorhanden sind (max. 1×)."""
+    users = cfg.setdefault("users", [])
+    # Duplikate/veraltete System-Einträge entfernen, dann wieder einfügen
+    cfg["users"] = [u for u in users if u.get("id") not in _SYSTEM_USER_IDS]
+    # Am Ende anfügen (nach normalen Usern)
+    for sys_user in _SYSTEM_USERS.values():
+        cfg["users"].append(sys_user)
+
+
 def load_config() -> dict:
     if CONF_FILE.exists():
         try:
             cfg = json.loads(CONF_FILE.read_text(encoding="utf-8"))
             # Embeddings-Use-Case entfernen (wurde in separate Sektion ausgelagert)
             cfg.get("use_cases", {}).pop("embeddings", None)
+            _ensure_system_users(cfg)
             return cfg
         except Exception:
             pass
-    return DEFAULT_CONFIG
+    cfg = dict(DEFAULT_CONFIG)
+    _ensure_system_users(cfg)
+    return cfg
 
 
 def save_config(cfg: dict) -> None:
     CONF_FILE.parent.mkdir(parents=True, exist_ok=True)
-    CONF_FILE.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+    # System-User nicht in Datei persistieren – werden immer aus Code injiziert
+    to_save = {**cfg, "users": [u for u in cfg.get("users", []) if u.get("id") not in _SYSTEM_USER_IDS]}
+    CONF_FILE.write_text(json.dumps(to_save, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def read_recent_logs(category: str, sub: Optional[str] = None, limit: int = 100) -> list[dict]:
@@ -738,8 +760,8 @@ def _start_agent_container(user: dict, cfg: dict) -> dict:
     template      = user.get("claude_md_template", "user")
     primary_slot  = user.get("primary_llm_slot", 1)
     extract_slot  = user.get("extraction_llm_slot", 3)
-    write_scopes  = f"{uid}_memory,bnd_memory"
-    read_scopes   = f"{uid}_memory,bnd_memory"
+    write_scopes  = f"{uid}_memory,household_memory"
+    read_scopes   = f"{uid}_memory,household_memory"
 
     # LLM-Slot-Infos aus Config
     slots = {s["slot"]: s for s in cfg.get("llm_providers", [])}
@@ -838,6 +860,8 @@ async def create_user(request: Request):
     uid = (body.get("id") or "").strip().lower()
     if not re.match(r"^[a-z0-9][a-z0-9-]{0,29}$", uid):
         raise HTTPException(400, "ID muss [a-z0-9-], max 30 Zeichen, nicht mit - beginnen")
+    if uid in _SYSTEM_USER_IDS:
+        raise HTTPException(409, f"'{uid}' ist eine reservierte System-ID")
 
     cfg = load_config()
     existing = [u["id"] for u in cfg.get("users", [])]
