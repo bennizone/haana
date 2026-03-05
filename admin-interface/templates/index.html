@@ -260,6 +260,21 @@
     </div>
   </div>
 
+  <!-- Rebuild-Banner (erscheint wenn Qdrant leer aber Logs vorhanden) -->
+  <div id="rebuild-banner" style="display:none;background:#1c1a00;border:1px solid var(--yellow);
+       border-radius:8px;padding:12px 16px;margin-bottom:14px;display:none;
+       justify-content:space-between;align-items:center;gap:12px;">
+    <span style="color:var(--yellow);font-size:13px;">
+      ⚠ Qdrant ist leer – Memory kann aus Konversations-Logs neu aufgebaut werden.
+    </span>
+    <div style="display:flex;gap:8px;flex-shrink:0;">
+      <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;border-color:var(--yellow);color:var(--yellow);"
+        onclick="showTab('config');scrollToRebuild()">Jetzt rebuilden</button>
+      <button class="btn btn-secondary" style="font-size:12px;padding:5px 10px;"
+        onclick="document.getElementById('rebuild-banner').style.display='none'">✕</button>
+    </div>
+  </div>
+
   <!-- Chat-Eingabe -->
   <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px;">
     <div style="display:flex;gap:10px;align-items:flex-end;">
@@ -316,6 +331,41 @@
     <div class="config-section-header">🎯 Use-Case Zuordnung</div>
     <div class="config-section-body" id="use-cases">
       <!-- Wird per JS befüllt -->
+    </div>
+  </div>
+
+  <!-- Memory Rebuild -->
+  <div class="config-section" id="rebuild-section">
+    <div class="config-section-header">🔄 Memory Rebuild aus Konversations-Logs</div>
+    <div class="config-section-body">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">
+        Baut Qdrant komplett neu auf – nützlich nach Datenverlust oder Embedding-Modell-Wechsel.
+        Konversations-Logs sind die Source of Truth.<br>
+        <strong style="color:var(--yellow);">⚠ Kann je nach Anzahl der Konversationen und LLM-Geschwindigkeit Minuten bis Stunden dauern.</strong>
+      </p>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+        <div class="form-group" style="flex-shrink:0;">
+          <label>Instanz</label>
+          <select id="rebuild-instance">
+            {% for inst in instances %}<option value="{{ inst }}">{{ inst }}</option>{% endfor %}
+          </select>
+        </div>
+        <div style="align-self:flex-end;display:flex;gap:8px;">
+          <button class="btn btn-primary" id="rebuild-btn" onclick="startRebuild()">🔄 Rebuild starten</button>
+          <button class="btn btn-danger" id="rebuild-cancel-btn" style="display:none;" onclick="cancelRebuild()">■ Abbrechen</button>
+        </div>
+      </div>
+      <!-- Progress -->
+      <div id="rebuild-progress-wrap" style="display:none;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:4px;">
+          <span id="rebuild-progress-label">0 / 0 Einträge</span>
+          <span id="rebuild-eta"></span>
+        </div>
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;height:12px;overflow:hidden;">
+          <div id="rebuild-bar" style="height:100%;background:var(--accent);width:0%;transition:width .4s;"></div>
+        </div>
+        <div id="rebuild-status-text" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>
+      </div>
     </div>
   </div>
 
@@ -1014,6 +1064,12 @@ async function loadStatus() {
       </div>
     `;
 
+    // Rebuild-Banner anzeigen wenn Qdrant leer aber Logs vorhanden
+    const banner = document.getElementById('rebuild-banner');
+    if (banner) {
+      banner.style.display = qdrant.rebuild_suggested ? 'flex' : 'none';
+    }
+
     // Header-Status aktualisieren
     const allOk = qdrant.ok;
     document.getElementById('header-dot').style.background = allOk ? 'var(--green)' : 'var(--red)';
@@ -1154,6 +1210,94 @@ function toast(msg, type = 'ok') {
   el.className = 'show ' + type;
   if (toastTimer) clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.className = ''; }, 3500);
+}
+
+// ── Memory Rebuild ─────────────────────────────────────────────────────────
+let _rebuildSSE = null;
+
+function scrollToRebuild() {
+  document.getElementById('rebuild-section')?.scrollIntoView({ behavior: 'smooth' });
+}
+
+async function startRebuild() {
+  const inst = document.getElementById('rebuild-instance')?.value;
+  if (!inst) return;
+  if (!confirm(`Memory für "${inst}" komplett neu aufbauen?\n\nDies kann Minuten bis Stunden dauern – bestehende Qdrant-Daten für diese Instanz werden überschrieben.`)) return;
+
+  const btn    = document.getElementById('rebuild-btn');
+  const cancel = document.getElementById('rebuild-cancel-btn');
+  btn.disabled = true;
+  cancel.style.display = '';
+  document.getElementById('rebuild-progress-wrap').style.display = '';
+  setRebuildProgress(0, 0, null, 'Wird gestartet…');
+
+  try {
+    const r = await fetch(`/api/rebuild-memory/${inst}`, { method: 'POST' });
+    const d = await r.json();
+    if (!d.ok) {
+      setRebuildProgress(0, 0, null, `❌ ${d.error}`);
+      btn.disabled = false; cancel.style.display = 'none';
+      return;
+    }
+    toast(`Rebuild gestartet – ${d.total} Einträge`, 'ok');
+    startRebuildSSE(inst);
+  } catch(e) {
+    setRebuildProgress(0, 0, null, '❌ ' + e.message);
+    btn.disabled = false; cancel.style.display = 'none';
+  }
+}
+
+async function cancelRebuild() {
+  const inst = document.getElementById('rebuild-instance')?.value;
+  if (!inst) return;
+  if (_rebuildSSE) { _rebuildSSE.close(); _rebuildSSE = null; }
+  await fetch(`/api/rebuild-cancel/${inst}`, { method: 'POST' }).catch(() => {});
+  setRebuildProgress(0, 0, null, '■ Abgebrochen');
+  document.getElementById('rebuild-btn').disabled = false;
+  document.getElementById('rebuild-cancel-btn').style.display = 'none';
+}
+
+function startRebuildSSE(inst) {
+  if (_rebuildSSE) _rebuildSSE.close();
+  _rebuildSSE = new EventSource(`/api/rebuild-progress/${inst}`);
+  _rebuildSSE.onmessage = (e) => {
+    const d = JSON.parse(e.data);
+    setRebuildProgress(d.done, d.total, d.eta_s, statusLabel(d.status, d.error));
+    if (d.status === 'done') {
+      toast('Rebuild abgeschlossen ✓', 'ok');
+      document.getElementById('rebuild-btn').disabled = false;
+      document.getElementById('rebuild-cancel-btn').style.display = 'none';
+      _rebuildSSE.close();
+    } else if (d.status === 'error') {
+      toast('Rebuild fehlgeschlagen: ' + d.error, 'err');
+      document.getElementById('rebuild-btn').disabled = false;
+      document.getElementById('rebuild-cancel-btn').style.display = 'none';
+      _rebuildSSE.close();
+    } else if (d.status === 'cancelled') {
+      _rebuildSSE.close();
+    }
+  };
+  _rebuildSSE.onerror = () => { _rebuildSSE.close(); };
+}
+
+function setRebuildProgress(done, total, eta_s, statusText) {
+  const pct = total > 0 ? Math.round(done / total * 100) : 0;
+  document.getElementById('rebuild-bar').style.width = pct + '%';
+  document.getElementById('rebuild-progress-label').textContent = total > 0
+    ? `${done} / ${total} Einträge (${pct}%)`
+    : statusText;
+  document.getElementById('rebuild-eta').textContent = eta_s != null && eta_s > 0
+    ? `noch ca. ${eta_s > 60 ? Math.round(eta_s/60) + ' min' : eta_s + ' s'}`
+    : '';
+  document.getElementById('rebuild-status-text').textContent = total > 0 ? statusText : '';
+}
+
+function statusLabel(status, error) {
+  if (status === 'running')   return '⏳ Läuft…';
+  if (status === 'done')      return '✓ Fertig';
+  if (status === 'error')     return '❌ Fehler: ' + (error || '');
+  if (status === 'cancelled') return '■ Abgebrochen';
+  return '';
 }
 
 // ── Embedding-Modell Hilfe ─────────────────────────────────────────────────

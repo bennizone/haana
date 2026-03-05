@@ -37,6 +37,13 @@ except ImportError:
 app = FastAPI(title="HAANA Admin", docs_url=None, redoc_url=None)
 templates = Jinja2Templates(directory="templates")
 
+# ── Rebuild-Zustand (pro Instanz) ─────────────────────────────────────────────
+# status: "idle" | "running" | "done" | "error" | "cancelled"
+_rebuild: dict[str, dict] = {
+    inst: {"status": "idle", "done": 0, "total": 0, "started": 0.0, "error": ""}
+    for inst in ["alice", "bob", "ha-assist", "ha-advanced"]
+}
+
 
 # ── Log-Retention Cleanup ─────────────────────────────────────────────────────
 
@@ -286,7 +293,23 @@ async def get_status():
         try:
             r = await client.get(f"{qdrant_url}/collections")
             colls = r.json().get("result", {}).get("collections", [])
-            status["qdrant"] = {"ok": True, "collections": [c["name"] for c in colls]}
+            coll_names = [c["name"] for c in colls]
+            # Prüfe ob Collections leer sind (für Rebuild-Empfehlung)
+            total_vectors = 0
+            for cname in coll_names:
+                try:
+                    cr = await client.get(f"{qdrant_url}/collections/{cname}")
+                    total_vectors += cr.json().get("result", {}).get("vectors_count", 0) or 0
+                except Exception:
+                    pass
+            # Konversations-Logs vorhanden?
+            conv_files = _glob.glob(str(LOG_ROOT / "conversations" / "**" / "*.jsonl"), recursive=True)
+            has_logs = len(conv_files) > 0
+            status["qdrant"] = {
+                "ok": True,
+                "collections": coll_names,
+                "rebuild_suggested": has_logs and total_vectors == 0,
+            }
         except Exception as e:
             status["qdrant"] = {"ok": False, "error": str(e)}
 
@@ -389,6 +412,107 @@ async def test_connection(request: Request):
         return {"ok": False, "detail": "Timeout (>5s)"}
     except Exception as e:
         return {"ok": False, "detail": str(e)[:200]}
+
+
+@app.post("/api/rebuild-memory/{instance}")
+async def start_rebuild(instance: str):
+    """Startet den Memory-Rebuild aus Konversations-Logs für eine Instanz."""
+    if instance not in INSTANCES:
+        raise HTTPException(404)
+
+    state = _rebuild.get(instance)
+    if state and state["status"] == "running":
+        return {"ok": False, "error": "Rebuild läuft bereits"}
+
+    # Konversations-Logs zählen
+    conv_files = sorted(
+        _glob.glob(str(LOG_ROOT / "conversations" / instance / "*.jsonl"))
+    )
+    total = sum(
+        sum(1 for line in Path(f).read_text(encoding="utf-8").splitlines() if line.strip())
+        for f in conv_files
+        if Path(f).exists()
+    )
+
+    if total == 0:
+        return {"ok": False, "error": "Keine Konversations-Logs gefunden"}
+
+    _rebuild[instance] = {
+        "status": "running", "done": 0, "total": total,
+        "started": time.time(), "error": "",
+    }
+
+    async def _run():
+        state = _rebuild[instance]
+        agent_url = AGENT_URLS.get(instance, "")
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                for fpath in conv_files:
+                    lines = Path(fpath).read_text(encoding="utf-8").splitlines()
+                    for line in lines:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        if state["status"] == "cancelled":
+                            return
+                        try:
+                            rec = json.loads(line)
+                            await client.post(
+                                f"{agent_url}/rebuild-entry",
+                                json={
+                                    "user":      rec.get("user", ""),
+                                    "assistant": rec.get("assistant", ""),
+                                },
+                            )
+                        except Exception:
+                            pass
+                        state["done"] += 1
+            state["status"] = "done"
+        except Exception as e:
+            state["status"] = "error"
+            state["error"]  = str(e)[:200]
+
+    asyncio.create_task(_run())
+    return {"ok": True, "total": total}
+
+
+@app.post("/api/rebuild-cancel/{instance}")
+async def cancel_rebuild(instance: str):
+    """Bricht einen laufenden Rebuild ab."""
+    state = _rebuild.get(instance)
+    if state and state["status"] == "running":
+        state["status"] = "cancelled"
+        return {"ok": True}
+    return {"ok": False, "error": "Kein laufender Rebuild"}
+
+
+@app.get("/api/rebuild-progress/{instance}")
+async def rebuild_progress(instance: str, request: Request):
+    """SSE-Stream mit Rebuild-Fortschritt."""
+    if instance not in INSTANCES:
+        raise HTTPException(404)
+
+    async def generator():
+        while True:
+            if await request.is_disconnected():
+                break
+            state = _rebuild.get(instance, {})
+            done    = state.get("done", 0)
+            total   = state.get("total", 0)
+            status  = state.get("status", "idle")
+            elapsed = time.time() - state.get("started", time.time())
+            eta_s   = int((total - done) * (elapsed / done)) if done > 0 else None
+            yield f"data: {json.dumps({'done': done, 'total': total, 'status': status, 'eta_s': eta_s, 'error': state.get('error','')})}\n\n"
+            if status in ("done", "error", "idle", "cancelled"):
+                break
+            await asyncio.sleep(1)
+
+    return StreamingResponse(
+        generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post("/api/fetch-models")

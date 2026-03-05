@@ -10,6 +10,7 @@ Endpunkte:
   WS   /ws            → bidirektionale Konversation (für Webchat-Live-Chat)
 """
 
+import asyncio
 import json
 import logging
 
@@ -52,6 +53,45 @@ def create_api(agent) -> FastAPI:
         logger.info(f"[{agent.instance}] API /chat | channel={channel} | {message[:80]}")
         response = await agent.run_async(message, channel=channel)
         return {"response": response, "instance": agent.instance}
+
+    @api.post("/rebuild-entry")
+    async def rebuild_entry(request: Request):
+        """
+        Fügt einen einzelnen Konversations-Eintrag direkt in Qdrant ein.
+        Wird vom Admin-Interface für den Memory-Rebuild aus Logs aufgerufen.
+        Läuft synchron (kein Sliding Window, kein LLM-Skip – volle Mem0-Extraktion).
+        """
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(400, "Ungültiges JSON")
+
+        user_msg  = (body.get("user")      or "").strip()
+        asst_msg  = (body.get("assistant") or "").strip()
+        scope_req = body.get("scope")
+
+        if not user_msg and not asst_msg:
+            raise HTTPException(400, "user oder assistant fehlt")
+
+        # Scope bestimmen: explizit > persönlicher Scope > erster Write-Scope
+        if scope_req and scope_req in agent.memory.write_scopes:
+            scope = scope_req
+        else:
+            personal = [s for s in agent.memory.write_scopes if s != "bnd_memory"]
+            scope = personal[0] if personal else (
+                next(iter(agent.memory.write_scopes), None)
+            )
+
+        if scope is None:
+            return {"ok": False, "error": "Keine Write-Scopes für diese Instanz"}
+
+        messages = [
+            {"role": "user",      "content": user_msg},
+            {"role": "assistant", "content": asst_msg},
+        ]
+        loop = asyncio.get_running_loop()
+        success = await loop.run_in_executor(None, agent.memory.add, messages, scope)
+        return {"ok": success, "scope": scope}
 
     @api.websocket("/ws")
     async def websocket_chat(ws: WebSocket):
