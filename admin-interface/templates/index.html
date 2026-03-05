@@ -302,6 +302,17 @@
       <div>Konversationen werden geladen...</div>
     </div>
   </div>
+
+  <!-- Log-Dateien (editierbar) -->
+  <div style="margin-top:20px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <span style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Log-Dateien</span>
+      <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" onclick="loadLogFiles(currentInstance)">↺</button>
+    </div>
+    <div id="log-files-list" style="display:flex;flex-wrap:wrap;gap:6px;">
+      <span style="font-size:12px;color:var(--muted);">Wird geladen…</span>
+    </div>
+  </div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════ LOGS -->
@@ -344,20 +355,29 @@
         Konversations-Logs sind die Source of Truth.<br>
         <strong style="color:var(--yellow);">⚠ Kann je nach Anzahl der Konversationen und LLM-Geschwindigkeit Minuten bis Stunden dauern.</strong>
       </p>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
-        <div class="form-group" style="flex-shrink:0;">
-          <label>Instanz</label>
-          <select id="rebuild-instance">
-            {% for inst in instances %}<option value="{{ inst }}">{{ inst }}</option>{% endfor %}
-          </select>
-        </div>
-        <div style="align-self:flex-end;display:flex;gap:8px;">
-          <button class="btn btn-primary" id="rebuild-btn" onclick="startRebuild()">🔄 Rebuild starten</button>
-          <button class="btn btn-danger" id="rebuild-cancel-btn" style="display:none;" onclick="cancelRebuild()">■ Abbrechen</button>
+
+      <!-- Instanz-Auswahl mit Statistiken -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Instanzen</span>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" onclick="rebuildSelectEmpty()">Alle leeren wählen</button>
+          <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" onclick="rebuildSelectAll()">Alle wählen</button>
+          <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" onclick="rebuildSelectNone()">Keine</button>
+          <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" onclick="loadMemoryStats()">↺ Aktualisieren</button>
         </div>
       </div>
-      <!-- Progress -->
-      <div id="rebuild-progress-wrap" style="display:none;">
+      <div id="rebuild-instance-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;">
+        <div style="color:var(--muted);font-size:12px;">Wird geladen…</div>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn btn-primary" id="rebuild-btn" onclick="startRebuild()">🔄 Rebuild starten</button>
+        <button class="btn btn-danger" id="rebuild-cancel-btn" style="display:none;" onclick="cancelRebuild()">■ Abbrechen</button>
+        <span id="rebuild-overall-status" style="font-size:12px;color:var(--muted);"></span>
+      </div>
+
+      <!-- Progress (zeigt aktuell laufende Instanz) -->
+      <div id="rebuild-progress-wrap" style="display:none;margin-top:12px;">
         <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:4px;">
           <span id="rebuild-progress-label">0 / 0 Einträge</span>
           <span id="rebuild-eta"></span>
@@ -653,6 +673,29 @@
 
 <div id="toast"></div>
 
+<!-- ── Log-Editor Modal ── -->
+<div id="log-editor-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:min(860px,96vw);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;">
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-weight:600;" id="log-editor-title">Log Editor</div>
+        <div style="font-size:11px;color:var(--yellow);margin-top:2px;">⚠ Nach dem Bearbeiten Memory-Rebuild empfohlen</div>
+      </div>
+      <button class="btn btn-secondary" style="font-size:12px;padding:4px 12px;" onclick="closeLogEditor()">✕ Schließen</button>
+    </div>
+    <div style="padding:12px 16px;background:rgba(251,191,36,.05);border-bottom:1px solid var(--border);font-size:12px;color:var(--muted);">
+      Jede Zeile ist ein JSON-Objekt (eine Konversation). Zeilen entfernen oder bearbeiten, dann Speichern.
+      <span id="log-editor-info" style="margin-left:12px;color:var(--text);"></span>
+    </div>
+    <textarea id="log-editor-area" spellcheck="false"
+      style="flex:1;min-height:400px;background:var(--bg);color:var(--text);border:none;padding:16px;font-family:var(--mono);font-size:12px;resize:none;outline:none;overflow-y:auto;"></textarea>
+    <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:10px;">
+      <button class="btn" onclick="saveLogEditor()">💾 Speichern</button>
+      <button class="btn btn-secondary" onclick="closeLogEditor()">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── Zustand ────────────────────────────────────────────────────────────────
 let currentInstance = '{{ instances[0] }}';
@@ -668,9 +711,9 @@ function showTab(name) {
   document.getElementById('panel-' + name).classList.add('active');
   event.target.classList.add('active');
 
-  if (name === 'chat')   loadConversations(currentInstance);
+  if (name === 'chat')   { loadConversations(currentInstance); loadLogFiles(currentInstance); }
   if (name === 'logs')   loadLogs(currentLogCat);
-  if (name === 'config') loadConfig();
+  if (name === 'config') { loadConfig(); loadMemoryStats(); }
   if (name === 'users')  loadUsers();
   if (name === 'status') loadStatus();
 }
@@ -682,7 +725,28 @@ function selectInstance(inst) {
   document.getElementById('btn-' + inst)?.classList.add('active');
   startSSE(inst);
   loadConversations(inst);
+  loadLogFiles(inst);
   checkAgentHealth(inst);
+}
+
+async function loadLogFiles(inst) {
+  const el = document.getElementById('log-files-list');
+  if (!el) return;
+  try {
+    const r = await fetch(`/api/conversations/${inst}/files`);
+    const files = await r.json();
+    if (!files.length) {
+      el.innerHTML = '<span style="font-size:12px;color:var(--muted);">Keine Dateien</span>';
+      return;
+    }
+    el.innerHTML = files.map(f => `
+      <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;"
+        onclick="openLogEditor('${escAttr(inst)}', '${escAttr(f.date)}')" title="${f.entries} Einträge, ${f.size_kb} KB">
+        📄 ${escHtml(f.date)} <span style="color:var(--muted);">(${f.entries})</span>
+      </button>`).join('');
+  } catch(e) {
+    el.innerHTML = `<span style="font-size:12px;color:var(--red);">${e.message}</span>`;
+  }
 }
 
 // ── Konversationen laden ───────────────────────────────────────────────────
@@ -1096,8 +1160,10 @@ async function loadStatus() {
   const grid = document.getElementById('status-grid');
   grid.innerHTML = '<div class="status-card"><div class="empty-state"><div class="icon">⏳</div><div>Wird geprüft...</div></div></div>';
   try {
-    const r = await fetch('/api/status');
-    const s = await r.json();
+    const [s, memStats] = await Promise.all([
+      fetch('/api/status').then(r => r.json()),
+      fetch('/api/memory-stats').then(r => r.json()).catch(() => []),
+    ]);
 
     const qdrant = s.qdrant || {};
     const ollama = s.ollama || {};
@@ -1106,13 +1172,10 @@ async function loadStatus() {
     const colls = (qdrant.collections || []).map(c => `<span class="tag">${escHtml(c)}</span>`).join(' ');
     const models = (ollama.models || []).map(m => `<span class="tag">${escHtml(m)}</span>`).join(' ');
 
-    const logRows = Object.entries(logs).map(([inst, info]) =>
-      `<div class="status-row"><span>${inst}</span><span>${info.days} Tag(e), zuletzt ${info.latest||'–'}</span></div>`
-    ).join('');
-
-    // Agent Queue-Status parallel laden
+    // Agent-Status + Health parallel
+    const allInsts = {{ instances | tojson }};
     const agentHealth = await Promise.all(
-      ['alice','bob','ha-assist','ha-advanced'].map(async inst => {
+      allInsts.map(async inst => {
         try {
           const r = await fetch(`/api/agent-health/${inst}`);
           return { inst, ...(await r.json()) };
@@ -1120,17 +1183,44 @@ async function loadStatus() {
       })
     );
 
+    // Memory-Stats-Map für schnellen Lookup
+    const memMap = {};
+    (memStats || []).forEach(m => memMap[m.instance] = m);
+
     const agentRows = agentHealth.map(a => {
       const dot = a.ok ? '🟢' : '🔴';
-      const queue = a.ok
-        ? `<span style="font-size:11px;color:var(--muted);">Window: ${a.window_size??'?'} | Pending: ${a.pending_extractions??'?'}</span>`
+      const mem = memMap[a.inst];
+      const queueInfo = a.ok
+        ? `<span style="font-size:11px;color:var(--muted);">Win: ${a.window_size??'?'} | Queue: ${a.pending_extractions??'?'}</span>`
         : `<span style="font-size:11px;color:var(--muted);">offline</span>`;
-      return `<div class="status-row"><span>${dot} ${a.inst}</span>${queue}</div>`;
+      const memInfo = mem
+        ? `<span style="font-size:11px;color:${mem.total_vectors===0&&mem.log_entries>0?'var(--yellow)':'var(--muted)'};">📦 ${mem.total_vectors} Vektoren</span>`
+        : '';
+      const controls = `
+        <div style="display:flex;gap:4px;margin-top:6px;">
+          <button class="btn btn-secondary" style="font-size:10px;padding:2px 8px;" onclick="instanceControl('${a.inst}','restart')">↺ Restart</button>
+          <button class="btn btn-secondary" style="font-size:10px;padding:2px 8px;" onclick="instanceControl('${a.inst}','stop')">⏹ Stop</button>
+          <button class="btn btn-danger"    style="font-size:10px;padding:2px 8px;" onclick="instanceForceStop('${a.inst}')">☠ Kill</button>
+        </div>`;
+      return `<div class="status-row" style="flex-direction:column;align-items:flex-start;gap:2px;">
+        <div style="display:flex;justify-content:space-between;width:100%;align-items:center;">
+          <span style="font-weight:500;">${dot} ${a.inst}</span>
+          <div style="display:flex;gap:8px;">${queueInfo}${memInfo}</div>
+        </div>
+        ${controls}
+      </div>`;
     }).join('');
+
+    const logRows = Object.entries(logs).map(([inst, info]) =>
+      `<div class="status-row"><span>${inst}</span><span>${info.days} Tag(e), zuletzt ${info.latest||'–'}</span></div>`
+    ).join('');
 
     grid.innerHTML = `
       <div class="status-card">
-        <h3>Qdrant</h3>
+        <h3 style="display:flex;justify-content:space-between;align-items:center;">
+          Qdrant
+          <button class="btn btn-secondary" style="font-size:10px;padding:2px 8px;" onclick="qdrantRestart()">↺ Restart</button>
+        </h3>
         <div class="status-row">
           <span>Status</span>
           <span class="${qdrant.ok ? 'status-ok' : 'status-err'}">${qdrant.ok ? '✓ Online' : '✗ ' + (qdrant.error||'Fehler')}</span>
@@ -1145,9 +1235,9 @@ async function loadStatus() {
         </div>
         ${ollama.ok ? `<div class="status-row"><span>Modelle</span><div style="text-align:right;">${models||'keine'}</div></div>` : ''}
       </div>
-      <div class="status-card">
+      <div class="status-card" style="grid-column:1/-1;">
         <h3>Agent-Instanzen</h3>
-        ${agentRows}
+        ${agentRows || '<div style="color:var(--muted)">Keine Instanzen</div>'}
       </div>
       <div class="status-card">
         <h3>Konversations-Logs</h3>
@@ -1155,19 +1245,40 @@ async function loadStatus() {
       </div>
     `;
 
-    // Rebuild-Banner anzeigen wenn Qdrant leer aber Logs vorhanden
+    // Rebuild-Banner
     const banner = document.getElementById('rebuild-banner');
-    if (banner) {
-      banner.style.display = qdrant.rebuild_suggested ? 'flex' : 'none';
-    }
+    if (banner) banner.style.display = qdrant.rebuild_suggested ? 'flex' : 'none';
 
-    // Header-Status aktualisieren
     const allOk = qdrant.ok;
     document.getElementById('header-dot').style.background = allOk ? 'var(--green)' : 'var(--red)';
     document.getElementById('header-status').textContent = allOk ? 'System OK' : 'Fehler – Details im Status-Tab';
   } catch(e) {
     grid.innerHTML = `<div class="status-card"><div class="empty-state"><div class="icon">❌</div><div>${e.message}</div></div></div>`;
   }
+}
+
+// ── Instanz-Steuerung ───────────────────────────────────────────────────────
+async function instanceControl(inst, action) {
+  const r = await fetch(`/api/instances/${inst}/${action}`, { method: 'POST' });
+  const d = await r.json();
+  if (d.ok) { toast(`${inst}: ${action} ✓`, 'ok'); loadStatus(); }
+  else       { toast(`${inst} ${action} fehlgeschlagen: ${(d.error||'?').substring(0,60)}`, 'err'); }
+}
+
+async function instanceForceStop(inst) {
+  if (!confirm(`${inst} sofort beenden (SIGKILL)?\n\nACHTUNG: Laufende Memory-Extraktion geht verloren – Konversations-Logs bleiben erhalten.`)) return;
+  const r = await fetch(`/api/instances/${inst}/force-stop`, { method: 'POST' });
+  const d = await r.json();
+  if (d.ok) { toast(`${inst} beendet ✓`, 'ok'); loadStatus(); }
+  else       { toast(`Kill fehlgeschlagen: ${(d.error||'?').substring(0,60)}`, 'err'); }
+}
+
+async function qdrantRestart() {
+  if (!confirm('Qdrant neu starten? Laufende Vorgänge werden unterbrochen.')) return;
+  const r = await fetch('/api/instances/qdrant/restart', { method: 'POST' });
+  const d = await r.json();
+  if (d.ok) { toast('Qdrant wird neu gestartet ✓', 'ok'); setTimeout(loadStatus, 3000); }
+  else       { toast(`Qdrant Restart fehlgeschlagen: ${(d.error||'?').substring(0,60)}`, 'err'); }
 }
 
 // ── Chat-Eingabe ───────────────────────────────────────────────────────────
@@ -1305,70 +1416,120 @@ function toast(msg, type = 'ok') {
 
 // ── Memory Rebuild ─────────────────────────────────────────────────────────
 let _rebuildSSE = null;
+let _memStats   = [];
 
 function scrollToRebuild() {
   document.getElementById('rebuild-section')?.scrollIntoView({ behavior: 'smooth' });
 }
 
-async function startRebuild() {
-  const inst = document.getElementById('rebuild-instance')?.value;
-  if (!inst) return;
-  if (!confirm(`Memory für "${inst}" komplett neu aufbauen?\n\nDies kann Minuten bis Stunden dauern – bestehende Qdrant-Daten für diese Instanz werden überschrieben.`)) return;
-
-  const btn    = document.getElementById('rebuild-btn');
-  const cancel = document.getElementById('rebuild-cancel-btn');
-  btn.disabled = true;
-  cancel.style.display = '';
-  document.getElementById('rebuild-progress-wrap').style.display = '';
-  setRebuildProgress(0, 0, null, 'Wird gestartet…');
-
+async function loadMemoryStats() {
+  const list = document.getElementById('rebuild-instance-list');
+  if (!list) return;
+  list.innerHTML = '<div style="color:var(--muted);font-size:12px;">Wird geladen…</div>';
   try {
-    const r = await fetch(`/api/rebuild-memory/${inst}`, { method: 'POST' });
-    const d = await r.json();
-    if (!d.ok) {
-      setRebuildProgress(0, 0, null, `❌ ${d.error}`);
-      btn.disabled = false; cancel.style.display = 'none';
-      return;
-    }
-    toast(`Rebuild gestartet – ${d.total} Einträge`, 'ok');
-    startRebuildSSE(inst);
+    const r = await fetch('/api/memory-stats');
+    _memStats = await r.json();
+    list.innerHTML = _memStats.map(m => {
+      const scopeStr = Object.entries(m.scopes).map(([k,v]) =>
+        `<span class="tag" style="${v===0?'color:var(--red)':''}">${escHtml(k)}: ${v}</span>`
+      ).join(' ');
+      const logColor = m.log_entries > 0 ? 'var(--text)' : 'var(--muted)';
+      const emptyWarn = m.rebuild_suggested
+        ? `<span style="color:var(--yellow);font-size:11px;"> ⚠ leer</span>` : '';
+      return `
+      <label style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;cursor:pointer;${m.rebuild_suggested?'border-color:var(--yellow);':''}">
+        <input type="checkbox" class="rebuild-cb" data-inst="${escAttr(m.instance)}" ${m.rebuild_suggested?'checked':''} style="margin-top:2px;flex-shrink:0;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:500;font-size:13px;">${escHtml(m.instance)}${emptyWarn}</div>
+          <div style="font-size:11px;color:${logColor};margin-top:2px;">
+            📄 ${m.log_entries} Log-Einträge (${m.log_days} Tage) · ${scopeStr}
+          </div>
+        </div>
+      </label>`;
+    }).join('');
   } catch(e) {
-    setRebuildProgress(0, 0, null, '❌ ' + e.message);
-    btn.disabled = false; cancel.style.display = 'none';
+    list.innerHTML = `<div style="color:var(--red);font-size:12px;">Fehler: ${e.message}</div>`;
   }
 }
 
+function rebuildSelectEmpty() {
+  document.querySelectorAll('.rebuild-cb').forEach(cb => {
+    const inst = _memStats.find(m => m.instance === cb.dataset.inst);
+    cb.checked = inst?.rebuild_suggested ?? false;
+  });
+}
+function rebuildSelectAll()  { document.querySelectorAll('.rebuild-cb').forEach(cb => cb.checked = true); }
+function rebuildSelectNone() { document.querySelectorAll('.rebuild-cb').forEach(cb => cb.checked = false); }
+
+async function startRebuild() {
+  const selected = [...document.querySelectorAll('.rebuild-cb:checked')].map(cb => cb.dataset.inst);
+  if (!selected.length) { toast('Keine Instanz ausgewählt', 'err'); return; }
+
+  const totalEntries = selected.reduce((sum, inst) => {
+    const m = _memStats.find(x => x.instance === inst);
+    return sum + (m?.log_entries || 0);
+  }, 0);
+
+  if (!confirm(`Memory für ${selected.length} Instanz(en) neu aufbauen?\n${selected.join(', ')}\n\n${totalEntries} Einträge total – kann Minuten bis Stunden dauern.`)) return;
+
+  const btn    = document.getElementById('rebuild-btn');
+  const cancel = document.getElementById('rebuild-cancel-btn');
+  const overall = document.getElementById('rebuild-overall-status');
+  btn.disabled = true;
+  cancel.style.display = '';
+  document.getElementById('rebuild-progress-wrap').style.display = '';
+  overall.textContent = `0 / ${selected.length} Instanzen`;
+
+  // Instanzen sequenziell abarbeiten
+  for (let i = 0; i < selected.length; i++) {
+    const inst = selected[i];
+    overall.textContent = `${i+1} / ${selected.length}: ${inst}`;
+    setRebuildProgress(0, 0, null, `Starte ${inst}…`);
+    try {
+      const r = await fetch(`/api/rebuild-memory/${inst}`, { method: 'POST' });
+      const d = await r.json();
+      if (!d.ok) {
+        toast(`${inst}: ${d.error}`, 'err');
+        continue;
+      }
+      await new Promise(resolve => startRebuildSSE(inst, resolve));
+    } catch(e) {
+      toast(`${inst}: ${e.message}`, 'err');
+    }
+  }
+
+  overall.textContent = `✓ Fertig (${selected.length} Instanzen)`;
+  btn.disabled = false;
+  cancel.style.display = 'none';
+  loadMemoryStats();
+}
+
 async function cancelRebuild() {
-  const inst = document.getElementById('rebuild-instance')?.value;
-  if (!inst) return;
   if (_rebuildSSE) { _rebuildSSE.close(); _rebuildSSE = null; }
-  await fetch(`/api/rebuild-cancel/${inst}`, { method: 'POST' }).catch(() => {});
+  // Alle laufenden Rebuilds abbrechen
+  const selected = [...document.querySelectorAll('.rebuild-cb:checked')].map(cb => cb.dataset.inst);
+  for (const inst of selected) {
+    await fetch(`/api/rebuild-cancel/${inst}`, { method: 'POST' }).catch(() => {});
+  }
   setRebuildProgress(0, 0, null, '■ Abgebrochen');
   document.getElementById('rebuild-btn').disabled = false;
   document.getElementById('rebuild-cancel-btn').style.display = 'none';
 }
 
-function startRebuildSSE(inst) {
+function startRebuildSSE(inst, onDone) {
   if (_rebuildSSE) _rebuildSSE.close();
   _rebuildSSE = new EventSource(`/api/rebuild-progress/${inst}`);
   _rebuildSSE.onmessage = (e) => {
     const d = JSON.parse(e.data);
     setRebuildProgress(d.done, d.total, d.eta_s, statusLabel(d.status, d.error));
-    if (d.status === 'done') {
-      toast('Rebuild abgeschlossen ✓', 'ok');
-      document.getElementById('rebuild-btn').disabled = false;
-      document.getElementById('rebuild-cancel-btn').style.display = 'none';
-      _rebuildSSE.close();
-    } else if (d.status === 'error') {
-      toast('Rebuild fehlgeschlagen: ' + d.error, 'err');
-      document.getElementById('rebuild-btn').disabled = false;
-      document.getElementById('rebuild-cancel-btn').style.display = 'none';
-      _rebuildSSE.close();
-    } else if (d.status === 'cancelled') {
-      _rebuildSSE.close();
+    if (['done','error','cancelled'].includes(d.status)) {
+      _rebuildSSE.close(); _rebuildSSE = null;
+      if (d.status === 'done') toast(`${inst}: Rebuild abgeschlossen ✓`, 'ok');
+      if (d.status === 'error') toast(`${inst}: ${d.error}`, 'err');
+      if (onDone) onDone();
     }
   };
-  _rebuildSSE.onerror = () => { _rebuildSSE.close(); };
+  _rebuildSSE.onerror = () => { _rebuildSSE?.close(); _rebuildSSE = null; if (onDone) onDone(); };
 }
 
 function setRebuildProgress(done, total, eta_s, statusText) {
@@ -1376,10 +1537,9 @@ function setRebuildProgress(done, total, eta_s, statusText) {
   document.getElementById('rebuild-bar').style.width = pct + '%';
   document.getElementById('rebuild-progress-label').textContent = total > 0
     ? `${done} / ${total} Einträge (${pct}%)`
-    : statusText;
+    : (statusText || '');
   document.getElementById('rebuild-eta').textContent = eta_s != null && eta_s > 0
-    ? `noch ca. ${eta_s > 60 ? Math.round(eta_s/60) + ' min' : eta_s + ' s'}`
-    : '';
+    ? `noch ca. ${eta_s > 60 ? Math.round(eta_s/60) + ' min' : eta_s + ' s'}` : '';
   document.getElementById('rebuild-status-text').textContent = total > 0 ? statusText : '';
 }
 
@@ -1389,6 +1549,52 @@ function statusLabel(status, error) {
   if (status === 'error')     return '❌ Fehler: ' + (error || '');
   if (status === 'cancelled') return '■ Abgebrochen';
   return '';
+}
+
+// ── Konversations-Log Editor ────────────────────────────────────────────────
+let _logEditorInst = null;
+let _logEditorDate = null;
+
+async function openLogEditor(inst, date) {
+  _logEditorInst = inst;
+  _logEditorDate = date;
+  const modal = document.getElementById('log-editor-modal');
+  const title = document.getElementById('log-editor-title');
+  const area  = document.getElementById('log-editor-area');
+  const info  = document.getElementById('log-editor-info');
+  title.textContent = `${inst} / ${date}.jsonl`;
+  area.value = ''; info.textContent = 'Wird geladen…';
+  modal.style.display = 'flex';
+  try {
+    const r = await fetch(`/api/conversations/${inst}/raw/${date}`);
+    const d = await r.json();
+    area.value = d.content;
+    info.textContent = `${d.entries} Einträge`;
+  } catch(e) { area.value = ''; info.textContent = '❌ ' + e.message; }
+}
+
+function closeLogEditor() {
+  document.getElementById('log-editor-modal').style.display = 'none';
+}
+
+async function saveLogEditor() {
+  const area = document.getElementById('log-editor-area');
+  const info = document.getElementById('log-editor-info');
+  try {
+    const r = await fetch(`/api/conversations/${_logEditorInst}/raw/${_logEditorDate}`, {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ content: area.value }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      info.textContent = `✓ ${d.entries} Einträge gespeichert`;
+      toast('Log gespeichert – Memory ggf. neu aufbauen!', 'ok');
+      closeLogEditor();
+      loadConversations(currentInstance);
+    } else {
+      info.textContent = '❌ Fehler';
+    }
+  } catch(e) { info.textContent = '❌ ' + e.message; }
 }
 
 // ── Embedding-Modell Hilfe ─────────────────────────────────────────────────
@@ -1684,6 +1890,7 @@ async function stopUserContainer(userId) {
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   loadConversations(currentInstance);
+  loadLogFiles(currentInstance);
   startSSE(currentInstance);
   checkAgentHealth(currentInstance);
   loadStatus();

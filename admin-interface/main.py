@@ -484,6 +484,201 @@ async def chat_proxy(instance: str, request: Request):
         raise HTTPException(502, f"Agent-Fehler: {str(e)[:200]}")
 
 
+@app.get("/api/memory-stats")
+async def memory_stats():
+    """
+    Liefert pro Instanz: Konversations-Logs (Zeilen), Qdrant-Vektoren pro Scope.
+    Wird für Rebuild-Checkboxen verwendet.
+    """
+    import httpx
+    cfg = load_config()
+    qdrant_url = cfg.get("services", {}).get("qdrant_url", "http://qdrant:6333")
+
+    # Qdrant-Vektoren pro Collection laden
+    coll_vectors: dict[str, int] = {}
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"{qdrant_url}/collections")
+            colls = r.json().get("result", {}).get("collections", [])
+            for c in colls:
+                try:
+                    cr = await client.get(f"{qdrant_url}/collections/{c['name']}")
+                    coll_vectors[c["name"]] = cr.json().get("result", {}).get("vectors_count", 0) or 0
+                except Exception:
+                    coll_vectors[c["name"]] = 0
+    except Exception:
+        pass
+
+    result = []
+    for inst in get_all_instances():
+        # Log-Zeilen zählen
+        log_entries = 0
+        log_days = 0
+        inst_log = LOG_ROOT / "conversations" / inst
+        if inst_log.exists():
+            files = list(inst_log.glob("*.jsonl"))
+            log_days = len(files)
+            for f in files:
+                try:
+                    log_entries += sum(1 for ln in f.read_text(encoding="utf-8").splitlines() if ln.strip())
+                except Exception:
+                    pass
+
+        # Qdrant-Vektoren: primärer Scope ist {uid}_memory, außer System-Instanzen
+        scopes: dict[str, int] = {}
+        user = next((u for u in cfg.get("users", []) if u["id"] == inst), None)
+        if user:
+            tpl = user.get("claude_md_template", "")
+            if tpl in ("ha-assist", "ha-advanced"):
+                # Nur lesen – household + alle user-scopes
+                for scope in ("household_memory",):
+                    scopes[scope] = coll_vectors.get(scope, 0)
+            else:
+                for scope in (f"{inst}_memory", "household_memory"):
+                    scopes[scope] = coll_vectors.get(scope, 0)
+        else:
+            scopes[f"{inst}_memory"] = coll_vectors.get(f"{inst}_memory", 0)
+            scopes["household_memory"] = coll_vectors.get("household_memory", 0)
+
+        total_vectors = sum(scopes.values())
+        result.append({
+            "instance": inst,
+            "log_entries": log_entries,
+            "log_days": log_days,
+            "scopes": scopes,
+            "total_vectors": total_vectors,
+            "rebuild_suggested": log_entries > 0 and total_vectors == 0,
+        })
+
+    return result
+
+
+# ── Instanz-Steuerung (Container stop/restart) ────────────────────────────────
+
+def _get_instance_container(instance: str) -> Optional[str]:
+    """Gibt Container-Name für eine Instanz zurück."""
+    cfg = load_config()
+    user = next((u for u in cfg.get("users", []) if u["id"] == instance), None)
+    if user:
+        return user.get("container_name", f"haana-instanz-{instance}-1")
+    # Compose-Naming-Konvention
+    return f"haana-instanz-{instance}-1"
+
+
+@app.post("/api/instances/{instance}/restart")
+async def restart_instance(instance: str):
+    """Container einer Instanz neu starten."""
+    if instance not in get_all_instances():
+        raise HTTPException(404)
+    container_name = _get_instance_container(instance)
+    if not _docker_client:
+        return {"ok": False, "error": "Docker nicht verfügbar"}
+    try:
+        c = _docker_client.containers.get(container_name)
+        c.restart(timeout=10)
+        return {"ok": True, "container": container_name}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
+
+
+@app.post("/api/instances/{instance}/stop")
+async def stop_instance(instance: str):
+    """Container einer Instanz graceful stoppen (SIGTERM, 10s timeout)."""
+    if instance not in get_all_instances():
+        raise HTTPException(404)
+    container_name = _get_instance_container(instance)
+    if not _docker_client:
+        return {"ok": False, "error": "Docker nicht verfügbar"}
+    try:
+        c = _docker_client.containers.get(container_name)
+        c.stop(timeout=10)
+        return {"ok": True, "container": container_name}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
+
+
+@app.post("/api/instances/{instance}/force-stop")
+async def force_stop_instance(instance: str):
+    """Container einer Instanz sofort beenden (SIGKILL – laufende Memory-Extraktion geht verloren)."""
+    if instance not in get_all_instances():
+        raise HTTPException(404)
+    container_name = _get_instance_container(instance)
+    if not _docker_client:
+        return {"ok": False, "error": "Docker nicht verfügbar"}
+    try:
+        c = _docker_client.containers.get(container_name)
+        c.kill()
+        return {"ok": True, "container": container_name}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
+
+
+@app.post("/api/instances/qdrant/restart")
+async def restart_qdrant():
+    """Qdrant-Container neu starten."""
+    if not _docker_client:
+        return {"ok": False, "error": "Docker nicht verfügbar"}
+    try:
+        c = _docker_client.containers.get("haana-qdrant-1")
+        c.restart(timeout=10)
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
+
+
+# ── Konversations-Logs direkt lesen/schreiben (Editieren) ─────────────────────
+
+@app.get("/api/conversations/{instance}/files")
+async def list_conversation_files(instance: str):
+    """Listet alle vorhandenen Datumsdateien für eine Instanz."""
+    if instance not in get_all_instances():
+        raise HTTPException(404)
+    inst_log = LOG_ROOT / "conversations" / instance
+    if not inst_log.exists():
+        return []
+    files = sorted(inst_log.glob("*.jsonl"), reverse=True)
+    result = []
+    for f in files:
+        try:
+            lines = [ln for ln in f.read_text(encoding="utf-8").splitlines() if ln.strip()]
+            result.append({"date": f.stem, "entries": len(lines), "size_kb": round(f.stat().st_size / 1024, 1)})
+        except Exception:
+            result.append({"date": f.stem, "entries": 0, "size_kb": 0})
+    return result
+
+
+@app.get("/api/conversations/{instance}/raw/{date}")
+async def get_conversation_raw(instance: str, date: str):
+    """Gibt den rohen JSONL-Inhalt einer Datums-Log-Datei zurück."""
+    if instance not in get_all_instances():
+        raise HTTPException(404)
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
+        raise HTTPException(400, "Ungültiges Datumsformat (erwartet YYYY-MM-DD)")
+    path = LOG_ROOT / "conversations" / instance / f"{date}.jsonl"
+    if not path.exists():
+        raise HTTPException(404, "Datei nicht gefunden")
+    return {"content": path.read_text(encoding="utf-8"), "entries": sum(1 for ln in path.read_text().splitlines() if ln.strip())}
+
+
+@app.put("/api/conversations/{instance}/raw/{date}")
+async def put_conversation_raw(instance: str, date: str, request: Request):
+    """Überschreibt eine Datums-Log-Datei mit neuem Inhalt."""
+    if instance not in get_all_instances():
+        raise HTTPException(404)
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
+        raise HTTPException(400, "Ungültiges Datumsformat")
+    try:
+        body = await request.json()
+        content = body.get("content", "")
+    except Exception:
+        raise HTTPException(400, "Ungültiges JSON")
+    path = LOG_ROOT / "conversations" / instance / f"{date}.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    entries = sum(1 for ln in content.splitlines() if ln.strip())
+    return {"ok": True, "entries": entries}
+
+
 @app.post("/api/test-connection")
 async def test_connection(request: Request):
     """
