@@ -12,11 +12,17 @@ Routen:
   POST /api/claude-md/{instance}     → CLAUDE.md speichern
   GET  /api/status                   → Systemstatus (Qdrant, Ollama, Log-Stats)
   GET  /api/events/{instance}        → SSE-Stream für neue Konversationen
+  GET  /api/users                    → User-Liste
+  POST /api/users                    → User anlegen (inkl. Container-Start)
+  PATCH /api/users/{user_id}         → User aktualisieren (Container-Restart)
+  DELETE /api/users/{user_id}        → User löschen (Container entfernen)
+  POST /api/users/{user_id}/restart  → Container neu starten
 """
 
 import asyncio
 import json
 import os
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,6 +40,12 @@ try:
 except ImportError:
     pass
 
+try:
+    import docker as _docker
+    _docker_client = _docker.from_env()
+except Exception:
+    _docker_client = None
+
 app = FastAPI(title="HAANA Admin", docs_url=None, redoc_url=None)
 templates = Jinja2Templates(directory="templates")
 
@@ -43,6 +55,15 @@ _rebuild: dict[str, dict] = {
     inst: {"status": "idle", "done": 0, "total": 0, "started": 0.0, "error": ""}
     for inst in ["alice", "bob", "ha-assist", "ha-advanced"]
 }
+
+
+def _sync_rebuild_state():
+    """Rebuild-State mit dynamischen Usern aus config.json synchronisieren."""
+    cfg = load_config()
+    for u in cfg.get("users", []):
+        uid = u.get("id", "")
+        if uid and uid not in _rebuild:
+            _rebuild[uid] = {"status": "idle", "done": 0, "total": 0, "started": 0.0, "error": ""}
 
 
 # ── Log-Retention Cleanup ─────────────────────────────────────────────────────
@@ -82,6 +103,8 @@ async def _cleanup_loop():
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(_cleanup_loop())
+    # Rebuild-Zustand aus config.json-Users erweitern (dynamische Instanzen)
+    _sync_rebuild_state()
 
 # ── Pfade ────────────────────────────────────────────────────────────────────
 
@@ -90,7 +113,18 @@ LOG_ROOT   = Path(os.environ.get("HAANA_LOG_DIR",   "/data/logs"))
 CONF_FILE  = Path(os.environ.get("HAANA_CONF_FILE", "/data/config/config.json"))
 INST_DIR   = Path(os.environ.get("HAANA_INST_DIR",  "/app/instanzen"))
 
-INSTANCES = ["alice", "bob", "ha-assist", "ha-advanced"]
+INSTANCES = ["alice", "bob", "ha-assist", "ha-advanced"]  # statische Basis-Instanzen
+
+def get_all_instances() -> list[str]:
+    """Alle Instanzen: statische + dynamische User aus config.json."""
+    cfg = load_config()
+    user_ids = [u["id"] for u in cfg.get("users", []) if u.get("id")]
+    # Combine: statische zuerst, dann weitere dynamische (de-dup)
+    result = list(INSTANCES)
+    for uid in user_ids:
+        if uid not in result:
+            result.append(uid)
+    return result
 
 # Agent-API URLs (aus Env, Fallback für lokale Entwicklung)
 AGENT_URLS: dict[str, str] = {
@@ -99,6 +133,13 @@ AGENT_URLS: dict[str, str] = {
     "ha-assist":   os.environ.get("AGENT_URL_HA_ASSIST",   "http://localhost:8003"),
     "ha-advanced": os.environ.get("AGENT_URL_HA_ADVANCED", "http://localhost:8004"),
 }
+
+# Docker-Management Konstanten
+HOST_BASE       = os.environ.get("HAANA_HOST_BASE",        "/opt/haana")
+DATA_VOLUME     = os.environ.get("HAANA_DATA_VOLUME",       "haana_haana-data")
+COMPOSE_NETWORK = os.environ.get("HAANA_COMPOSE_NETWORK",  "haana_default")
+AGENT_IMAGE     = os.environ.get("HAANA_AGENT_IMAGE",       "haana-instanz-alice")
+TEMPLATES_DIR   = INST_DIR / "templates"
 
 # ── Default-Konfiguration ────────────────────────────────────────────────────
 
@@ -142,6 +183,50 @@ DEFAULT_CONFIG = {
         "ollama_url": os.environ.get("OLLAMA_URL", "http://10.83.1.110:11434"),
         "qdrant_url": os.environ.get("QDRANT_URL", "http://qdrant:6333"),
     },
+    "users": [
+        {
+            "id": "alice", "display_name": "Alice", "role": "admin",
+            "primary_llm_slot": 1, "extraction_llm_slot": 3,
+            "ha_user": "alice", "whatsapp_jid": "", "whatsapp_mode": "separate",
+            "api_port": 8001, "container_name": "haana-instanz-alice-1",
+            "claude_md_template": "admin",
+            "caldav_url": "", "caldav_user": "", "caldav_pass": "",
+            "imap_host": "", "imap_port": 993, "imap_user": "", "imap_pass": "",
+            "smtp_host": "", "smtp_port": 587, "smtp_user": "", "smtp_pass": "",
+        },
+        {
+            "id": "bob", "display_name": "Bob", "role": "user",
+            "primary_llm_slot": 1, "extraction_llm_slot": 3,
+            "ha_user": "bob", "whatsapp_jid": "", "whatsapp_mode": "separate",
+            "api_port": 8002, "container_name": "haana-instanz-bob-1",
+            "claude_md_template": "user",
+            "caldav_url": "", "caldav_user": "", "caldav_pass": "",
+            "imap_host": "", "imap_port": 993, "imap_user": "", "imap_pass": "",
+            "smtp_host": "", "smtp_port": 587, "smtp_user": "", "smtp_pass": "",
+        },
+        {
+            "id": "ha-assist", "display_name": "HAANA Voice", "role": "voice",
+            "system": True,
+            "primary_llm_slot": 3, "extraction_llm_slot": 3,
+            "ha_user": "", "whatsapp_jid": "", "whatsapp_mode": "separate",
+            "api_port": 8003, "container_name": "haana-instanz-ha-assist-1",
+            "claude_md_template": "ha-assist",
+            "caldav_url": "", "caldav_user": "", "caldav_pass": "",
+            "imap_host": "", "imap_port": 993, "imap_user": "", "imap_pass": "",
+            "smtp_host": "", "smtp_port": 587, "smtp_user": "", "smtp_pass": "",
+        },
+        {
+            "id": "ha-advanced", "display_name": "HAANA Advanced", "role": "voice-advanced",
+            "system": True,
+            "primary_llm_slot": 1, "extraction_llm_slot": 3,
+            "ha_user": "", "whatsapp_jid": "", "whatsapp_mode": "separate",
+            "api_port": 8004, "container_name": "haana-instanz-ha-advanced-1",
+            "claude_md_template": "ha-advanced",
+            "caldav_url": "", "caldav_user": "", "caldav_pass": "",
+            "imap_host": "", "imap_port": 993, "imap_user": "", "imap_pass": "",
+            "smtp_host": "", "smtp_port": 587, "smtp_user": "", "smtp_pass": "",
+        },
+    ],
 }
 
 
@@ -201,7 +286,7 @@ def log_file_for(instance: str) -> Optional[Path]:
 async def index(request: Request):
     return templates.TemplateResponse("index.html", {
         "request": request,
-        "instances": INSTANCES,
+        "instances": get_all_instances(),
     })
 
 
@@ -210,7 +295,7 @@ async def index(request: Request):
 @app.get("/api/instances")
 async def get_instances():
     result = []
-    for inst in INSTANCES:
+    for inst in get_all_instances():
         inst_dir = LOG_ROOT / "conversations" / inst
         count = sum(1 for _ in inst_dir.glob("*.jsonl")) if inst_dir.exists() else 0
         result.append({"name": inst, "log_days": count})
@@ -219,7 +304,7 @@ async def get_instances():
 
 @app.get("/api/conversations/{instance}")
 async def get_conversations(instance: str, limit: int = 50):
-    if instance not in INSTANCES:
+    if instance not in get_all_instances():
         raise HTTPException(404, f"Instanz '{instance}' nicht gefunden")
     records = read_recent_logs("conversations", instance, limit)
     return records
@@ -256,7 +341,7 @@ async def post_config(request: Request):
 
 @app.get("/api/claude-md/{instance}")
 async def get_claude_md(instance: str):
-    if instance not in INSTANCES:
+    if instance not in get_all_instances():
         raise HTTPException(404, "Instanz nicht gefunden")
     path = INST_DIR / instance / "CLAUDE.md"
     if not path.exists():
@@ -266,7 +351,7 @@ async def get_claude_md(instance: str):
 
 @app.post("/api/claude-md/{instance}")
 async def post_claude_md(instance: str, request: Request):
-    if instance not in INSTANCES:
+    if instance not in get_all_instances():
         raise HTTPException(404, "Instanz nicht gefunden")
     try:
         body = await request.json()
@@ -324,7 +409,7 @@ async def get_status():
                 status["ollama"] = {"ok": False, "error": str(e)}
 
     # Log-Statistiken
-    for inst in INSTANCES:
+    for inst in get_all_instances():
         inst_log = LOG_ROOT / "conversations" / inst
         if inst_log.exists():
             days = sorted(inst_log.glob("*.jsonl"), reverse=True)
@@ -344,7 +429,7 @@ async def chat_proxy(instance: str, request: Request):
     Sendet eine Nachricht an eine Agent-Instanz und gibt die Antwort zurück.
     Proxy zur Agent-API (core/api.py, läuft im Agent-Container).
     """
-    if instance not in INSTANCES:
+    if instance not in get_all_instances():
         raise HTTPException(404, f"Instanz '{instance}' nicht gefunden")
 
     try:
@@ -356,7 +441,7 @@ async def chat_proxy(instance: str, request: Request):
     if not message:
         raise HTTPException(400, "message darf nicht leer sein")
 
-    agent_url = AGENT_URLS.get(instance)
+    agent_url = _get_agent_url(instance)
     if not agent_url:
         raise HTTPException(503, f"Keine Agent-URL für '{instance}' konfiguriert")
 
@@ -419,7 +504,7 @@ async def test_connection(request: Request):
 @app.post("/api/rebuild-memory/{instance}")
 async def start_rebuild(instance: str):
     """Startet den Memory-Rebuild aus Konversations-Logs für eine Instanz."""
-    if instance not in INSTANCES:
+    if instance not in get_all_instances():
         raise HTTPException(404)
 
     state = _rebuild.get(instance)
@@ -446,7 +531,7 @@ async def start_rebuild(instance: str):
 
     async def _run():
         state = _rebuild[instance]
-        agent_url = AGENT_URLS.get(instance, "")
+        agent_url = _get_agent_url(instance)
         import httpx
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
@@ -492,7 +577,7 @@ async def cancel_rebuild(instance: str):
 @app.get("/api/rebuild-progress/{instance}")
 async def rebuild_progress(instance: str, request: Request):
     """SSE-Stream mit Rebuild-Fortschritt."""
-    if instance not in INSTANCES:
+    if instance not in get_all_instances():
         raise HTTPException(404)
 
     async def generator():
@@ -533,6 +618,15 @@ async def fetch_models(request: Request):
     url   = (body.get("url")  or "").strip()
     key   = (body.get("key")  or "").strip()
 
+    # Bekannte Anthropic-Modelle als Fallback
+    _ANTHROPIC_KNOWN = [
+        "claude-opus-4-6", "claude-sonnet-4-6",
+        "claude-haiku-4-5-20251001",
+        "claude-opus-4-5", "claude-sonnet-4-5",
+        "claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022",
+        "claude-3-opus-20240229",
+    ]
+
     import httpx
     try:
         async with httpx.AsyncClient(timeout=8.0) as client:
@@ -541,25 +635,378 @@ async def fetch_models(request: Request):
                 r = await client.get(f"{target}/api/tags")
                 models = [m["name"] for m in r.json().get("models", [])]
                 return {"models": models}
+
+            elif type_ == "minimax":
+                # MiniMax: Anthropic-kompatible API
+                return {"models": ["MiniMax-M2.5", "MiniMax-Text-01"]}
+
             elif type_ == "anthropic":
+                # Wenn custom URL mit minimax → minimax-Modelle zurückgeben
+                if url and "minimax" in url.lower():
+                    return {"models": ["MiniMax-M2.5", "MiniMax-Text-01"]}
+                # Wenn kein API-Key → Fallback-Liste
+                if not key:
+                    return {"models": _ANTHROPIC_KNOWN, "fallback": True}
                 headers = {"x-api-key": key, "anthropic-version": "2023-06-01"}
-                r = await client.get("https://api.anthropic.com/v1/models", headers=headers)
-                if r.status_code == 200:
-                    models = [m["id"] for m in r.json().get("data", [])]
-                    return {"models": models}
-                return {"models": [], "error": f"HTTP {r.status_code}"}
+                try:
+                    r = await client.get("https://api.anthropic.com/v1/models", headers=headers)
+                    if r.status_code == 200:
+                        models = [m["id"] for m in r.json().get("data", [])]
+                        return {"models": models}
+                except Exception:
+                    pass
+                return {"models": _ANTHROPIC_KNOWN, "fallback": True}
+
             else:
                 return {"models": [], "manual": True}
     except Exception as e:
         return {"models": [], "error": str(e)[:200]}
 
 
+# ── User-Management ───────────────────────────────────────────────────────────
+
+def _render_claude_md(template_name: str, display_name: str, user_id: str, ha_user: str = "") -> str:
+    """Generiert CLAUDE.md aus Template mit Platzhalter-Ersetzung."""
+    tpl_path = TEMPLATES_DIR / f"{template_name}.md"
+    if not tpl_path.exists():
+        tpl_path = TEMPLATES_DIR / "user.md"
+    content = tpl_path.read_text(encoding="utf-8")
+    content = content.replace("{{DISPLAY_NAME}}", display_name)
+    content = content.replace("{{USER_ID}}", user_id)
+    content = content.replace("{{HA_USER}}", ha_user or user_id)
+    return content
+
+
+def _find_free_port(existing_ports: list[int]) -> int:
+    """Nächsten freien Port ab 8001 finden."""
+    port = 8001
+    while port in existing_ports:
+        port += 1
+    return port
+
+
+def _get_agent_image() -> str:
+    """Agent-Image auto-detektieren (erstes HAANA-Image das läuft)."""
+    if not _docker_client:
+        return AGENT_IMAGE
+    try:
+        containers = _docker_client.containers.list(all=True)
+        for c in containers:
+            if "instanz-" in c.name or "haana-instanz" in c.name:
+                return c.image.tags[0] if c.image.tags else AGENT_IMAGE
+    except Exception:
+        pass
+    return AGENT_IMAGE
+
+
+def _get_compose_network() -> str:
+    """Docker-Netzwerk auto-detektieren."""
+    if not _docker_client:
+        return COMPOSE_NETWORK
+    try:
+        for net_name in [COMPOSE_NETWORK, "haana-default", "haana_default", "bridge"]:
+            try:
+                _docker_client.networks.get(net_name)
+                return net_name
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return COMPOSE_NETWORK
+
+
+def _container_status(container_name: str) -> str:
+    """Container-Status abfragen."""
+    if not _docker_client:
+        return "unknown"
+    try:
+        c = _docker_client.containers.get(container_name)
+        return c.status  # "running", "exited", "created", etc.
+    except Exception:
+        return "absent"
+
+
+def _start_agent_container(user: dict, cfg: dict) -> dict:
+    """Startet einen Agent-Container für einen User via Docker SDK."""
+    if not _docker_client:
+        return {"ok": False, "error": "Docker nicht verfügbar (kein Socket gemountet?)"}
+
+    uid           = user["id"]
+    display_name  = user.get("display_name", uid)
+    api_port      = user["api_port"]
+    container_name = user.get("container_name", f"haana-instanz-{uid}-1")
+    template      = user.get("claude_md_template", "user")
+    primary_slot  = user.get("primary_llm_slot", 1)
+    extract_slot  = user.get("extraction_llm_slot", 3)
+    write_scopes  = f"{uid}_memory,bnd_memory"
+    read_scopes   = f"{uid}_memory,bnd_memory"
+
+    # LLM-Slot-Infos aus Config
+    slots = {s["slot"]: s for s in cfg.get("llm_providers", [])}
+    pslot = slots.get(primary_slot, {})
+    eslot = slots.get(extract_slot, {})
+
+    env = {
+        "HAANA_INSTANCE":         uid,
+        "HAANA_API_PORT":         str(api_port),
+        "HAANA_LOG_DIR":          "/data/logs",
+        "HAANA_WRITE_SCOPES":     write_scopes,
+        "HAANA_READ_SCOPES":      read_scopes,
+        "HAANA_MODEL":            pslot.get("model", "claude-sonnet-4-6"),
+        "HAANA_EXTRACT_MODEL":    eslot.get("model", ""),
+        "QDRANT_URL":             cfg.get("services", {}).get("qdrant_url", "http://qdrant:6333"),
+        "OLLAMA_URL":             cfg.get("services", {}).get("ollama_url", ""),
+        "HA_URL":                 cfg.get("services", {}).get("ha_url", ""),
+        "HA_TOKEN":               cfg.get("services", {}).get("ha_token", ""),
+    }
+
+    # Anthropic API-Key oder Custom URL
+    if pslot.get("key"):
+        env["ANTHROPIC_API_KEY"] = pslot["key"]
+    if pslot.get("url"):
+        env["ANTHROPIC_BASE_URL"] = pslot["url"]
+    if pslot.get("type") == "minimax" or (pslot.get("url", "") and "minimax" in pslot.get("url", "").lower()):
+        env["ANTHROPIC_BASE_URL"]  = pslot.get("url", "https://api.minimax.io/anthropic")
+        env["ANTHROPIC_AUTH_TOKEN"] = pslot.get("key", "")
+
+    image = _get_agent_image()
+    network = _get_compose_network()
+
+    # Host-Pfad für CLAUDE.md
+    host_claude_md = f"{HOST_BASE}/instanzen/{uid}/CLAUDE.md"
+    host_skills    = f"{HOST_BASE}/skills"
+    host_claude_config = "/root/.claude"
+
+    volumes = {
+        host_claude_md:     {"bind": "/app/CLAUDE.md",        "mode": "ro"},
+        host_skills:        {"bind": "/app/skills",            "mode": "ro"},
+        host_claude_config: {"bind": "/home/haana/.claude",   "mode": "ro"},
+        DATA_VOLUME:        {"bind": "/data",                  "mode": "rw"},
+    }
+
+    try:
+        # Eventuell alten Container entfernen
+        try:
+            old = _docker_client.containers.get(container_name)
+            old.stop(timeout=5)
+            old.remove()
+        except Exception:
+            pass
+
+        container = _docker_client.containers.run(
+            image,
+            name=container_name,
+            environment=env,
+            volumes=volumes,
+            ports={f"{api_port}/tcp": api_port},
+            network=network,
+            detach=True,
+            restart_policy={"Name": "unless-stopped"},
+        )
+        return {"ok": True, "container_id": container.short_id, "container_name": container_name}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:300]}
+
+
+@app.get("/api/users")
+async def get_users():
+    """User-Liste mit Container-Status."""
+    cfg = load_config()
+    users = cfg.get("users", [])
+    result = []
+    for u in users:
+        status = _container_status(u.get("container_name", f"haana-instanz-{u['id']}-1"))
+        result.append({**u, "container_status": status})
+    return result
+
+
+@app.post("/api/users")
+async def create_user(request: Request):
+    """
+    Legt neuen User an:
+    1. ID-Validierung
+    2. Port vergeben
+    3. CLAUDE.md aus Template generieren
+    4. Container starten via Docker SDK
+    5. User in config.json speichern
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Ungültiges JSON")
+
+    uid = (body.get("id") or "").strip().lower()
+    if not re.match(r"^[a-z0-9][a-z0-9-]{0,29}$", uid):
+        raise HTTPException(400, "ID muss [a-z0-9-], max 30 Zeichen, nicht mit - beginnen")
+
+    cfg = load_config()
+    existing = [u["id"] for u in cfg.get("users", [])]
+    if uid in existing:
+        raise HTTPException(409, f"User '{uid}' existiert bereits")
+
+    # Port vergeben
+    used_ports = [u.get("api_port", 0) for u in cfg.get("users", [])]
+    port = _find_free_port(used_ports)
+
+    # User-Objekt aufbauen
+    user: dict = {
+        "id":                  uid,
+        "display_name":        body.get("display_name") or uid.capitalize(),
+        "role":                body.get("role", "user"),
+        "primary_llm_slot":    int(body.get("primary_llm_slot", 1)),
+        "extraction_llm_slot": int(body.get("extraction_llm_slot", 3)),
+        "ha_user":             body.get("ha_user", uid),
+        "whatsapp_jid":        body.get("whatsapp_jid", ""),
+        "whatsapp_mode":       body.get("whatsapp_mode", "separate"),
+        "api_port":            port,
+        "container_name":      f"haana-instanz-{uid}-1",
+        "claude_md_template":  body.get("claude_md_template", "admin" if body.get("role") == "admin" else "user"),
+        "caldav_url": "", "caldav_user": "", "caldav_pass": "",
+        "imap_host": "", "imap_port": 993, "imap_user": "", "imap_pass": "",
+        "smtp_host": "", "smtp_port": 587, "smtp_user": "", "smtp_pass": "",
+    }
+
+    # CLAUDE.md generieren
+    claude_md_dir = INST_DIR / uid
+    claude_md_dir.mkdir(parents=True, exist_ok=True)
+    claude_md_content = _render_claude_md(
+        user["claude_md_template"], user["display_name"], uid, user["ha_user"]
+    )
+    (claude_md_dir / "CLAUDE.md").write_text(claude_md_content, encoding="utf-8")
+
+    # Container starten
+    result = _start_agent_container(user, cfg)
+
+    # User in config speichern (auch wenn Container-Start fehlschlägt)
+    cfg.setdefault("users", []).append(user)
+    save_config(cfg)
+
+    # Rebuild-State erweitern
+    _rebuild[uid] = {"status": "idle", "done": 0, "total": 0, "started": 0.0, "error": ""}
+
+    return {"ok": True, "user": user, "container": result}
+
+
+@app.patch("/api/users/{user_id}")
+async def update_user(user_id: str, request: Request):
+    """User-Felder aktualisieren. Container wird neu gestartet wenn relevante Felder geändert."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Ungültiges JSON")
+
+    cfg = load_config()
+    users = cfg.get("users", [])
+    user = next((u for u in users if u["id"] == user_id), None)
+    if not user:
+        raise HTTPException(404, f"User '{user_id}' nicht gefunden")
+
+    restart_fields = {"primary_llm_slot", "extraction_llm_slot", "ha_user", "role", "claude_md_template"}
+    needs_restart = any(k in body and body[k] != user.get(k) for k in restart_fields)
+
+    user.update({k: v for k, v in body.items() if k not in ("id", "api_port", "container_name")})
+    save_config(cfg)
+
+    # CLAUDE.md neu generieren wenn Template oder Name geändert
+    if "display_name" in body or "claude_md_template" in body or "ha_user" in body:
+        claude_md_content = _render_claude_md(
+            user["claude_md_template"], user["display_name"], user_id, user.get("ha_user", user_id)
+        )
+        (INST_DIR / user_id / "CLAUDE.md").write_text(claude_md_content, encoding="utf-8")
+
+    container_result = None
+    if needs_restart:
+        container_result = _start_agent_container(user, cfg)
+
+    return {"ok": True, "user": user, "restarted": needs_restart, "container": container_result}
+
+
+@app.delete("/api/users/{user_id}")
+async def delete_user(user_id: str):
+    """User löschen: Container stoppen + entfernen, CLAUDE.md-Dir löschen, config speichern."""
+    cfg = load_config()
+    users = cfg.get("users", [])
+    user = next((u for u in users if u["id"] == user_id), None)
+    if not user:
+        raise HTTPException(404, f"User '{user_id}' nicht gefunden")
+    if user.get("system"):
+        raise HTTPException(403, "System-Instanzen können nicht gelöscht werden")
+
+    container_name = user.get("container_name", f"haana-instanz-{user_id}-1")
+
+    # Container stoppen + entfernen
+    container_removed = False
+    if _docker_client:
+        try:
+            c = _docker_client.containers.get(container_name)
+            c.stop(timeout=5)
+            c.remove()
+            container_removed = True
+        except Exception:
+            pass
+
+    # CLAUDE.md-Verzeichnis löschen
+    import shutil
+    inst_path = INST_DIR / user_id
+    if inst_path.exists():
+        shutil.rmtree(inst_path, ignore_errors=True)
+
+    # User aus config entfernen
+    cfg["users"] = [u for u in users if u["id"] != user_id]
+    save_config(cfg)
+
+    _rebuild.pop(user_id, None)
+
+    return {"ok": True, "container_removed": container_removed}
+
+
+@app.post("/api/users/{user_id}/restart")
+async def restart_user_container(user_id: str):
+    """Container für einen User neu starten."""
+    cfg = load_config()
+    user = next((u for u in cfg.get("users", []) if u["id"] == user_id), None)
+    if not user:
+        raise HTTPException(404, f"User '{user_id}' nicht gefunden")
+    result = _start_agent_container(user, cfg)
+    return {"ok": result.get("ok", False), "container": result}
+
+
+@app.post("/api/users/{user_id}/stop")
+async def stop_user_container(user_id: str):
+    """Container für einen User stoppen."""
+    cfg = load_config()
+    user = next((u for u in cfg.get("users", []) if u["id"] == user_id), None)
+    if not user:
+        raise HTTPException(404, f"User '{user_id}' nicht gefunden")
+    container_name = user.get("container_name", f"haana-instanz-{user_id}-1")
+    if not _docker_client:
+        return {"ok": False, "error": "Docker nicht verfügbar"}
+    try:
+        c = _docker_client.containers.get(container_name)
+        c.stop(timeout=5)
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
+
+
+def _get_agent_url(instance: str) -> str:
+    """Agent-URL aus AGENT_URLS oder dynamisch aus config."""
+    if instance in AGENT_URLS:
+        return AGENT_URLS[instance]
+    # Dynamischer User: URL aus api_port
+    cfg = load_config()
+    user = next((u for u in cfg.get("users", []) if u["id"] == instance), None)
+    if user:
+        return f"http://{user.get('container_name', f'haana-instanz-{instance}-1')}:{user['api_port']}"
+    return ""
+
+
 @app.get("/api/agent-health/{instance}")
 async def agent_health(instance: str):
     """Prüft ob ein Agent-Container erreichbar ist."""
-    if instance not in INSTANCES:
+    if instance not in get_all_instances():
         raise HTTPException(404)
-    agent_url = AGENT_URLS.get(instance, "")
+    agent_url = _get_agent_url(instance)
     import httpx
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
@@ -577,7 +1024,7 @@ async def sse_events(instance: str, request: Request):
     Server-Sent Events: streamt neue Konversationszeilen sobald sie erscheinen.
     Pollt alle 2 Sekunden die aktuelle Tages-Log-Datei.
     """
-    if instance not in INSTANCES:
+    if instance not in get_all_instances():
         raise HTTPException(404, "Instanz nicht gefunden")
 
     async def event_generator():

@@ -99,17 +99,23 @@ services:
     build: ./admin-interface
     env_file: .env
     environment:
-      HAANA_LOG_DIR:        /data/logs
-      HAANA_DATA_DIR:       /data
-      HAANA_CONF_FILE:      /data/config/config.json
-      HAANA_INST_DIR:       /app/instanzen
-      AGENT_URL_BENNI:      http://instanz-alice:8001
-      AGENT_URL_DOMI:       http://instanz-bob:8002
+      HAANA_LOG_DIR:          /data/logs
+      HAANA_DATA_DIR:         /data
+      HAANA_CONF_FILE:        /data/config/config.json
+      HAANA_INST_DIR:         /app/instanzen
+      AGENT_URL_BENNI:        http://instanz-alice:8001
+      AGENT_URL_DOMI:         http://instanz-bob:8002
+      # Docker-Management für User-Provisioning
+      HAANA_HOST_BASE:        /opt/haana
+      HAANA_DATA_VOLUME:      haana_haana-data
+      HAANA_COMPOSE_NETWORK:  haana_default
+      HAANA_AGENT_IMAGE:      haana-instanz-alice  # wird beim ersten Start auto-detected
     ports:
       - "8080:8080"
     volumes:
-      - ./instanzen:/app/instanzen:ro
+      - ./instanzen:/app/instanzen
       - haana-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     depends_on:
       qdrant:

@@ -229,6 +229,7 @@
   <button class="tab-btn active" onclick="showTab('chat')">💬 Chat</button>
   <button class="tab-btn" onclick="showTab('logs')">📋 Logs</button>
   <button class="tab-btn" onclick="showTab('config')">⚙️ Config</button>
+  <button class="tab-btn" onclick="showTab('users')">👥 Users</button>
   <button class="tab-btn" onclick="showTab('status')">📊 Status</button>
 </div>
 
@@ -549,6 +550,95 @@
   </div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════════════ USERS -->
+<div id="panel-users" class="panel">
+
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+    <h2 style="font-size:16px;font-weight:600;">👥 User-Verwaltung</h2>
+    <button class="btn" onclick="showUserForm(null)">+ Neuer User</button>
+  </div>
+
+  <!-- User-Liste -->
+  <div id="user-list" style="display:flex;flex-direction:column;gap:12px;margin-bottom:24px;">
+    <div class="empty-state"><div class="icon">⏳</div><div>Wird geladen...</div></div>
+  </div>
+
+  <!-- Neuer/Edit-User-Formular -->
+  <div id="user-form-section" style="display:none;">
+    <div class="config-section">
+      <div class="config-section-header" id="user-form-title">Neuer User</div>
+      <div class="config-section-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label>ID <span style="color:var(--muted);font-size:11px;">(einmalig, nur a-z 0-9 -)</span></label>
+          <input type="text" id="uf-id" placeholder="z.B. alice" pattern="[a-z0-9-]+" maxlength="30">
+        </div>
+        <div class="form-group">
+          <label>Anzeigename</label>
+          <input type="text" id="uf-display-name" placeholder="z.B. Alice">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Rolle</label>
+          <select id="uf-role" onchange="updateUserFormTemplate()">
+            <option value="user">User (eingeschränkt)</option>
+            <option value="admin">Admin (voller Zugriff)</option>
+            <option value="voice">Voice – HAANA (schnell, HA-Steuerung)</option>
+            <option value="voice-advanced">Voice-Advanced – HAANA Advanced (Kalender, Skills)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>HA-User</label>
+          <input type="text" id="uf-ha-user" placeholder="Home-Assistant Benutzername">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Primäres LLM</label>
+          <select id="uf-primary-llm"></select>
+        </div>
+        <div class="form-group">
+          <label>Extraktions-LLM</label>
+          <select id="uf-extract-llm"></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>WhatsApp JID <span style="color:var(--muted);font-size:11px;">(optional, z.B. 49xxx@s.whatsapp.net)</span></label>
+          <input type="text" id="uf-wa-jid" placeholder="">
+        </div>
+        <div class="form-group">
+          <label>WhatsApp Modus</label>
+          <select id="uf-wa-mode">
+            <option value="separate">Separate Nummer</option>
+            <option value="self">An mich selbst schreiben</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>CLAUDE.md Template</label>
+        <select id="uf-template">
+          <option value="user">User (Standard)</option>
+          <option value="admin">Admin</option>
+          <option value="ha-assist">HAANA Voice (ha-assist)</option>
+          <option value="ha-advanced">HAANA Advanced (ha-advanced)</option>
+        </select>
+      </div>
+      <div id="uf-phase3-note" style="padding:10px;background:rgba(100,116,139,.08);border-radius:6px;font-size:12px;color:var(--muted);margin-bottom:12px;">
+        CalDAV, CardDAV, IMAP/SMTP – noch nicht verfügbar (Phase 3+). Für HAANA Advanced: eigener Kalender &amp; E-Mail-Account geplant.
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button class="btn" id="uf-submit-btn" onclick="submitUserForm()">User anlegen</button>
+        <button class="btn btn-secondary" onclick="hideUserForm()">Abbrechen</button>
+        <span id="uf-status" style="font-size:12px;color:var(--muted);"></span>
+      </div>
+      </div><!-- config-section-body -->
+    </div><!-- config-section -->
+  </div>
+
+</div>
+
 <!-- ═══════════════════════════════════════════════════════════════ STATUS -->
 <div id="panel-status" class="panel">
   <div class="status-grid" id="status-grid">
@@ -581,6 +671,7 @@ function showTab(name) {
   if (name === 'chat')   loadConversations(currentInstance);
   if (name === 'logs')   loadLogs(currentLogCat);
   if (name === 'config') loadConfig();
+  if (name === 'users')  loadUsers();
   if (name === 'status') loadStatus();
 }
 
@@ -823,7 +914,7 @@ function renderConfig(c) {
         <div class="form-group">
           <label>Typ</label>
           <select id="prov-${i}-type">
-            ${['anthropic','ollama','custom'].map(t => `<option value="${t}" ${s.type===t?'selected':''}>${t}</option>`).join('')}
+            ${['anthropic','minimax','ollama','custom'].map(t => `<option value="${t}" ${s.type===t?'selected':''}>${t}</option>`).join('')}
           </select>
         </div>
       </div>
@@ -1350,8 +1441,8 @@ async function fetchModels(i) {
     }
     const datalist = document.getElementById(`models-${i}`);
     datalist.innerHTML = d.models.map(m => `<option value="${escAttr(m)}">`).join('');
-    st.textContent = `✓ ${d.models.length} Modelle`;
-    st.style.color = 'var(--green)';
+    st.textContent = d.fallback ? `✓ ${d.models.length} bekannte Modelle` : `✓ ${d.models.length} Modelle`;
+    st.style.color = d.fallback ? 'var(--yellow)' : 'var(--green)';
   } catch(e) {
     st.textContent = '✗ ' + e.message.substring(0,40);
     st.style.color = 'var(--red)';
@@ -1390,6 +1481,196 @@ async function testProviderConn(i) {
     el.textContent = d.ok ? `✓ ${d.detail}` : `✗ ${d.detail}`;
     el.style.color = d.ok ? 'var(--green)' : 'var(--red)';
   } catch(e) { el.textContent = '✗ ' + e.message; el.style.color = 'var(--red)'; }
+}
+
+// ── User-Management ────────────────────────────────────────────────────────
+let editingUserId = null;
+
+async function loadUsers() {
+  const list = document.getElementById('user-list');
+  try {
+    const r = await fetch('/api/users');
+    const users = await r.json();
+    if (!users.length) {
+      list.innerHTML = '<div class="empty-state"><div class="icon">👤</div><div>Noch keine User.</div></div>';
+      return;
+    }
+    list.innerHTML = users.map(u => {
+      const statusColor = u.container_status === 'running' ? 'var(--green)' : u.container_status === 'absent' ? 'var(--muted)' : 'var(--red)';
+      const statusDot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${statusColor};margin-right:6px;"></span>`;
+      const sysTag = u.system ? `<span class="tag" style="background:#1a2744;color:#60a5fa;margin-left:4px;font-size:10px;">System</span>` : '';
+      const roleColor = {'admin':'var(--accent2)','voice':'var(--yellow)','voice-advanced':'var(--blue)','user':'var(--green)'}[u.role] || 'var(--muted)';
+      return `
+      <div class="conv-card" style="padding:14px 16px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <div style="font-weight:600;margin-bottom:4px;">${statusDot}${escHtml(u.display_name)} <span style="color:var(--muted);font-weight:400;font-size:12px;">(${escHtml(u.id)})</span>
+              <span class="tag" style="margin-left:6px;color:${roleColor};">${escHtml(u.role)}</span>${sysTag}
+            </div>
+            <div style="font-size:12px;color:var(--muted);">
+              Port :${u.api_port} · Slot ${u.primary_llm_slot} (primär), ${u.extraction_llm_slot} (Extraktion)
+              ${u.ha_user ? ` · HA: ${escHtml(u.ha_user)}` : ''}
+              ${u.whatsapp_jid ? ` · WA: ${escHtml(u.whatsapp_jid)}` : ''}
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px;">Container: ${escHtml(u.container_name)} · ${escHtml(u.container_status)}</div>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0;">
+            <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" onclick="restartUserContainer('${escAttr(u.id)}')">↺</button>
+            <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" onclick="stopUserContainer('${escAttr(u.id)}')">⏹</button>
+            <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" onclick="showUserForm('${escAttr(u.id)}')">✎</button>
+            ${u.system ? '' : `<button class="btn btn-danger" style="font-size:11px;padding:3px 10px;" onclick="deleteUser('${escAttr(u.id)}')">✕</button>`}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    list.innerHTML = `<div class="empty-state"><div class="icon">❌</div><div>${e.message}</div></div>`;
+  }
+}
+
+function _populateLlmSelects() {
+  if (!cfg) return;
+  const slots = cfg.llm_providers || [];
+  const opts = slots.map(s => `<option value="${s.slot}">Slot ${s.slot} – ${escHtml(s.name||'')}</option>`).join('');
+  document.getElementById('uf-primary-llm').innerHTML = opts;
+  document.getElementById('uf-extract-llm').innerHTML = opts;
+}
+
+async function showUserForm(userId) {
+  editingUserId = userId;
+  const section = document.getElementById('user-form-section');
+  const title   = document.getElementById('user-form-title');
+  const submitBtn = document.getElementById('uf-submit-btn');
+
+  if (!cfg) await loadConfig();
+  _populateLlmSelects();
+
+  if (userId) {
+    // Edit-Modus: Felder befüllen
+    const r = await fetch('/api/users');
+    const users = await r.json();
+    const u = users.find(x => x.id === userId);
+    if (!u) return;
+    title.textContent = `User bearbeiten: ${u.display_name}`;
+    submitBtn.textContent = 'Speichern';
+    document.getElementById('uf-id').value          = u.id;
+    document.getElementById('uf-id').disabled       = true;
+    document.getElementById('uf-display-name').value = u.display_name || '';
+    document.getElementById('uf-role').value         = u.role || 'user';
+    document.getElementById('uf-ha-user').value      = u.ha_user || '';
+    document.getElementById('uf-primary-llm').value  = u.primary_llm_slot || 1;
+    document.getElementById('uf-extract-llm').value  = u.extraction_llm_slot || 3;
+    document.getElementById('uf-wa-jid').value       = u.whatsapp_jid || '';
+    document.getElementById('uf-wa-mode').value      = u.whatsapp_mode || 'separate';
+    document.getElementById('uf-template').value     = u.claude_md_template || 'user';
+  } else {
+    // Neu-Modus
+    title.textContent = 'Neuer User';
+    submitBtn.textContent = 'User anlegen';
+    document.getElementById('uf-id').value          = '';
+    document.getElementById('uf-id').disabled       = false;
+    document.getElementById('uf-display-name').value = '';
+    document.getElementById('uf-role').value         = 'user';
+    document.getElementById('uf-ha-user').value      = '';
+    document.getElementById('uf-primary-llm').value  = 1;
+    document.getElementById('uf-extract-llm').value  = 3;
+    document.getElementById('uf-wa-jid').value       = '';
+    document.getElementById('uf-wa-mode').value      = 'separate';
+    document.getElementById('uf-template').value     = 'user';
+  }
+
+  section.style.display = '';
+  section.scrollIntoView({ behavior: 'smooth' });
+  document.getElementById('uf-status').textContent = '';
+}
+
+function hideUserForm() {
+  document.getElementById('user-form-section').style.display = 'none';
+  editingUserId = null;
+}
+
+function updateUserFormTemplate() {
+  const role = document.getElementById('uf-role').value;
+  const tplMap = { 'admin': 'admin', 'voice': 'ha-assist', 'voice-advanced': 'ha-advanced' };
+  document.getElementById('uf-template').value = tplMap[role] || 'user';
+}
+
+async function submitUserForm() {
+  const btn = document.getElementById('uf-submit-btn');
+  const st  = document.getElementById('uf-status');
+  const payload = {
+    id:                  document.getElementById('uf-id').value.trim(),
+    display_name:        document.getElementById('uf-display-name').value.trim(),
+    role:                document.getElementById('uf-role').value,
+    ha_user:             document.getElementById('uf-ha-user').value.trim(),
+    primary_llm_slot:    parseInt(document.getElementById('uf-primary-llm').value),
+    extraction_llm_slot: parseInt(document.getElementById('uf-extract-llm').value),
+    whatsapp_jid:        document.getElementById('uf-wa-jid').value.trim(),
+    whatsapp_mode:       document.getElementById('uf-wa-mode').value,
+    claude_md_template:  document.getElementById('uf-template').value,
+  };
+
+  btn.disabled = true;
+  st.textContent = '…';
+  st.style.color = 'var(--muted)';
+
+  try {
+    let r;
+    if (editingUserId) {
+      r = await fetch(`/api/users/${editingUserId}`, {
+        method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload),
+      });
+    } else {
+      r = await fetch('/api/users', {
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload),
+      });
+    }
+    const d = await r.json();
+    if (r.ok && d.ok) {
+      const containerOk = d.container?.ok !== false;
+      st.textContent = containerOk
+        ? (editingUserId ? '✓ Gespeichert' : `✓ User angelegt · Port :${d.user?.api_port}`)
+        : `⚠ Gespeichert aber Container-Start fehlgeschlagen: ${d.container?.error?.substring(0,80)}`;
+      st.style.color = containerOk ? 'var(--green)' : 'var(--yellow)';
+      hideUserForm();
+      loadUsers();
+      toast(editingUserId ? 'User aktualisiert ✓' : 'User angelegt ✓', 'ok');
+    } else {
+      const errMsg = d.detail || d.error || 'Unbekannter Fehler';
+      st.textContent = '✗ ' + errMsg.substring(0, 100);
+      st.style.color = 'var(--red)';
+      toast(errMsg.substring(0,60), 'err');
+    }
+  } catch(e) {
+    st.textContent = '✗ ' + e.message;
+    st.style.color = 'var(--red)';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function deleteUser(userId) {
+  if (!confirm(`User "${userId}" wirklich löschen? Container wird gestoppt und entfernt.`)) return;
+  try {
+    const r = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+    const d = await r.json();
+    if (d.ok) { toast('User gelöscht', 'ok'); loadUsers(); }
+    else       { toast(d.detail || 'Fehler beim Löschen', 'err'); }
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+async function restartUserContainer(userId) {
+  const r = await fetch(`/api/users/${userId}/restart`, { method: 'POST' });
+  const d = await r.json();
+  if (d.ok) { toast(`Container für ${userId} neu gestartet ✓`, 'ok'); loadUsers(); }
+  else       { toast(`Fehler: ${(d.container?.error || d.error || '?').substring(0,80)}`, 'err'); }
+}
+
+async function stopUserContainer(userId) {
+  const r = await fetch(`/api/users/${userId}/stop`, { method: 'POST' });
+  const d = await r.json();
+  if (d.ok) { toast(`Container für ${userId} gestoppt`, 'ok'); loadUsers(); }
+  else       { toast(`Fehler: ${(d.error || '?').substring(0,80)}`, 'err'); }
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────

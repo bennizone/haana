@@ -264,11 +264,31 @@ class ConversationWindow:
 
 # ── HaanaMemory ────────────────────────────────────────────────────────────────
 
+def _load_scopes(instance_name: str) -> tuple[set[str], set[str]]:
+    """
+    Liest Write/Read-Scopes aus Env-Variablen oder fällt auf Hardcoded-Defaults zurück.
+    HAANA_WRITE_SCOPES / HAANA_READ_SCOPES: kommagetrennte Scope-Namen.
+    Erlaubt dynamisch erstellte User-Instanzen ohne Code-Änderungen.
+    """
+    write_env = os.environ.get("HAANA_WRITE_SCOPES")
+    read_env  = os.environ.get("HAANA_READ_SCOPES")
+    write = (
+        {s.strip() for s in write_env.split(",") if s.strip()}
+        if write_env is not None
+        else _WRITE_SCOPES.get(instance_name, set())
+    )
+    read = (
+        {s.strip() for s in read_env.split(",") if s.strip()}
+        if read_env is not None
+        else _READ_SCOPES.get(instance_name, set())
+    )
+    return write, read
+
+
 class HaanaMemory:
     def __init__(self, instance_name: str):
         self.instance = instance_name
-        self.write_scopes = _WRITE_SCOPES.get(instance_name, set())
-        self.read_scopes = _READ_SCOPES.get(instance_name, set())
+        self.write_scopes, self.read_scopes = _load_scopes(instance_name)
 
         # Lazy-loaded Mem0-Instanzen pro Scope (None = nicht verfügbar)
         self._memories: dict[str, object] = {}

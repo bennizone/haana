@@ -51,6 +51,7 @@ def log_conversation(
     assistant_response: str,
     latency_s: float,
     memory_used: bool = False,
+    memory_hits: int = 0,
     tool_calls: Optional[list[dict]] = None,
 ) -> None:
     """Loggt eine vollständige Konversationsrunde."""
@@ -61,6 +62,7 @@ def log_conversation(
         "assistant": assistant_response,
         "latency_s": round(latency_s, 3),
         "memory_used": memory_used,
+        "memory_hits": memory_hits,
         "tool_calls": tool_calls or [],
     })
 
@@ -102,6 +104,29 @@ def log_tool_call(
         "tool": tool_name,
         "input": str(tool_input)[:500] if tool_input is not None else None,
         "latency_s": round(latency_s, 3) if latency_s is not None else None,
+        "success": success,
+        "error": error,
+    })
+
+
+def log_llm_call(
+    instance: str,
+    model: str,
+    prompt_tokens: Optional[int] = None,
+    completion_tokens: Optional[int] = None,
+    latency_s: Optional[float] = None,
+    use_case: Optional[str] = None,
+    success: bool = True,
+    error: Optional[str] = None,
+) -> None:
+    """Loggt einen LLM-Aufruf (Modell, Token, Latenz)."""
+    _write("llm-calls", None, {
+        "instance": instance,
+        "model": model,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "latency_s": round(latency_s, 3) if latency_s is not None else None,
+        "use_case": use_case,
         "success": success,
         "error": error,
     })
