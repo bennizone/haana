@@ -118,7 +118,6 @@ DEFAULT_CONFIG = {
         "chat":              {"label": "Chat (WhatsApp/Webchat)", "primary": 1, "fallback": 2},
         "voice_tier2":       {"label": "Voice Tier 2",           "primary": 3, "fallback": 3},
         "memory_extraction": {"label": "Memory-Extraktion",      "primary": 3, "fallback": 3},
-        "embeddings":        {"label": "Embeddings",             "primary": 3, "fallback": 3},
         "daily_brief":       {"label": "Daily Brief",            "primary": 2, "fallback": 3},
     },
     "memory": {
@@ -151,7 +150,10 @@ DEFAULT_CONFIG = {
 def load_config() -> dict:
     if CONF_FILE.exists():
         try:
-            return json.loads(CONF_FILE.read_text(encoding="utf-8"))
+            cfg = json.loads(CONF_FILE.read_text(encoding="utf-8"))
+            # Embeddings-Use-Case entfernen (wurde in separate Sektion ausgelagert)
+            cfg.get("use_cases", {}).pop("embeddings", None)
+            return cfg
         except Exception:
             pass
     return DEFAULT_CONFIG
