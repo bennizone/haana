@@ -31,6 +31,7 @@ from claude_agent_sdk import (
     ProcessError,
     CLIJSONDecodeError,
 )
+from claude_agent_sdk.types import McpHttpServerConfig
 from core.memory import HaanaMemory
 import core.logger as haana_log
 
@@ -69,6 +70,15 @@ class HaanaAgent:
 
         # MCP-Server für Custom Tools (Phase 2+: HA, Trilium, Kalender, ...)
         self._mcp_servers: dict = {}
+
+        # Home Assistant MCP (ha-mcp Add-on) – automatisch einbinden wenn konfiguriert
+        ha_mcp_url = os.environ.get("HA_MCP_URL")
+        if ha_mcp_url:
+            self._mcp_servers["home-assistant"] = McpHttpServerConfig(
+                type="http",
+                url=ha_mcp_url,
+            )
+            logger.info(f"[{instance_name}] HA MCP-Server registriert: {ha_mcp_url}")
 
         # Erlaubte Built-in-Tools (Phase 1: Basis)
         self._allowed_tools: list[str] = [
