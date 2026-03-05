@@ -281,6 +281,9 @@ class HaanaMemory:
         # Tracking laufender Extraktions-Tasks (für flush_pending / shutdown)
         self._pending_tasks: set[asyncio.Task] = set()
 
+        # Anzahl Memory-Treffer aus letztem search()-Aufruf (für Logging)
+        self._last_search_hits: int = 0
+
         logger.info(
             f"[{instance_name}] Memory init | "
             f"write={sorted(self.write_scopes)} | "
@@ -368,6 +371,7 @@ class HaanaMemory:
                 )
 
         if not all_results:
+            self._last_search_hits = 0
             haana_log.log_memory_op(
                 instance=self.instance, op="read",
                 scope=",".join(scopes), query=query[:200],
@@ -380,6 +384,7 @@ class HaanaMemory:
         lines = [f"[{scope}] {content}" for _, scope, content in top]
         result_str = "\n".join(lines)
 
+        self._last_search_hits = len(top)
         haana_log.log_memory_op(
             instance=self.instance, op="read",
             scope=",".join(scopes), query=query[:200],

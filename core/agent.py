@@ -288,6 +288,7 @@ class HaanaAgent:
             assistant_response=response_text,
             latency_s=elapsed,
             memory_used=bool(memory_context),
+            memory_hits=self.memory._last_search_hits,
             tool_calls=tool_calls_log,
         )
 

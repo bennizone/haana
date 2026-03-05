@@ -301,6 +301,45 @@ async def chat_proxy(instance: str, request: Request):
         raise HTTPException(502, f"Agent-Fehler: {str(e)[:200]}")
 
 
+@app.post("/api/test-connection")
+async def test_connection(request: Request):
+    """
+    Testet eine Verbindung zu einem Dienst.
+    Body: {"type": "qdrant"|"ollama"|"http", "url": "..."}
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Ungültiges JSON")
+
+    url   = (body.get("url") or "").strip()
+    type_ = (body.get("type") or "http").strip()
+
+    if not url:
+        raise HTTPException(400, "url fehlt")
+
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            if type_ == "qdrant":
+                r = await client.get(f"{url}/collections")
+                colls = r.json().get("result", {}).get("collections", [])
+                return {"ok": True, "detail": f"{len(colls)} Collection(s)"}
+            elif type_ == "ollama":
+                r = await client.get(f"{url}/api/tags")
+                models = [m["name"] for m in r.json().get("models", [])]
+                return {"ok": True, "detail": f"{len(models)} Modell(e)"}
+            else:
+                r = await client.get(url)
+                return {"ok": r.status_code < 400, "detail": f"HTTP {r.status_code}"}
+    except httpx.ConnectError as e:
+        return {"ok": False, "detail": f"Verbindung abgelehnt: {str(e)[:100]}"}
+    except httpx.TimeoutException:
+        return {"ok": False, "detail": "Timeout (>5s)"}
+    except Exception as e:
+        return {"ok": False, "detail": str(e)[:200]}
+
+
 @app.get("/api/agent-health/{instance}")
 async def agent_health(instance: str):
     """Prüft ob ein Agent-Container erreichbar ist."""
