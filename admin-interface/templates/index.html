@@ -241,6 +241,18 @@
       {{ inst }}
     </button>
     {% endfor %}
+    <div style="display:flex;align-items:center;gap:6px;margin-left:8px;">
+      <label style="font-size:11px;color:var(--muted);">Letzte</label>
+      <select id="conv-limit" onchange="loadConversations(currentInstance)"
+        style="background:var(--surface);border:1px solid var(--border);color:var(--text);
+               padding:4px 8px;border-radius:6px;font-size:12px;cursor:pointer;">
+        <option value="10">10</option>
+        <option value="25">25</option>
+        <option value="50" selected>50</option>
+        <option value="100">100</option>
+        <option value="200">200</option>
+      </select>
+    </div>
     <div class="live-bar">
       <div class="live-dot offline" id="live-dot"></div>
       <span id="live-label">Live</span>
@@ -472,8 +484,9 @@ function selectInstance(inst) {
 
 // ── Konversationen laden ───────────────────────────────────────────────────
 async function loadConversations(inst) {
+  const limit = document.getElementById('conv-limit')?.value || 50;
   try {
-    const r = await fetch(`/api/conversations/${inst}?limit=50`);
+    const r = await fetch(`/api/conversations/${inst}?limit=${limit}`);
     const data = await r.json();
     renderConversations(data);
   } catch(e) {

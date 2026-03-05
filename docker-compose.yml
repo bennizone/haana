@@ -26,6 +26,7 @@ services:
     environment:
       HAANA_INSTANCE: alice
       HAANA_API_PORT: 8001
+      HAANA_LOG_DIR: /data/logs
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
     ports:
       - "8001:8001"
@@ -46,6 +47,7 @@ services:
     environment:
       HAANA_INSTANCE: bob
       HAANA_API_PORT: 8002
+      HAANA_LOG_DIR: /data/logs
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
     ports:
       - "8002:8002"
@@ -65,6 +67,7 @@ services:
     env_file: .env
     environment:
       HAANA_INSTANCE: ha-assist
+      HAANA_LOG_DIR: /data/logs
     volumes:
       - ./instanzen/ha-assist/CLAUDE.md:/app/CLAUDE.md:ro
       - ./skills:/app/skills:ro
@@ -80,6 +83,7 @@ services:
     env_file: .env
     environment:
       HAANA_INSTANCE: ha-advanced
+      HAANA_LOG_DIR: /data/logs
     volumes:
       - ./instanzen/ha-advanced/CLAUDE.md:/app/CLAUDE.md:ro
       - ./skills:/app/skills:ro
