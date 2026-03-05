@@ -35,6 +35,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+import core.logger as haana_log
+
 logger = logging.getLogger(__name__)
 
 VALID_SCOPES = {"alice_memory", "bob_memory", "bnd_memory"}
@@ -366,11 +368,25 @@ class HaanaMemory:
                 )
 
         if not all_results:
+            haana_log.log_memory_op(
+                instance=self.instance, op="read",
+                scope=",".join(scopes), query=query[:200],
+                results_count=0,
+            )
             return ""
 
         all_results.sort(reverse=True)
-        lines = [f"[{scope}] {content}" for _, scope, content in all_results[:10]]
-        return "\n".join(lines)
+        top = all_results[:10]
+        lines = [f"[{scope}] {content}" for _, scope, content in top]
+        result_str = "\n".join(lines)
+
+        haana_log.log_memory_op(
+            instance=self.instance, op="read",
+            scope=",".join(scopes), query=query[:200],
+            results_count=len(top),
+            content_preview=result_str,
+        )
+        return result_str
 
     # ── Schreiben (synchron, für Thread-Executor) ──────────────────────────────
 
@@ -401,6 +417,7 @@ class HaanaMemory:
 
         try:
             user_id = scope.replace("_memory", "")
+            content_preview = " | ".join(m.get("content", "")[:100] for m in messages)
             result = mem.add(
                 messages=messages,
                 user_id=user_id,
@@ -411,11 +428,21 @@ class HaanaMemory:
                 f"[{self.instance}] Memory gespeichert | "
                 f"scope={scope} | user_id={user_id} | result={result}"
             )
+            haana_log.log_memory_op(
+                instance=self.instance, op="write",
+                scope=scope,
+                content_preview=content_preview,
+                success=True,
+            )
             return True
         except Exception as e:
             logger.error(
                 f"[{self.instance}] Memory-Write in '{scope}' fehlgeschlagen: {e}",
                 exc_info=True,
+            )
+            haana_log.log_memory_op(
+                instance=self.instance, op="write",
+                scope=scope, success=False, error=str(e),
             )
             return False
 

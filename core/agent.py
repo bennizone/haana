@@ -32,6 +32,7 @@ from claude_agent_sdk import (
     CLIJSONDecodeError,
 )
 from core.memory import HaanaMemory
+import core.logger as haana_log
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +171,7 @@ class HaanaAgent:
 
     # ── Haupt-Loop ────────────────────────────────────────────────────────────
 
-    async def run_async(self, user_message: str) -> str:
+    async def run_async(self, user_message: str, channel: str = "repl") -> str:
         """
         Führt einen Agent-Turn aus.
 
@@ -180,6 +181,7 @@ class HaanaAgent:
         4. Text aus AssistantMessage-Blöcken sammeln
         5. Session-ID für Kontinuität merken
         6. Konversation non-blocking ins Sliding Window schreiben
+        7. Vollständige Konversation + Tool-Calls ins Log schreiben
         """
         # Memory: relevanten Kontext laden (in Executor – blockiert Event-Loop nicht)
         loop = asyncio.get_running_loop()
@@ -205,6 +207,7 @@ class HaanaAgent:
 
         # Prompt senden und Antwort empfangen
         response_parts: list[str] = []
+        tool_calls_log: list[dict] = []
         t_start = time.monotonic()
 
         try:
@@ -219,12 +222,19 @@ class HaanaAgent:
                                 f"[{self.instance}] TextBlock: {block.text[:80]}..."
                             )
                         elif isinstance(block, ToolUseBlock):
-                            # Sichtbar loggen: wenn Claude Tools nutzt, ist das
-                            # oft ein Hinweis auf falsches Verhalten (z.B. Memory
-                            # via Bash statt via HAANA-Infrastruktur schreiben)
+                            t_tool = time.monotonic()
                             logger.info(
                                 f"[{self.instance}] Tool-Aufruf: {block.name} "
                                 f"| input={str(block.input)[:120]}"
+                            )
+                            tool_calls_log.append({
+                                "tool": block.name,
+                                "input": str(block.input)[:300],
+                            })
+                            haana_log.log_tool_call(
+                                instance=self.instance,
+                                tool_name=block.name,
+                                tool_input=block.input,
                             )
                 elif isinstance(message, ResultMessage):
                     if message.session_id:
@@ -259,6 +269,17 @@ class HaanaAgent:
         # Memory: Konversation async im Hintergrund speichern (non-blocking)
         if response_text:
             await self.memory.add_conversation_async(user_message, response_text)
+
+        # Strukturiertes Log schreiben
+        haana_log.log_conversation(
+            instance=self.instance,
+            channel=channel,
+            user_message=user_message,
+            assistant_response=response_text,
+            latency_s=elapsed,
+            memory_used=bool(memory_context),
+            tool_calls=tool_calls_log,
+        )
 
         return response_text or "[Keine Antwort]"
 
