@@ -231,24 +231,29 @@ async function ttsViaHA(text) {
     return null;
   }
 
-  const { ha_url, ha_token, tts_entity, tts_language } = _ttsConfig;
+  const { ha_url, ha_token, tts_entity, tts_language, tts_voice } = _ttsConfig;
   const lang = tts_language || "de-DE";
 
-  log.info({ entity: tts_entity, lang, chars: text.length }, "TTS-Anfrage an Home Assistant");
+  log.info({ entity: tts_entity, lang, voice: tts_voice || "(default)", chars: text.length }, "TTS-Anfrage an Home Assistant");
 
   // Schritt 1: Audio-URL via tts_get_url generieren
+  const body = {
+    engine_id: tts_entity,
+    platform: tts_entity.replace("tts.", ""),
+    message: text,
+    language: lang,
+  };
+  if (tts_voice) {
+    body.options = { voice: tts_voice };
+  }
+
   const urlRes = await fetch(`${ha_url}/api/tts_get_url`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${ha_token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      engine_id: tts_entity,
-      platform: tts_entity.replace("tts.", ""),
-      message: text,
-      language: lang,
-    }),
+    body: JSON.stringify(body),
     timeout: 30_000,
   });
 

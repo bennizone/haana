@@ -591,11 +591,13 @@
               <option value="pt-BR">Português (pt-BR)</option>
             </select>
           </div>
-          <div class="form-group" style="display:flex;align-items:flex-end;">
-            <div style="font-size:11px;color:var(--muted);padding-bottom:8px;">
-              Sprache gilt für STT und TTS. WhatsApp-Sprachnachrichten werden per STT transkribiert,
-              Agent-Antworten optional per TTS als Sprachnachricht zurückgeschickt.
-            </div>
+          <div class="form-group">
+            <label>TTS Stimme <span style="font-size:11px;color:var(--muted);">(optional)</span></label>
+            <input type="text" id="svc-tts-voice" placeholder="z.B. DeAmala, DeKatja, DeConrad">
+            <span style="font-size:11px;color:var(--muted);">
+              Nabu Casa Stimmen findest du in der HA App unter Einstellungen → Sprachassistenten → TTS.
+              Leer = Standardstimme.
+            </span>
           </div>
         </div>
       </div>
@@ -1245,6 +1247,8 @@ function renderConfig(c) {
     ttsEl.value = sv.tts_entity;
   }
   if (sv.stt_language && langEl) langEl.value = sv.stt_language;
+  const voiceEl = document.getElementById('svc-tts-voice');
+  if (voiceEl && sv.tts_voice) voiceEl.value = sv.tts_voice;
   // Entities automatisch laden wenn HA konfiguriert ist
   if (sv.ha_url && sv.ha_token) loadSttTtsEntities();
 
@@ -1312,6 +1316,7 @@ async function saveConfig() {
       stt_entity:      document.getElementById('svc-stt-entity')?.value || '',
       tts_entity:      document.getElementById('svc-tts-entity')?.value || '',
       stt_language:    document.getElementById('svc-stt-language')?.value || 'de-DE',
+      tts_voice:       document.getElementById('svc-tts-voice')?.value || '',
       ollama_url:      document.getElementById('svc-ollama-url').value,
       qdrant_url:      document.getElementById('svc-qdrant-url').value,
     },
