@@ -185,7 +185,8 @@ DEFAULT_CONFIG = {
         "ha_url":        os.environ.get("HA_URL", ""),
         "ha_token":      "",
         "ha_mcp_enabled": False,
-        "ha_mcp_url":    "",   # leer = {ha_url}/mcp_server/sse
+        "ha_mcp_type":   "extended",  # "builtin" = HA built-in (SSE), "extended" = ha-mcp add-on (HTTP)
+        "ha_mcp_url":    "",   # leer = auto-detect je nach Typ
         "ha_mcp_token":  "",   # leer = ha_token verwenden
         "ollama_url":    os.environ.get("OLLAMA_URL", "http://10.83.1.110:11434"),
         "qdrant_url":    os.environ.get("QDRANT_URL", "http://qdrant:6333"),
@@ -1313,14 +1314,18 @@ def _start_agent_container(user: dict, cfg: dict) -> dict:
     # HA MCP-Server URL (optional)
     services = cfg.get("services", {})
     if services.get("ha_mcp_enabled"):
+        ha_mcp_type = services.get("ha_mcp_type", "extended")
         ha_mcp_url = services.get("ha_mcp_url", "").strip()
         if not ha_mcp_url:
-            # Default: {ha_url}/mcp_server/sse
+            # Auto-detect URL based on type
             ha_url = services.get("ha_url", "").rstrip("/")
             if ha_url:
-                ha_mcp_url = f"{ha_url}/mcp_server/sse"
+                if ha_mcp_type == "builtin":
+                    ha_mcp_url = f"{ha_url}/mcp_server/sse"
+                # extended: no auto-URL, must be configured manually
         if ha_mcp_url:
             env["HA_MCP_URL"] = ha_mcp_url
+            env["HA_MCP_TYPE"] = ha_mcp_type  # agent needs this for SSE vs HTTP
 
     # Anthropic API-Key oder Custom URL
     if pslot.get("key"):

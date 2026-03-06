@@ -694,11 +694,18 @@ Schritt 7: Privacy
 
 **Admin-Interface (`admin-interface/`):**
 - FastAPI + Jinja2 + Vanilla JS, Port 8080
-- Tabs: Chat, Logs, Config (Sub-Tabs: LLMs / Memory / Dienste / Logs / CLAUDE.md), Status, Users
+- Tabs: Chat, Logs (inkl. Log-Dateien), Config (Sub-Tabs: LLMs / Memory / Services / Retention / CLAUDE.md), Users, Status
 - Config → LLMs: 4 Provider-Slots als Akkordeon, LLM-Zuordnung per User (nicht global)
-- Config → Dienste: HA REST API + Test-Button, HA MCP-Konfiguration + Test
+- Config → Services: HA REST API + Test-Button, HA MCP-Konfiguration + Test, WhatsApp Bridge, STT/TTS, Infrastruktur
+- Config → Retention: Log-Aufbewahrungsfristen konfigurierbar
 - Users-Tab: Expandierbare Karten, CLAUDE.md Inline-Editor pro User, Dropdown HA Person-Entity
 - Chat-Tab: kanalübergreifend, SSE Live-Updates, Agent-Online/Offline-Status
+- i18n: Key-basiertes Übersetzungssystem (de.json + en.json, ~220 Keys), `t()` Funktion, `data-i18n` Attribute, Sprachauswahl im Header
+- Design: Modernisiert mit Glassmorphism, Gradient-Buttons, CSS Custom Properties, Dark Theme
+- Responsive: Mobile-first CSS, Breakpoints bei 640px und 1024px
+- Modular: CSS extrahiert (admin.css), JS-Utilities extrahiert (i18n.js, utils.js, modal.js)
+- Modal-System: Callback-basiert, ersetzt alle `confirm()`-Dialoge
+- Restart-Detection: Erkennt welche Config-Änderungen Container-Neustarts erfordern, bietet Restart an
 
 **Docker Compose:**
 - `qdrant`, `admin-interface` immer aktiv
@@ -736,12 +743,16 @@ Schritt 7: Privacy
 - STT-Konfiguration (Entity, Sprache) dynamisch via `/api/whatsapp-config` aus Admin-Interface
 - Memory Scope-Klassifikation: LLM-basiert (Ollama) für automatische personal/household Zuordnung
 - Custom Mem0 Extraction Prompt: berücksichtigt beide Gesprächsseiten (User + Assistant)
+- TTS: Antwort → `POST /api/tts_proxy` an HA → OGG Opus Audio → WhatsApp, Voice-Auswahl im Admin-Interface, sprachoptimierter Prompt
+- TTS auch als Text: Antwort wahlweise zusätzlich als Textnachricht (neben Sprachnachricht)
+- Admin-Interface modernisiert: CSS/JS extrahiert, i18n-System, Modal-System, Responsive Design, Design-Modernisierung, Restart-Detection
 
 **Noch offen:**
-- TTS: Antwort → `POST /api/tts_proxy` an HA → Audio → WhatsApp (konfigurierbar)
+- Admin-Interface: JS-Code (~1700 Zeilen) noch inline in index.html → in separate Module extrahieren
+- Admin-Interface: Restliche hardcoded deutsche Strings in dynamischem JS durch `t()`-Aufrufe ersetzen
 - Backup auf TrueNAS: SMB/CIFS, täglich, Logs unbegrenzt / Qdrant 7 Tage
 
-**Ergebnis:** Alice chattet per WhatsApp (Text + Sprache). Agent kennt ihn bereits (Phase 1 Memory). STT via Nabu Casa. Admin-Interface unter `http://10.83.1.11:8080` zugänglich.
+**Ergebnis:** Alice chattet per WhatsApp (Text + Sprache, bidirektional). Agent kennt ihn bereits (Phase 1 Memory). STT + TTS via Nabu Casa. Admin-Interface unter `http://10.83.1.11:8080` zugänglich, responsiv, mehrsprachig vorbereitet.
 
 ---
 
