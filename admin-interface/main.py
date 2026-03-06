@@ -1221,7 +1221,7 @@ def _start_agent_container(user: dict, cfg: dict) -> dict:
         "HAANA_WRITE_SCOPES":     write_scopes,
         "HAANA_READ_SCOPES":      read_scopes,
         "HAANA_MODEL":            pslot.get("model", "claude-sonnet-4-6"),
-        "HAANA_EXTRACT_MODEL":    eslot.get("model", ""),
+        "HAANA_MEMORY_MODEL":     eslot.get("model", "ministral-3-32k:3b"),
         "QDRANT_URL":             cfg.get("services", {}).get("qdrant_url", "http://qdrant:6333"),
         "OLLAMA_URL":             cfg.get("services", {}).get("ollama_url", ""),
         "HA_URL":                 cfg.get("services", {}).get("ha_url", ""),

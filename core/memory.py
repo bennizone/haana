@@ -67,6 +67,39 @@ def _get_qdrant_host_port() -> tuple[str, int]:
     return host, port
 
 
+CUSTOM_FACT_EXTRACTION_PROMPT = """\
+Du bist ein Fakten-Extraktor für ein Haushalts-Assistenzsystem.
+Extrahiere alle relevanten Fakten aus dem Gespräch zwischen User und Assistant.
+
+WICHTIG: Berücksichtige BEIDE Seiten – sowohl User-Nachrichten als auch Assistant-Antworten.
+Der Assistant fasst oft Informationen zusammen oder bestätigt Fakten – diese sind genauso relevant.
+
+Arten von Fakten die du extrahieren sollst:
+1. Persönliche Daten: Namen, Geburtstage, Wohnort, Beruf
+2. Vorlieben und Gewohnheiten: Essen, Trinken, Hobbys, Routinen
+3. Haushalt: Mitbewohner, Haustiere, Geräte, Wohnung
+4. Pläne und Termine: Urlaub, Verabredungen, Vorhaben
+5. Korrekturen: Wenn etwas als falsch markiert wird, extrahiere die RICHTIGE Information
+
+Beispiele:
+
+User: was weißt du über mich?
+Assistant: Du bist Alice, geboren am 1. Juli 1983. Du trinkst morgens gerne Kaffee.
+Output: {"facts": ["Name ist Alice", "Geboren am 1. Juli 1983", "Trinkt morgens gerne Kaffee"]}
+
+User: das stimmt nicht, ich trinke keinen Kaffee
+Assistant: Entschuldigung, ich korrigiere das.
+Output: {"facts": ["Trinkt keinen Kaffee"]}
+
+User: Hallo
+Assistant: Hi! Wie kann ich helfen?
+Output: {"facts": []}
+
+Gib die Fakten als JSON zurück. Nur das JSON-Objekt mit dem Key "facts", nichts anderes.
+Erkenne die Sprache des Users und schreibe die Fakten in derselben Sprache.\
+"""
+
+
 def _build_mem0_config(collection_name: str) -> Optional[dict]:
     """
     Erstellt vollständige Mem0-Konfiguration für einen Scope.
@@ -83,11 +116,12 @@ def _build_mem0_config(collection_name: str) -> Optional[dict]:
         )
         return None
 
-    memory_llm    = os.environ.get("HAANA_MEMORY_MODEL",     "ministral-3-32k:3b")
+    memory_llm    = os.environ.get("HAANA_MEMORY_MODEL") or os.environ.get("HAANA_EXTRACT_MODEL") or "ministral-3-32k:3b"
     embed_model   = os.environ.get("HAANA_EMBEDDING_MODEL",  "bge-m3")
     embed_dims    = int(os.environ.get("HAANA_EMBEDDING_DIMS", "1024"))
 
     config = {
+        "custom_fact_extraction_prompt": CUSTOM_FACT_EXTRACTION_PROMPT,
         "llm": {
             "provider": "ollama",
             "config": {
@@ -338,11 +372,16 @@ class HaanaMemory:
     def _resolve_scope(self, assistant_response: str, scope: Optional[str]) -> str:
         """
         Bestimmt den Ziel-Scope für einen Memory-Write.
-        Liest Scope aus Agentenantwort oder fällt auf persönlichen Scope zurück.
+
+        1. Explizit übergeben → direkt verwenden
+        2. Scope-Name in Agentenantwort erkannt → verwenden
+        3. LLM-Klassifikation via Ollama → personal vs. household
+        4. Fallback → persönlicher Scope
         """
         if scope is not None:
             return scope
 
+        # Versuch 1: Scope aus Agentenantwort lesen
         match = re.search(
             r"\b(alice_memory|bob_memory|household_memory)\b",
             assistant_response,
@@ -350,12 +389,66 @@ class HaanaMemory:
         if match and match.group(1) in self.write_scopes:
             scope = match.group(1)
             logger.debug(f"[{self.instance}] Scope aus Agentenantwort: '{scope}'")
-        else:
-            personal = {s for s in self.write_scopes if s != "household_memory"}
-            scope = next(iter(personal), next(iter(self.write_scopes)))
-            logger.debug(f"[{self.instance}] Scope nicht erkannt, Fallback: '{scope}'")
+            return scope
 
+        # Versuch 2: LLM-Klassifikation (nur wenn household_memory schreibbar)
+        if "household_memory" in self.write_scopes:
+            classified = self._classify_scope_via_llm(assistant_response)
+            if classified:
+                logger.debug(f"[{self.instance}] Scope via LLM: '{classified}'")
+                return classified
+
+        # Fallback: persönlicher Scope
+        personal = {s for s in self.write_scopes if s != "household_memory"}
+        scope = next(iter(personal), next(iter(self.write_scopes)))
+        logger.debug(f"[{self.instance}] Scope Fallback: '{scope}'")
         return scope
+
+    def _classify_scope_via_llm(self, text: str) -> Optional[str]:
+        """
+        Fragt das Ollama-LLM ob die Information persönlich oder haushaltsbezogen ist.
+        Gibt den passenden Scope zurück oder None bei Fehler.
+        """
+        ollama_url = os.environ.get("OLLAMA_URL", "").strip()
+        if not ollama_url:
+            return None
+
+        model = os.environ.get("HAANA_MEMORY_MODEL") or os.environ.get("HAANA_EXTRACT_MODEL") or "ministral-3-32k:3b"
+        personal_scope = next(
+            (s for s in self.write_scopes if s != "household_memory"),
+            None,
+        )
+        if not personal_scope:
+            return None
+
+        prompt = (
+            "Klassifiziere die folgende Information in genau eine Kategorie:\n"
+            f"- PERSONAL: betrifft nur eine einzelne Person ({self.instance}), "
+            "z.B. Geburtstag, Beruf, Vorlieben, persönliche Termine, Urlaub\n"
+            "- HOUSEHOLD: betrifft den gemeinsamen Haushalt, z.B. Haustiere, "
+            "Wohnung, gemeinsame Geräte, Familienmitglieder, Mitbewohner\n\n"
+            f"Text:\n{text[:500]}\n\n"
+            "Antworte mit genau einem Wort: PERSONAL oder HOUSEHOLD"
+        )
+
+        try:
+            import requests
+            r = requests.post(
+                f"{ollama_url}/api/generate",
+                json={"model": model, "prompt": prompt, "stream": False},
+                timeout=15,
+            )
+            if r.status_code != 200:
+                return None
+            answer = r.json().get("response", "").strip().upper()
+            if "HOUSEHOLD" in answer:
+                return "household_memory"
+            if "PERSONAL" in answer:
+                return personal_scope
+        except Exception as e:
+            logger.warning(f"[{self.instance}] Scope-Klassifikation fehlgeschlagen: {e}")
+
+        return None
 
     # ── Lesen ─────────────────────────────────────────────────────────────────
 

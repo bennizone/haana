@@ -73,14 +73,11 @@ def create_api(agent) -> FastAPI:
         if not user_msg and not asst_msg:
             raise HTTPException(400, "user oder assistant fehlt")
 
-        # Scope bestimmen: explizit > persönlicher Scope > erster Write-Scope
+        # Scope bestimmen: explizit > aus Agentenantwort > persönlicher Fallback
         if scope_req and scope_req in agent.memory.write_scopes:
             scope = scope_req
         else:
-            personal = [s for s in agent.memory.write_scopes if s != "household_memory"]
-            scope = personal[0] if personal else (
-                next(iter(agent.memory.write_scopes), None)
-            )
+            scope = agent.memory._resolve_scope(asst_msg, None)
 
         if scope is None:
             return {"ok": False, "error": "Keine Write-Scopes für diese Instanz"}
