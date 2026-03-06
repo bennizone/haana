@@ -116,7 +116,7 @@ def _build_mem0_config(collection_name: str) -> Optional[dict]:
         )
         return None
 
-    memory_llm    = os.environ.get("HAANA_MEMORY_MODEL") or os.environ.get("HAANA_EXTRACT_MODEL") or "ministral-3-32k:3b"
+    memory_llm    = os.environ.get("HAANA_MEMORY_MODEL", "ministral-3-32k:3b")
     embed_model   = os.environ.get("HAANA_EMBEDDING_MODEL",  "bge-m3")
     embed_dims    = int(os.environ.get("HAANA_EMBEDDING_DIMS", "1024"))
 
@@ -163,10 +163,11 @@ def _build_mem0_config(collection_name: str) -> Optional[dict]:
 class _WindowEntry:
     user: str
     assistant: str
-    scope: str
+    scope: Optional[str]
     # Wall-clock (time.time()) für Persistenz über Neustarts hinweg
     timestamp: float = field(default_factory=time.time)
     extracting: bool = False  # True = Hintergrund-Task läuft gerade
+    classify_retries: int = 0  # Fehlversuche bei Scope-Klassifikation
 
 
 class ConversationWindow:
@@ -256,10 +257,11 @@ class ConversationWindow:
                 {
                     "user": e.user,
                     "assistant": e.assistant,
-                    "scope": e.scope,
+                    "scope": e.scope,  # None wenn noch nicht klassifiziert
                     "timestamp": e.timestamp,
                     # War der Task aktiv als gespeichert wurde? → pending auf nächsten Start
                     "pending_extraction": e.extracting,
+                    "classify_retries": e.classify_retries,
                 }
                 for e in self._entries
             ],
@@ -279,9 +281,10 @@ class ConversationWindow:
             entry = _WindowEntry(
                 user=item["user"],
                 assistant=item["assistant"],
-                scope=item["scope"],
+                scope=item.get("scope"),  # None wenn noch nicht klassifiziert
                 timestamp=item["timestamp"],
                 extracting=False,
+                classify_retries=item.get("classify_retries", 0),
             )
             self._entries.append(entry)
             if item.get("pending_extraction", False):
@@ -369,14 +372,14 @@ class HaanaMemory:
 
         return self._memories[scope]
 
-    def _resolve_scope(self, assistant_response: str, scope: Optional[str]) -> str:
+    def _resolve_scope(self, assistant_response: str, scope: Optional[str]) -> Optional[str]:
         """
         Bestimmt den Ziel-Scope für einen Memory-Write.
 
         1. Explizit übergeben → direkt verwenden
         2. Scope-Name in Agentenantwort erkannt → verwenden
         3. LLM-Klassifikation via Ollama → personal vs. household
-        4. Fallback → persönlicher Scope
+        4. None → Klassifikation fehlgeschlagen, Eintrag bleibt im Window
         """
         if scope is not None:
             return scope
@@ -398,11 +401,15 @@ class HaanaMemory:
                 logger.debug(f"[{self.instance}] Scope via LLM: '{classified}'")
                 return classified
 
-        # Fallback: persönlicher Scope
-        personal = {s for s in self.write_scopes if s != "household_memory"}
-        scope = next(iter(personal), next(iter(self.write_scopes)))
-        logger.debug(f"[{self.instance}] Scope Fallback: '{scope}'")
-        return scope
+        # Nur ein Write-Scope → eindeutig, kein LLM nötig
+        if len(self.write_scopes) == 1:
+            scope = next(iter(self.write_scopes))
+            logger.debug(f"[{self.instance}] Scope eindeutig (einziger Write-Scope): '{scope}'")
+            return scope
+
+        # Keine Klassifikation möglich → None (Eintrag bleibt im Window)
+        logger.debug(f"[{self.instance}] Scope-Klassifikation nicht möglich, bleibt pending")
+        return None
 
     def _classify_scope_via_llm(self, text: str) -> Optional[str]:
         """
@@ -413,7 +420,7 @@ class HaanaMemory:
         if not ollama_url:
             return None
 
-        model = os.environ.get("HAANA_MEMORY_MODEL") or os.environ.get("HAANA_EXTRACT_MODEL") or "ministral-3-32k:3b"
+        model = os.environ.get("HAANA_MEMORY_MODEL", "ministral-3-32k:3b")
         personal_scope = next(
             (s for s in self.write_scopes if s != "household_memory"),
             None,
@@ -439,12 +446,18 @@ class HaanaMemory:
                 timeout=15,
             )
             if r.status_code != 200:
+                logger.warning(
+                    f"[{self.instance}] Scope-Klassifikation: Ollama HTTP {r.status_code}"
+                )
                 return None
             answer = r.json().get("response", "").strip().upper()
             if "HOUSEHOLD" in answer:
                 return "household_memory"
             if "PERSONAL" in answer:
                 return personal_scope
+            logger.warning(
+                f"[{self.instance}] Scope-Klassifikation: unerwartete Antwort '{answer[:50]}'"
+            )
         except Exception as e:
             logger.warning(f"[{self.instance}] Scope-Klassifikation fehlgeschlagen: {e}")
 
@@ -573,12 +586,36 @@ class HaanaMemory:
         self._pending_tasks.add(task)
         task.add_done_callback(self._pending_tasks.discard)
 
+    _CLASSIFY_MAX_RETRIES = 5
+
     async def _extract_entry(self, entry: _WindowEntry):
         """
         Extrahiert einen Window-Eintrag async zu Qdrant.
         Läuft im Thread-Executor → blockiert den Event-Loop nicht.
         Bei Fehler: Eintrag bleibt im Window (kein Datenverlust).
+        Bei fehlendem Scope: Klassifikation nochmal versuchen, bei Dauerfehler Admins warnen.
         """
+        # Scope noch nicht klassifiziert → nochmal versuchen
+        if entry.scope is None:
+            entry.scope = self._resolve_scope(entry.assistant, None)
+            if entry.scope is None:
+                entry.classify_retries += 1
+                self._window.mark_failed(entry)
+                if entry.classify_retries >= self._CLASSIFY_MAX_RETRIES:
+                    logger.error(
+                        f"[{self.instance}] Scope-Klassifikation nach "
+                        f"{entry.classify_retries} Versuchen fehlgeschlagen. "
+                        f"Eintrag bleibt im Window. Bitte Ollama-Verbindung prüfen. "
+                        f"Text: {entry.user[:80]}..."
+                    )
+                else:
+                    logger.warning(
+                        f"[{self.instance}] Scope-Klassifikation Versuch "
+                        f"{entry.classify_retries}/{self._CLASSIFY_MAX_RETRIES} "
+                        f"fehlgeschlagen, Retry beim nächsten Overflow"
+                    )
+                return
+
         messages = [
             {"role": "user",      "content": entry.user},
             {"role": "assistant", "content": entry.assistant},

@@ -80,7 +80,7 @@ def create_api(agent) -> FastAPI:
             scope = agent.memory._resolve_scope(asst_msg, None)
 
         if scope is None:
-            return {"ok": False, "error": "Keine Write-Scopes für diese Instanz"}
+            return {"ok": False, "error": "Scope-Klassifikation fehlgeschlagen (Ollama erreichbar?)"}
 
         messages = [
             {"role": "user",      "content": user_msg},

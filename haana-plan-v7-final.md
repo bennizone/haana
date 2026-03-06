@@ -848,6 +848,7 @@ Schritt 7: Privacy
 - Wyoming Whisper + Piper einrichten als HA-Fallback STT/TTS
 
 **Infrastruktur:**
+- LLM-Fallback für Memory-Operationen: Scope-Klassifikation + Extraktion nutzen konfigurierte Provider-Slots (Primär → Fallback, z.B. Ollama → MiniMax). cascade.py aktivieren, analog zur geplanten Chat-Kaskade
 - Authentik oder Keycloak als einheitliches Auth-System für alle Self-Hosted-Dienste
 - Multi-User-Wissensbasis (Outline/AppFlowy) wenn Auth-System steht
 - MariaDB direkter HA-Zugriff (fragil wegen undokumentiertem Schema, vorerst Webhook-Weg)
