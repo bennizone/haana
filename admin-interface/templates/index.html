@@ -1160,17 +1160,13 @@ async function saveConfig() {
       // Neustart anbieten wenn restart-relevante Felder geändert wurden
       if (restartChanges.length > 0) {
         const changedList = restartChanges.join('\n  - ');
-        const doRestart = confirm(
-          `Folgende Änderungen erfordern einen Neustart der Agenten:\n\n  - ${changedList}\n\n` +
-          `Beim Neustart wird das aktuelle Sliding Window ins Memory extrahiert. ` +
-          `Der Konversationskontext geht dabei verloren.\n\n` +
-          `Agenten jetzt neu starten?`
-        );
-        if (doRestart) {
-          await restartAllAgents();
-        } else {
-          toast('Neustart ausstehend – Änderungen werden erst nach manuellem Neustart wirksam', 'warn');
-        }
+        Modal.show({
+          title: 'Neustart erforderlich',
+          body: `<p class="modal-message">${escHtml('Folgende Änderungen erfordern einen Neustart:\n\n- ' + changedList + '\n\nBeim Neustart wird das Sliding Window ins Memory extrahiert. Der Konversationskontext geht verloren.').replace(/\n/g, '<br>')}</p>`,
+          confirmText: 'Jetzt neu starten',
+          onConfirm: async () => { await restartAllAgents(); },
+          onCancel: () => { toast('Neustart ausstehend – Änderungen erst nach manuellem Neustart wirksam', 'warn'); },
+        });
       }
     } else {
       toast('Fehler beim Speichern', 'err');
@@ -1330,7 +1326,7 @@ async function loadStatus() {
 
     // Rebuild-Banner
     const banner = document.getElementById('rebuild-banner');
-    if (banner) banner.style.display = qdrant.rebuild_suggested ? 'flex' : 'none';
+    if (banner) banner.classList.toggle('active', !!qdrant.rebuild_suggested);
 
     const allOk = qdrant.ok;
     document.getElementById('header-dot').style.background = allOk ? 'var(--green)' : 'var(--red)';
@@ -1349,28 +1345,31 @@ async function instanceControl(inst, action) {
 }
 
 async function instanceForceStop(inst) {
-  if (!confirm(`${inst} sofort beenden (SIGKILL)?\n\nACHTUNG: Laufende Memory-Extraktion geht verloren – Konversations-Logs bleiben erhalten.`)) return;
-  const r = await fetch(`/api/instances/${inst}/force-stop`, { method: 'POST' });
-  const d = await r.json();
-  if (d.ok) { toast(`${inst} beendet ✓`, 'ok'); loadStatus(); }
-  else       { toast(`Kill fehlgeschlagen: ${(d.error||'?').substring(0,60)}`, 'err'); }
+  Modal.showDangerConfirm(`${inst} sofort beenden (SIGKILL)?\n\nACHTUNG: Laufende Memory-Extraktion geht verloren – Konversations-Logs bleiben erhalten.`, async () => {
+    const r = await fetch(`/api/instances/${inst}/force-stop`, { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) { toast(`${inst} beendet ✓`, 'ok'); loadStatus(); }
+    else       { toast(`Kill fehlgeschlagen: ${(d.error||'?').substring(0,60)}`, 'err'); }
+  });
 }
 
 async function qdrantRestart() {
-  if (!confirm('Qdrant neu starten? Laufende Vorgänge werden unterbrochen.')) return;
-  const r = await fetch('/api/qdrant/restart', { method: 'POST' });
-  const d = await r.json();
-  if (d.ok) { toast('Qdrant wird neu gestartet ✓', 'ok'); setTimeout(loadStatus, 3000); }
-  else       { toast(`Qdrant Restart fehlgeschlagen: ${(d.error||'?').substring(0,60)}`, 'err'); }
+  Modal.showConfirm('Qdrant neu starten? Laufende Vorgänge werden unterbrochen.', async () => {
+    const r = await fetch('/api/qdrant/restart', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) { toast('Qdrant wird neu gestartet ✓', 'ok'); setTimeout(loadStatus, 3000); }
+    else       { toast(`Qdrant Restart fehlgeschlagen: ${(d.error||'?').substring(0,60)}`, 'err'); }
+  });
 }
 
 async function deleteQdrantCollection(name) {
-  if (!confirm(`Collection "${name}" endgültig löschen?\n\nDanach Memory-Rebuild für betroffene Instanzen erforderlich.`)) return;
-  const r = await fetch(`/api/qdrant/collections/${encodeURIComponent(name)}`, { method: 'DELETE' });
-  const d = await r.json();
-  toast(d.result === true ? `"${name}" gelöscht ✓` : `Fehler: ${JSON.stringify(d).substring(0,60)}`, d.result === true ? 'ok' : 'err');
-  loadStatus();
-  loadMemoryStats();
+  Modal.showDangerConfirm(`Collection "${name}" endgültig löschen?\n\nDanach Memory-Rebuild für betroffene Instanzen erforderlich.`, async () => {
+    const r = await fetch(`/api/qdrant/collections/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    const d = await r.json();
+    toast(d.result === true ? `"${name}" gelöscht ✓` : `Fehler: ${JSON.stringify(d).substring(0,60)}`, d.result === true ? 'ok' : 'err');
+    loadStatus();
+    loadMemoryStats();
+  });
 }
 
 // ── Chat-Eingabe ───────────────────────────────────────────────────────────
@@ -1491,21 +1490,6 @@ async function checkAgentHealth(inst) {
   }
 }
 
-// ── Utilities ─────────────────────────────────────────────────────────────
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-function escAttr(s) { return escHtml(s); }
-
-let toastTimer = null;
-function toast(msg, type = 'ok') {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.className = 'show ' + type;
-  if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.className = ''; }, 3500);
-}
-
 // ── Memory Rebuild ─────────────────────────────────────────────────────────
 let _rebuildSSE = null;
 let _memStats   = [];
@@ -1562,38 +1546,38 @@ async function startRebuild() {
     return sum + (m?.log_entries || 0);
   }, 0);
 
-  if (!confirm(`Memory für ${selected.length} Instanz(en) neu aufbauen?\n${selected.join(', ')}\n\n${totalEntries} Einträge total – kann Minuten bis Stunden dauern.`)) return;
+  Modal.showConfirm(`Memory für ${selected.length} Instanz(en) neu aufbauen?\n${selected.join(', ')}\n\n${totalEntries} Einträge total – kann Minuten bis Stunden dauern.`, async () => {
+    const btn    = document.getElementById('rebuild-btn');
+    const cancel = document.getElementById('rebuild-cancel-btn');
+    const overall = document.getElementById('rebuild-overall-status');
+    btn.disabled = true;
+    cancel.style.display = '';
+    document.getElementById('rebuild-progress-wrap').style.display = '';
+    overall.textContent = `0 / ${selected.length} Instanzen`;
 
-  const btn    = document.getElementById('rebuild-btn');
-  const cancel = document.getElementById('rebuild-cancel-btn');
-  const overall = document.getElementById('rebuild-overall-status');
-  btn.disabled = true;
-  cancel.style.display = '';
-  document.getElementById('rebuild-progress-wrap').style.display = '';
-  overall.textContent = `0 / ${selected.length} Instanzen`;
-
-  // Instanzen sequenziell abarbeiten
-  for (let i = 0; i < selected.length; i++) {
-    const inst = selected[i];
-    overall.textContent = `${i+1} / ${selected.length}: ${inst}`;
-    setRebuildProgress(0, 0, null, `Starte ${inst}…`);
-    try {
-      const r = await fetch(`/api/rebuild-memory/${inst}`, { method: 'POST' });
-      const d = await r.json();
-      if (!d.ok) {
-        toast(`${inst}: ${d.error}`, 'err');
-        continue;
+    // Instanzen sequenziell abarbeiten
+    for (let i = 0; i < selected.length; i++) {
+      const inst = selected[i];
+      overall.textContent = `${i+1} / ${selected.length}: ${inst}`;
+      setRebuildProgress(0, 0, null, `Starte ${inst}…`);
+      try {
+        const r = await fetch(`/api/rebuild-memory/${inst}`, { method: 'POST' });
+        const d = await r.json();
+        if (!d.ok) {
+          toast(`${inst}: ${d.error}`, 'err');
+          continue;
+        }
+        await new Promise(resolve => startRebuildSSE(inst, resolve));
+      } catch(e) {
+        toast(`${inst}: ${e.message}`, 'err');
       }
-      await new Promise(resolve => startRebuildSSE(inst, resolve));
-    } catch(e) {
-      toast(`${inst}: ${e.message}`, 'err');
     }
-  }
 
-  overall.textContent = `✓ Fertig (${selected.length} Instanzen)`;
-  btn.disabled = false;
-  cancel.style.display = 'none';
-  loadMemoryStats();
+    overall.textContent = `✓ Fertig (${selected.length} Instanzen)`;
+    btn.disabled = false;
+    cancel.style.display = 'none';
+    loadMemoryStats();
+  });
 }
 
 async function cancelRebuild() {
@@ -1662,7 +1646,7 @@ async function openLogEditor(inst, date) {
   const info  = document.getElementById('log-editor-info');
   title.textContent = `${inst} / ${date}.jsonl`;
   area.value = ''; info.textContent = 'Wird geladen…';
-  modal.style.display = 'flex';
+  modal.classList.add('active');
   try {
     const r = await fetch(`/api/conversations/${inst}/raw/${date}`);
     const d = await r.json();
@@ -1672,7 +1656,7 @@ async function openLogEditor(inst, date) {
 }
 
 function closeLogEditor() {
-  document.getElementById('log-editor-modal').style.display = 'none';
+  document.getElementById('log-editor-modal').classList.remove('active');
 }
 
 async function saveLogEditor() {
@@ -2207,13 +2191,14 @@ async function submitNewUser() {
 }
 
 async function deleteUser(userId) {
-  if (!confirm(`User "${userId}" wirklich löschen? Container wird gestoppt und entfernt.`)) return;
-  try {
-    const r = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
-    const d = await r.json();
-    if (d.ok) { toast('User gelöscht', 'ok'); loadUsers(); }
-    else       { toast(d.detail || 'Fehler beim Löschen', 'err'); }
-  } catch(e) { toast(e.message, 'err'); }
+  Modal.showDangerConfirm(`User "${userId}" wirklich löschen? Container wird gestoppt und entfernt.`, async () => {
+    try {
+      const r = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+      const d = await r.json();
+      if (d.ok) { toast('User gelöscht', 'ok'); loadUsers(); }
+      else       { toast(d.detail || 'Fehler beim Löschen', 'err'); }
+    } catch(e) { toast(e.message, 'err'); }
+  });
 }
 
 async function restartUserContainer(userId) {
@@ -2300,15 +2285,16 @@ function stopWaPolling() {
 }
 
 async function waLogout() {
-  if (!confirm('WhatsApp-Session wirklich trennen? Du musst danach den QR-Code erneut scannen.')) return;
-  const r = await fetch('/api/whatsapp-logout', { method: 'POST' });
-  const d = await r.json();
-  if (d.ok) {
-    toast('WhatsApp getrennt – QR-Code erscheint gleich', 'ok');
-    setTimeout(refreshWaStatus, 3000);
-  } else {
-    toast('Fehler: ' + (d.error || 'Unbekannt'), 'err');
-  }
+  Modal.showDangerConfirm('WhatsApp-Session wirklich trennen? Du musst danach den QR-Code erneut scannen.', async () => {
+    const r = await fetch('/api/whatsapp-logout', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      toast('WhatsApp getrennt – QR-Code erscheint gleich', 'ok');
+      setTimeout(refreshWaStatus, 3000);
+    } else {
+      toast('Fehler: ' + (d.error || 'Unbekannt'), 'err');
+    }
+  });
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
