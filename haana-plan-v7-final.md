@@ -203,11 +203,12 @@ bob_memory:   Bobs persönlicher Kalender
 
 ### Mem0 Inference-Strategie
 
-**`infer=True` mit ministral-3:8b (aktiv seit Phase 1):** Bereits vorgezogen – ministral-3:8b analysiert die Konversation und extrahiert strukturierte Fakten. Läuft async nach der Antwort an den User, blockiert nichts.
+**`infer=True` mit ministral-3-32k:3b + Custom Prompt (aktiv seit Phase 1):** ministral-3-32k:3b analysiert die Konversation und extrahiert strukturierte Fakten. Läuft async nach der Antwort an den User, blockiert nichts. Custom Extraction Prompt ersetzt Mem0-Default und berücksichtigt beide Gesprächsseiten (User + Assistant).
 
 ```
-mem.add(text, infer=True, llm=ministral-3:8b)
-    → Faktenextraktion → bge-m3 Embedding → Qdrant
+mem.add(text, infer=True, llm=ministral-3-32k:3b)
+    → Custom Prompt (User+Assistant) → Faktenextraktion → bge-m3 Embedding → Qdrant
+    → Scope-Klassifikation: LLM entscheidet personal vs. household
 ```
 
 ### Sliding Window + Async Extraktion
@@ -480,7 +481,7 @@ haana/
 
 | Dienst | Scope | Beispiel |
 |---|---|---|
-| CalDAV | Pro User + BnD | Familien-iCloud (bnd), Alices CalDAV, Bobs iCloud |
+| CalDAV | Pro User + Haushalt | Familien-iCloud (geteilt), Alices CalDAV, Bobs iCloud |
 | IMAP / SMTP | Pro User | Alices Mailbox |
 | WhatsApp-Nummer | Pro User | Alices +49..., Bobs +49... |
 | HA Person-Entity | Pro User | `person.alice`, `person.bob` |
@@ -674,7 +675,9 @@ Schritt 7: Privacy
 - `flush_all()` beim Shutdown: alle Window-Einträge zu Qdrant extrahieren (kein Datenverlust)
 - Context-File (`data/context/alice.json`): Window-State überlebt Container-Restarts
 - Pending-Extraktion beim Startup: unfertige Einträge aus letzter Session werden nachgeholt
-- Scope-Erkennung via Regex aus Agent-Antwort
+- Scope-Erkennung: 1) Regex aus Agent-Antwort → 2) LLM-Klassifikation via Ollama (personal vs. household) → 3) Fallback persönlicher Scope
+- Custom Fact Extraction Prompt für Mem0: berücksichtigt User- UND Assistant-Nachrichten (Mem0 Default ignoriert Assistant)
+- Memory Rebuild aus Konversations-Logs im Admin-Interface (mit Scope-Klassifikation pro Eintrag)
 
 **Agent HTTP-API (`core/api.py`):**
 - FastAPI pro Agent-Instanz
@@ -729,13 +732,16 @@ Schritt 7: Privacy
 - WhatsApp-Bridge: QR-Code Linking/Unlinking im Admin-Interface
 - WhatsApp-Bridge: Inbetriebnahme, Alice chattet per WhatsApp mit Agent
 - LID→Phone-Auflösung (NanoClaw-Strategie), Dual-Routing (Phone-JID + LID)
+- STT: WhatsApp Sprachnachrichten (.ogg) → Baileys `downloadMediaMessage` → `POST /api/stt/stt.home_assistant_cloud` an HA (Nabu Casa) → Transkription → `[Sprachnachricht: ...]` an Agent
+- STT-Konfiguration (Entity, Sprache) dynamisch via `/api/whatsapp-config` aus Admin-Interface
+- Memory Scope-Klassifikation: LLM-basiert (Ollama) für automatische personal/household Zuordnung
+- Custom Mem0 Extraction Prompt: berücksichtigt beide Gesprächsseiten (User + Assistant)
 
 **Noch offen:**
-- STT: WhatsApp Sprachnachricht (.ogg) → `POST /api/stt` an HA → Transkription
 - TTS: Antwort → `POST /api/tts_proxy` an HA → Audio → WhatsApp (konfigurierbar)
 - Backup auf TrueNAS: SMB/CIFS, täglich, Logs unbegrenzt / Qdrant 7 Tage
 
-**Ergebnis:** Alice chattet per WhatsApp. Agent kennt ihn bereits (Phase 1 Memory). Admin-Interface unter `http://10.83.1.11:8080` zugänglich.
+**Ergebnis:** Alice chattet per WhatsApp (Text + Sprache). Agent kennt ihn bereits (Phase 1 Memory). STT via Nabu Casa. Admin-Interface unter `http://10.83.1.11:8080` zugänglich.
 
 ---
 
@@ -744,7 +750,7 @@ Schritt 7: Privacy
 **Ziel:** Kalender integriert. Bob bekommt Zugang mit echtem Mehrwert gegenüber ChatGPT.
 
 **Aufgaben:**
-- CalDAV-Skill: Familien-Kalender (bnd), Alices Kalender, Bobs Kalender
+- CalDAV-Skill: Familien-Kalender (geteilt), Alices Kalender, Bobs Kalender
 - Termine lesen, eintragen, Kalender-Übersicht
 - Daily Brief Skill: morgens automatisch, Termine des Tages + Wetter
 - Bob-Instanz freischalten: WhatsApp + HA App

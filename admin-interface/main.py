@@ -652,7 +652,7 @@ async def restart_qdrant():
 
 @app.delete("/api/qdrant/collections/{name}")
 async def delete_qdrant_collection(name: str):
-    """Löscht eine Qdrant-Collection (z.B. alte bnd_memory nach Rename)."""
+    """Löscht eine Qdrant-Collection."""
     import httpx
     cfg = load_config()
     qdrant_url = cfg.get("services", {}).get("qdrant_url", "http://qdrant:6333")
