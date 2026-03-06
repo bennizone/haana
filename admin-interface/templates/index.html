@@ -19,11 +19,11 @@
 </header>
 
 <div class="tabs">
-  <button class="tab-btn active" onclick="showTab('chat')" data-i18n="tabs.chat">Chat</button>
-  <button class="tab-btn" onclick="showTab('logs')" data-i18n="tabs.logs">Logs</button>
-  <button class="tab-btn" onclick="showTab('config')" data-i18n="tabs.config">Config</button>
-  <button class="tab-btn" onclick="showTab('users')" data-i18n="tabs.users">Users</button>
-  <button class="tab-btn" onclick="showTab('status')" data-i18n="tabs.status">Status</button>
+  <button class="tab-btn active" onclick="showTab('chat', event)" data-i18n="tabs.chat">Chat</button>
+  <button class="tab-btn" onclick="showTab('logs', event)" data-i18n="tabs.logs">Logs</button>
+  <button class="tab-btn" onclick="showTab('config', event)" data-i18n="tabs.config">Config</button>
+  <button class="tab-btn" onclick="showTab('users', event)" data-i18n="tabs.users">Users</button>
+  <button class="tab-btn" onclick="showTab('status', event)" data-i18n="tabs.status">Status</button>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════ CHAT -->
@@ -128,11 +128,13 @@
 
   <!-- Config Sub-Tabs -->
   <div class="cfg-tabs">
-    <button class="cfg-tab-btn active" onclick="showCfgTab('llms')"     id="cfgtab-llms" data-i18n="config.sub_tabs.llms">LLMs</button>
-    <button class="cfg-tab-btn"        onclick="showCfgTab('memory')"   id="cfgtab-memory" data-i18n="config.sub_tabs.memory">Memory</button>
-    <button class="cfg-tab-btn"        onclick="showCfgTab('dienste')"  id="cfgtab-dienste" data-i18n="config.sub_tabs.services">Dienste</button>
-    <button class="cfg-tab-btn"        onclick="showCfgTab('logs')"     id="cfgtab-logs" data-i18n="config.sub_tabs.retention">Retention</button>
-    <button class="cfg-tab-btn"        onclick="showCfgTab('claudemd')" id="cfgtab-claudemd" data-i18n="config.sub_tabs.claude_md">CLAUDE.md</button>
+    <button class="cfg-tab-btn active" onclick="showCfgTab('llms')"       id="cfgtab-llms" data-i18n="config.sub_tabs.llms">LLMs</button>
+    <button class="cfg-tab-btn"        onclick="showCfgTab('memory')"     id="cfgtab-memory" data-i18n="config.sub_tabs.memory">Memory</button>
+    <button class="cfg-tab-btn"        onclick="showCfgTab('ha')"         id="cfgtab-ha" data-i18n="config.sub_tabs.home_assistant">Home Assistant</button>
+    <button class="cfg-tab-btn"        onclick="showCfgTab('whatsapp')"   id="cfgtab-whatsapp" data-i18n="config.sub_tabs.whatsapp">WhatsApp</button>
+    <button class="cfg-tab-btn"        onclick="showCfgTab('infra')"      id="cfgtab-infra" data-i18n="config.sub_tabs.infra">Infra</button>
+    <button class="cfg-tab-btn"        onclick="showCfgTab('logs')"       id="cfgtab-logs" data-i18n="config.sub_tabs.retention">Retention</button>
+    <button class="cfg-tab-btn"        onclick="showCfgTab('claudemd')"   id="cfgtab-claudemd" data-i18n="config.sub_tabs.claude_md">CLAUDE.md</button>
   </div>
 
   <!-- ── Sub-Tab: LLMs ── -->
@@ -256,8 +258,8 @@
 
   </div>
 
-  <!-- ── Sub-Tab: Dienste ── -->
-  <div id="cfgpanel-dienste" class="cfg-tab-panel" style="display:none;">
+  <!-- ── Sub-Tab: Home Assistant ── -->
+  <div id="cfgpanel-ha" class="cfg-tab-panel" style="display:none;">
 
     <div class="config-section">
       <div class="config-section-header" data-i18n="config_services.ha_title">Home Assistant</div>
@@ -389,6 +391,37 @@
       </div>
     </div>
 
+    <!-- Auto-Backup -->
+    <div class="config-section">
+      <div class="config-section-header" data-i18n="config_services.auto_backup_title">Auto-Backup</div>
+      <div class="config-section-body">
+        <label class="checkbox-label">
+          <input type="checkbox" id="svc-ha-auto-backup">
+          <span data-i18n="config_services.auto_backup_label">Automatisches HA-Backup vor Agent-Änderungen</span>
+        </label>
+        <p class="form-hint" data-i18n="config_services.auto_backup_desc">
+          Erstellt ein Home Assistant Backup bevor der Agent Automationen, Scripts
+          oder andere HA-Konfigurationen ändert.
+        </p>
+      </div>
+    </div>
+
+    <!-- Geplante Dienste -->
+    <div class="config-section muted">
+      <div class="config-section-header">Geplante Integrationen</div>
+      <div class="config-section-body" style="display:flex;flex-direction:column;gap:12px;">
+        <div class="planned-card">
+          <div class="planned-card-title">HA Subscriptions · Phase 4+</div>
+          <div class="planned-card-desc">Echtzeit-Subscriptions auf HA-Ereignisse (Türklingel, Bewegungsmelder, …). Der Agent wird proaktiv benachrichtigt.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Sub-Tab: WhatsApp ── -->
+  <div id="cfgpanel-whatsapp" class="cfg-tab-panel" style="display:none;">
+
     <div class="config-section">
       <div class="config-section-header" data-i18n="config_services.wa_title">WhatsApp Bridge</div>
       <div class="config-section-body">
@@ -438,6 +471,11 @@
       </div>
     </div>
 
+  </div>
+
+  <!-- ── Sub-Tab: Infra ── -->
+  <div id="cfgpanel-infra" class="cfg-tab-panel" style="display:none;">
+
     <div class="config-section">
       <div class="config-section-header" data-i18n="config_services.infra_title">Infrastruktur</div>
       <div class="config-section-body">
@@ -464,14 +502,10 @@
       </div>
     </div>
 
-    <!-- Geplante Dienste -->
+    <!-- Geplante Infra-Features -->
     <div class="config-section muted">
-      <div class="config-section-header">Geplante Integrationen</div>
+      <div class="config-section-header">Geplante Features</div>
       <div class="config-section-body" style="display:flex;flex-direction:column;gap:12px;">
-        <div class="planned-card">
-          <div class="planned-card-title">HA Subscriptions · Phase 4+</div>
-          <div class="planned-card-desc">Echtzeit-Subscriptions auf HA-Ereignisse (Türklingel, Bewegungsmelder, …). Der Agent wird proaktiv benachrichtigt.</div>
-        </div>
         <div class="planned-card">
           <div class="planned-card-title">Backup · Phase 2+</div>
           <div class="planned-card-desc">Automatisches Backup der Qdrant-Collections auf TrueNAS (SMB).</div>

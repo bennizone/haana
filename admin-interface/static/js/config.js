@@ -131,6 +131,10 @@ function renderConfig(c) {
   if (voiceEl && sv.tts_voice) voiceEl.value = sv.tts_voice;
   const alsoTextEl = document.getElementById('svc-tts-also-text');
   if (alsoTextEl) alsoTextEl.checked = !!sv.tts_also_text;
+  // Auto-Backup
+  const autoBackupEl = document.getElementById('svc-ha-auto-backup');
+  if (autoBackupEl) autoBackupEl.checked = !!sv.ha_auto_backup;
+
   // Entities automatisch laden wenn HA konfiguriert ist
   if (sv.ha_url && sv.ha_token) loadSttTtsEntities();
 
@@ -253,6 +257,7 @@ async function saveConfig() {
       stt_language:    document.getElementById('svc-stt-language')?.value || 'de-DE',
       tts_voice:       document.getElementById('svc-tts-voice')?.value || '',
       tts_also_text:   document.getElementById('svc-tts-also-text')?.checked ?? false,
+      ha_auto_backup:  document.getElementById('svc-ha-auto-backup')?.checked ?? false,
       ollama_url:      document.getElementById('svc-ollama-url').value,
       qdrant_url:      document.getElementById('svc-qdrant-url').value,
     },

@@ -45,7 +45,9 @@
     "sub_tabs": {
       "llms": "LLMs",
       "memory": "Memory",
-      "services": "Services",
+      "home_assistant": "Home Assistant",
+      "whatsapp": "WhatsApp",
+      "infra": "Infra",
       "logs": "Logs",
       "retention": "Retention",
       "claude_md": "CLAUDE.md"
@@ -133,6 +135,9 @@
     "wa_prefix": "Self-prefix",
     "wa_prefix_hint": "only for mode \"Self\"",
     "wa_disconnect_confirm": "Really disconnect WhatsApp session? You will need to scan the QR code again.",
+    "auto_backup_title": "Auto-Backup",
+    "auto_backup_label": "Automatic HA backup before agent changes",
+    "auto_backup_desc": "Creates a Home Assistant backup before the agent modifies automations, scripts or other HA configurations.",
     "infra_title": "Infrastructure",
     "ollama_url": "Ollama URL",
     "qdrant_url": "Qdrant URL",

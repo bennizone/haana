@@ -188,6 +188,7 @@ DEFAULT_CONFIG = {
         "ha_mcp_type":   "extended",  # "builtin" = HA built-in (SSE), "extended" = ha-mcp add-on (HTTP)
         "ha_mcp_url":    "",   # leer = auto-detect je nach Typ
         "ha_mcp_token":  "",   # leer = ha_token verwenden
+        "ha_auto_backup": False,  # HA-Backup vor Agent-Änderungen
         "ollama_url":    os.environ.get("OLLAMA_URL", "http://10.83.1.110:11434"),
         "qdrant_url":    os.environ.get("QDRANT_URL", "http://qdrant:6333"),
     },

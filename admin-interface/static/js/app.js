@@ -9,11 +9,12 @@ let sse             = null;
 let cfg             = null;
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
-function showTab(name) {
+function showTab(name, e) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('panel-' + name).classList.add('active');
-  event.target.classList.add('active');
+  if (e && e.target) e.target.classList.add('active');
+  else document.querySelector(`.tab-btn[onclick*="'${name}'"]`)?.classList.add('active');
 
   if (name === 'chat')   { loadConversations(currentInstance); }
   if (name === 'logs')   { loadLogs(currentLogCat); loadLogFiles(currentInstance); }
