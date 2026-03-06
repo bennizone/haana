@@ -951,6 +951,7 @@ async def whatsapp_config_endpoint():
                 "tts_entity":   tts_entity,
                 "tts_language": services.get("stt_language", "de-DE"),
                 "tts_voice":    services.get("tts_voice", ""),
+                "tts_also_text": services.get("tts_also_text", False),
             }
 
     return {"mode": wa.get("mode", "separate"), "self_prefix": wa.get("self_prefix", "!h "), "routes": routes, "stt": stt, "tts": tts}

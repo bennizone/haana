@@ -600,6 +600,12 @@
             </span>
           </div>
         </div>
+        <div style="margin-top:10px;">
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;">
+            <input type="checkbox" id="svc-tts-also-text">
+            Antwort zusätzlich als Text senden (neben der Sprachnachricht)
+          </label>
+        </div>
       </div>
     </div>
 
@@ -1249,6 +1255,8 @@ function renderConfig(c) {
   if (sv.stt_language && langEl) langEl.value = sv.stt_language;
   const voiceEl = document.getElementById('svc-tts-voice');
   if (voiceEl && sv.tts_voice) voiceEl.value = sv.tts_voice;
+  const alsoTextEl = document.getElementById('svc-tts-also-text');
+  if (alsoTextEl) alsoTextEl.checked = !!sv.tts_also_text;
   // Entities automatisch laden wenn HA konfiguriert ist
   if (sv.ha_url && sv.ha_token) loadSttTtsEntities();
 
@@ -1317,6 +1325,7 @@ async function saveConfig() {
       tts_entity:      document.getElementById('svc-tts-entity')?.value || '',
       stt_language:    document.getElementById('svc-stt-language')?.value || 'de-DE',
       tts_voice:       document.getElementById('svc-tts-voice')?.value || '',
+      tts_also_text:   document.getElementById('svc-tts-also-text')?.checked ?? false,
       ollama_url:      document.getElementById('svc-ollama-url').value,
       qdrant_url:      document.getElementById('svc-qdrant-url').value,
     },

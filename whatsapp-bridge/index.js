@@ -581,7 +581,7 @@ async function startBridge() {
       await sock.sendPresenceUpdate("composing", from);
 
       try {
-        const response = await queryAgent(route.agent_url, text, "whatsapp");
+        const response = await queryAgent(route.agent_url, text, wasVoice ? "whatsapp_voice" : "whatsapp");
         log.info({ from: fromNorm, response: response.slice(0, 100) }, "Agent-Antwort");
 
         // TTS: Sprachnachricht zurücksenden wenn Input Voice war und TTS konfiguriert
@@ -599,6 +599,11 @@ async function startBridge() {
               });
               sentVoice = true;
               log.info({ from: fromNorm, bytes: oggBuffer.length }, "TTS-Sprachnachricht gesendet");
+              // Optional: Text zusätzlich senden
+              if (_ttsConfig.tts_also_text) {
+                await sock.sendMessage(from, { text: response });
+                log.debug({ from: fromNorm }, "Text zusätzlich zur Sprachnachricht gesendet");
+              }
             }
           } catch (ttsErr) {
             log.warn({ err: ttsErr.message }, "TTS fehlgeschlagen – sende Text stattdessen");

@@ -196,14 +196,20 @@ class HaanaAgent:
         # Memory: relevanten Kontext laden (in Executor – blockiert Event-Loop nicht)
         loop = asyncio.get_running_loop()
         memory_context = await loop.run_in_executor(None, self.memory.search, user_message)
+        parts = []
         if memory_context:
-            prompt = (
-                f"<relevante_erinnerungen>\n{memory_context}\n</relevante_erinnerungen>\n\n"
-                f"{user_message}"
-            )
+            parts.append(f"<relevante_erinnerungen>\n{memory_context}\n</relevante_erinnerungen>")
             logger.debug(f"[{self.instance}] Memory-Kontext: {len(memory_context)} Zeichen")
-        else:
-            prompt = user_message
+        if channel == "whatsapp_voice":
+            parts.append(
+                "<hinweis>Diese Nachricht kam als Sprachnachricht. "
+                "Deine Antwort wird per Text-to-Speech vorgelesen. "
+                "Antworte daher ohne Emojis, ohne Markdown-Formatierung, ohne Sonderzeichen. "
+                "Schreibe natürlich und gesprächig, als würdest du sprechen. "
+                "Halte dich kurz und prägnant.</hinweis>"
+            )
+        parts.append(user_message)
+        prompt = "\n\n".join(parts)
 
         # Verbindung sicherstellen (lazy init oder nach Fehler)
         try:
