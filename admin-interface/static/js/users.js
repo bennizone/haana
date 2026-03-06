@@ -34,7 +34,7 @@ function renderUserCard(u) {
       <div style="display:flex;gap:5px;flex-shrink:0;" onclick="event.stopPropagation()">
         <button class="btn btn-secondary" style="font-size:11px;padding:3px 8px;" title="Neu starten" onclick="restartUserContainer('${escAttr(u.id)}')">↺</button>
         <button class="btn btn-secondary" style="font-size:11px;padding:3px 8px;" title="Stoppen" onclick="stopUserContainer('${escAttr(u.id)}')">Stop</button>
-        <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" id="uedit-btn-${escAttr(u.id)}" onclick="toggleUserExpand('${escAttr(u.id)}')">✎ Bearbeiten</button>
+        <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" id="uedit-btn-${escAttr(u.id)}" onclick="toggleUserExpand('${escAttr(u.id)}')">\u270e ${t('users.edit')}</button>
         ${!u.system ? `<button class="btn btn-danger" style="font-size:11px;padding:3px 8px;" onclick="deleteUser('${escAttr(u.id)}')">✕</button>` : ''}
       </div>
     </div>
@@ -42,48 +42,48 @@ function renderUserCard(u) {
     <div id="user-expand-${escAttr(u.id)}" style="display:none;border-top:1px solid var(--border);padding:16px 16px 12px;">
       <div class="form-row">
         <div class="form-group">
-          <label>Anzeigename</label>
+          <label>${t('users.display_name')}</label>
           <input type="text" id="uf-${escAttr(u.id)}-name" value="${escAttr(u.display_name||'')}">
         </div>
         <div class="form-group">
-          <label>Rolle</label>
+          <label>${t('users.role')}</label>
           <select id="uf-${escAttr(u.id)}-role">
-            <option value="user"  ${u.role==='user' ?'selected':''}>User (eingeschränkt)</option>
-            <option value="admin" ${u.role==='admin'?'selected':''}>Admin (voller Zugriff)</option>
+            <option value="user"  ${u.role==='user' ?'selected':''}>${t('users.role_user')}</option>
+            <option value="admin" ${u.role==='admin'?'selected':''}>${t('users.role_admin')}</option>
           </select>
         </div>
       </div>
       ${!isVoice ? `
       <div class="form-row">
         <div class="form-group">
-          <label>HA-User <span style="font-size:11px;color:var(--muted);">(Person-Entität aus HA)</span></label>
+          <label>${t('users.ha_user')} <span style="font-size:11px;color:var(--muted);">(${t('users.ha_user_hint')})</span></label>
           <div style="display:flex;gap:6px;">
             <select id="uf-${escAttr(u.id)}-ha" style="flex:1;">
-              <option value="${escAttr(u.ha_user||'')}">${escHtml(u.ha_user||'– nicht zugeordnet –')}</option>
+              <option value="${escAttr(u.ha_user||'')}">${escHtml(u.ha_user||t('users.not_assigned'))}</option>
             </select>
             <button class="btn btn-secondary" style="font-size:11px;padding:4px 8px;flex-shrink:0;" onclick="loadHaUsersForCard('${escAttr(u.id)}')">↺</button>
           </div>
           <span id="uf-${escAttr(u.id)}-ha-status" style="font-size:11px;color:var(--muted);"></span>
         </div>
         <div class="form-group">
-          <label>WhatsApp Rufnummer <span style="font-size:11px;color:var(--muted);">(z.B. 491234567890)</span></label>
-          <input type="text" id="uf-${escAttr(u.id)}-wa-phone" value="${escAttr(u.whatsapp_phone||'')}" placeholder="Ohne +, ohne Leerzeichen">
+          <label>${t('users.wa_phone')} <span style="font-size:11px;color:var(--muted);">(${t('users.wa_phone_hint')})</span></label>
+          <input type="text" id="uf-${escAttr(u.id)}-wa-phone" value="${escAttr(u.whatsapp_phone||'')}" placeholder="${t('users.wa_phone_placeholder')}">
         </div>
       </div>
       ` : ''}
       <div class="form-row">
         <div class="form-group">
-          <label>Primäres LLM</label>
+          <label>${t('users.primary_llm')}</label>
           <select id="uf-${escAttr(u.id)}-primary-llm">${_llmOpts(u.primary_llm_slot)}</select>
         </div>
         <div class="form-group">
-          <label>Extraktions-LLM</label>
+          <label>${t('users.extraction_llm')}</label>
           <select id="uf-${escAttr(u.id)}-extract-llm">${_llmOpts(u.extraction_llm_slot)}</select>
         </div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
-        <button class="btn btn-primary" onclick="saveUserEdit('${escAttr(u.id)}')">Speichern</button>
-        <button class="btn btn-secondary" onclick="toggleUserExpand('${escAttr(u.id)}')">Abbrechen</button>
+        <button class="btn btn-primary" onclick="saveUserEdit('${escAttr(u.id)}')">${t('common.save')}</button>
+        <button class="btn btn-secondary" onclick="toggleUserExpand('${escAttr(u.id)}')">${t('common.cancel')}</button>
         <span id="uf-${escAttr(u.id)}-status" style="font-size:12px;color:var(--muted);"></span>
       </div>
       <!-- CLAUDE.md Inline-Editor -->
@@ -91,17 +91,17 @@ function renderUserCard(u) {
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
           <span style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">CLAUDE.md</span>
           <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;"
-            onclick="toggleUserClaudeMd('${escAttr(u.id)}')">✎ Bearbeiten</button>
+            onclick="toggleUserClaudeMd('${escAttr(u.id)}')">\u270e ${t('users.edit_claude_md')}</button>
           <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;"
-            onclick="loadDefaultClaudeMd('${escAttr(u.id)}')">↺ Role Default laden</button>
+            onclick="loadDefaultClaudeMd('${escAttr(u.id)}')">\u21ba ${t('users.load_role_default')}</button>
           <span id="uf-${escAttr(u.id)}-md-status" style="font-size:11px;color:var(--muted);"></span>
         </div>
         <div id="uf-${escAttr(u.id)}-md-editor" style="display:none;">
           <textarea id="uf-${escAttr(u.id)}-md-content" spellcheck="false"
             style="width:100%;min-height:260px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:10px;font-family:var(--mono);font-size:12px;resize:vertical;"></textarea>
           <div style="display:flex;gap:8px;margin-top:8px;">
-            <button class="btn btn-primary" onclick="saveUserClaudeMd('${escAttr(u.id)}')">CLAUDE.md speichern</button>
-            <button class="btn btn-secondary" onclick="document.getElementById('uf-${escAttr(u.id)}-md-editor').style.display='none'">Schließen</button>
+            <button class="btn btn-primary" onclick="saveUserClaudeMd('${escAttr(u.id)}')">${t('users.save_claude_md')}</button>
+            <button class="btn btn-secondary" onclick="document.getElementById('uf-${escAttr(u.id)}-md-editor').style.display='none'">${t('common.close')}</button>
           </div>
         </div>
       </div>
@@ -116,7 +116,7 @@ async function loadUsers() {
     const r = await fetch('/api/users');
     const users = await r.json();
     if (!users.length) {
-      list.innerHTML = '<div class="empty-state"><div class="icon">--</div><div>Noch keine User.</div></div>';
+      list.innerHTML = '<div class="empty-state"><div class="icon">--</div><div>' + t('users.no_users') + '</div></div>';
       return;
     }
     list.innerHTML = users.map(u => renderUserCard(u)).join('');
@@ -132,7 +132,7 @@ function toggleUserExpand(uid) {
   if (!el) return;
   const open = el.style.display !== 'none';
   el.style.display = open ? 'none' : 'block';
-  if (btn) btn.textContent = open ? '✎ Bearbeiten' : '▲ Schließen';
+  if (btn) btn.textContent = open ? '\u270e ' + t('users.edit') : '\u25b2 ' + t('users.close_edit');
   if (!open) loadHaUsersForCard(uid);
 }
 
@@ -145,16 +145,16 @@ async function loadHaUsersForCard(uid) {
     const r = await fetch('/api/ha-users');
     const data = await r.json();
     if (data.ok && data.users.length > 0) {
-      sel.innerHTML = '<option value="">– nicht zugeordnet –</option>' +
+      sel.innerHTML = '<option value="">' + t('users.not_assigned') + '</option>' +
         data.users.map(u =>
           `<option value="${escAttr(u.id)}" ${u.id === currentVal ? 'selected' : ''}>${escHtml(u.display_name)} (${escHtml(u.id)})</option>`
         ).join('');
-      if (status) { status.textContent = `${data.users.length} HA-User gefunden`; status.style.color = 'var(--green)'; }
+      if (status) { status.textContent = data.users.length + ' ' + t('users.ha_users_found'); status.style.color = 'var(--green)'; }
     } else {
-      if (status) { status.textContent = data.error || 'HA nicht konfiguriert'; status.style.color = 'var(--yellow)'; }
+      if (status) { status.textContent = data.error || t('users.ha_not_configured'); status.style.color = 'var(--yellow)'; }
     }
   } catch(e) {
-    if (status) { status.textContent = 'Fehler beim Laden'; status.style.color = 'var(--red)'; }
+    if (status) { status.textContent = t('users.ha_load_error'); status.style.color = 'var(--red)'; }
   }
 }
 
@@ -178,10 +178,10 @@ async function saveUserEdit(uid) {
     });
     const d = await r.json();
     if (r.ok && d.ok) {
-      toast(`User ${uid} gespeichert ✓`, 'ok');
+      toast(t('users.user_saved', {uid: uid}) + ' \u2713', 'ok');
       loadUsers();
     } else {
-      const err = d.detail || d.error || 'Unbekannter Fehler';
+      const err = d.detail || d.error || t('chat.unknown_error');
       if (status) { status.textContent = '✗ ' + err.substring(0,80); status.style.color = 'var(--red)'; }
       toast(err.substring(0,60), 'err');
     }
@@ -203,7 +203,7 @@ async function toggleUserClaudeMd(uid) {
       document.getElementById(`uf-${uid}-md-content`).value = d.content || '';
       editor.style.display = 'block';
     } else {
-      if (status) { status.textContent = 'Nicht gefunden'; status.style.color = 'var(--yellow)'; }
+      if (status) { status.textContent = t('users.not_found'); status.style.color = 'var(--yellow)'; }
     }
   } catch(e) {
     if (status) { status.textContent = e.message; status.style.color = 'var(--red)'; }
@@ -221,7 +221,7 @@ async function loadDefaultClaudeMd(uid) {
     const content = document.getElementById(`uf-${uid}-md-content`);
     if (content) content.value = d.content || '';
     if (editor)  editor.style.display = 'block';
-    if (status)  { status.textContent = `Template "${d.template}" geladen`; status.style.color = 'var(--green)'; setTimeout(() => { status.textContent = ''; }, 3000); }
+    if (status)  { status.textContent = t('users.template_loaded', {tpl: d.template}); status.style.color = 'var(--green)'; setTimeout(() => { status.textContent = ''; }, 3000); }
   } catch(e) {
     if (status) { status.textContent = e.message; status.style.color = 'var(--red)'; }
   }
@@ -237,10 +237,10 @@ async function saveUserClaudeMd(uid) {
     });
     const d = await r.json();
     if (d.ok) {
-      toast(`CLAUDE.md für ${uid} gespeichert ✓`, 'ok');
-      if (status) { status.textContent = '✓ Gespeichert'; status.style.color = 'var(--green)'; setTimeout(() => { status.textContent = ''; }, 3000); }
+      toast(t('users.claude_md_saved', {uid: uid}) + ' \u2713', 'ok');
+      if (status) { status.textContent = '\u2713 ' + t('users.claude_md_saved_short'); status.style.color = 'var(--green)'; setTimeout(() => { status.textContent = ''; }, 3000); }
     } else {
-      if (status) { status.textContent = '✗ Fehler'; status.style.color = 'var(--red)'; }
+      if (status) { status.textContent = '\u2717 ' + t('common.error'); status.style.color = 'var(--red)'; }
     }
   } catch(e) {
     if (status) { status.textContent = '✗ ' + e.message; status.style.color = 'var(--red)'; }
@@ -255,7 +255,7 @@ function showNewUserCard() {
 async function submitNewUser() {
   const st  = document.getElementById('nuf-status');
   const uid = document.getElementById('nuf-id').value.trim();
-  if (!uid) { st.textContent = '⚠ ID fehlt'; st.style.color = 'var(--yellow)'; return; }
+  if (!uid) { st.textContent = '\u26a0 ' + t('users.id_missing'); st.style.color = 'var(--yellow)'; return; }
   const payload = {
     id:           uid,
     display_name: document.getElementById('nuf-display-name').value.trim() || uid,
@@ -270,25 +270,25 @@ async function submitNewUser() {
     const d = await r.json();
     if (r.ok && d.ok) {
       const cOk = d.container?.ok !== false;
-      st.textContent = cOk ? `✓ Angelegt · Port :${d.user?.api_port}` : `⚠ Gespeichert, Container-Start fehlgeschlagen: ${(d.container?.error||'?').substring(0,60)}`;
+      st.textContent = cOk ? '\u2713 ' + t('users.created_port', {port: d.user?.api_port}) : '\u26a0 ' + t('users.created_container_error') + ': ' + (d.container?.error||'?').substring(0,60);
       st.style.color = cOk ? 'var(--green)' : 'var(--yellow)';
       document.getElementById('new-user-card').style.display = 'none';
-      toast('User angelegt ✓', 'ok');
+      toast(t('users.user_created') + ' \u2713', 'ok');
       loadUsers();
     } else {
-      const err = d.detail || d.error || 'Fehler';
-      st.textContent = '✗ ' + err.substring(0,80); st.style.color = 'var(--red)';
+      const err = d.detail || d.error || t('common.error');
+      st.textContent = '\u2717 ' + err.substring(0,80); st.style.color = 'var(--red)';
     }
   } catch(e) { st.textContent = '✗ ' + e.message; st.style.color = 'var(--red)'; }
 }
 
 async function deleteUser(userId) {
-  Modal.showDangerConfirm(`User "${userId}" wirklich löschen? Container wird gestoppt und entfernt.`, async () => {
+  Modal.showDangerConfirm(t('users.delete_confirm', {name: userId}), async () => {
     try {
       const r = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
       const d = await r.json();
-      if (d.ok) { toast('User gelöscht', 'ok'); loadUsers(); }
-      else       { toast(d.detail || 'Fehler beim Löschen', 'err'); }
+      if (d.ok) { toast(t('users.user_deleted'), 'ok'); loadUsers(); }
+      else       { toast(d.detail || t('users.delete_error'), 'err'); }
     } catch(e) { toast(e.message, 'err'); }
   });
 }
@@ -296,13 +296,13 @@ async function deleteUser(userId) {
 async function restartUserContainer(userId) {
   const r = await fetch(`/api/users/${userId}/restart`, { method: 'POST' });
   const d = await r.json();
-  if (d.ok) { toast(`Container für ${userId} neu gestartet ✓`, 'ok'); loadUsers(); }
-  else       { toast(`Fehler: ${(d.container?.error || d.error || '?').substring(0,80)}`, 'err'); }
+  if (d.ok) { toast(t('users.container_restarted', {uid: userId}) + ' \u2713', 'ok'); loadUsers(); }
+  else       { toast(t('common.error') + ': ' + (d.container?.error || d.error || '?').substring(0,80), 'err'); }
 }
 
 async function stopUserContainer(userId) {
   const r = await fetch(`/api/users/${userId}/stop`, { method: 'POST' });
   const d = await r.json();
-  if (d.ok) { toast(`Container für ${userId} gestoppt`, 'ok'); loadUsers(); }
-  else       { toast(`Fehler: ${(d.error || '?').substring(0,80)}`, 'err'); }
+  if (d.ok) { toast(t('users.container_stopped', {uid: userId}), 'ok'); loadUsers(); }
+  else       { toast(t('common.error') + ': ' + (d.error || '?').substring(0,80), 'err'); }
 }

@@ -9,12 +9,12 @@ function selectLogCat(cat) {
 
 async function loadLogs(cat) {
   const list = document.getElementById('log-list');
-  list.innerHTML = '<div class="empty-state"><div class="icon">...</div><div>Wird geladen...</div></div>';
+  list.innerHTML = '<div class="empty-state"><div class="icon">...</div><div>' + t('common.loading') + '</div></div>';
   try {
     const r = await fetch(`/api/logs/${cat}?limit=100`);
     const data = await r.json();
     if (!data.length) {
-      list.innerHTML = '<div class="empty-state"><div class="icon">--</div><div>Keine Einträge.</div></div>';
+      list.innerHTML = '<div class="empty-state"><div class="icon">--</div><div>' + t('logs.no_entries') + '</div></div>';
       return;
     }
     list.innerHTML = data.map(rec => {
@@ -25,7 +25,7 @@ async function loadLogs(cat) {
       let detail = '';
       if (cat === 'memory-ops') {
         detail = `<span class="tag">${rec.op||'?'}</span> <span class="tag">${rec.scope||'?'}</span>`;
-        if (rec.results_count !== null && rec.results_count !== undefined) detail += ` → ${rec.results_count} Treffer`;
+        if (rec.results_count !== null && rec.results_count !== undefined) detail += ' \u2192 ' + rec.results_count + ' ' + t('logs.hits');
         if (rec.query) detail += `<br><span style="color:var(--muted);font-size:11px;">${escHtml(rec.query.substring(0,80))}</span>`;
       } else if (cat === 'tool-calls') {
         detail = `<span class="tool-chip">${escHtml(rec.tool||'?')}</span>`;
@@ -70,12 +70,12 @@ async function loadLogFiles(inst) {
     const r = await fetch(`/api/conversations/${inst}/files`);
     const files = await r.json();
     if (!files.length) {
-      el.innerHTML = '<span style="font-size:12px;color:var(--muted);">Keine Dateien</span>';
+      el.innerHTML = '<span style="font-size:12px;color:var(--muted);">' + t('logs.no_files') + '</span>';
       return;
     }
     el.innerHTML = files.map(f => `
       <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;"
-        onclick="openLogEditor('${escAttr(inst)}', '${escAttr(f.date)}')" title="${f.entries} Einträge, ${f.size_kb} KB">
+        onclick="openLogEditor('${escAttr(inst)}', '${escAttr(f.date)}')" title="${f.entries} ${t('logs.entries')}, ${f.size_kb} KB">
         ${escHtml(f.date)} <span style="color:var(--muted);">(${f.entries})</span>
       </button>`).join('');
   } catch(e) {
@@ -95,13 +95,13 @@ async function openLogEditor(inst, date) {
   const area  = document.getElementById('log-editor-area');
   const info  = document.getElementById('log-editor-info');
   title.textContent = `${inst} / ${date}.jsonl`;
-  area.value = ''; info.textContent = 'Wird geladen…';
+  area.value = ''; info.textContent = t('common.loading');
   modal.classList.add('active');
   try {
     const r = await fetch(`/api/conversations/${inst}/raw/${date}`);
     const d = await r.json();
     area.value = d.content;
-    info.textContent = `${d.entries} Einträge`;
+    info.textContent = d.entries + ' ' + t('logs.entries');
   } catch(e) { area.value = ''; info.textContent = '❌ ' + e.message; }
 }
 
@@ -119,12 +119,12 @@ async function saveLogEditor() {
     });
     const d = await r.json();
     if (d.ok) {
-      info.textContent = `✓ ${d.entries} Einträge gespeichert`;
-      toast('Log gespeichert – Memory ggf. neu aufbauen!', 'ok');
+      info.textContent = '\u2713 ' + d.entries + ' ' + t('logs.entries_saved');
+      toast(t('logs.log_saved'), 'ok');
       closeLogEditor();
       loadConversations(currentInstance);
     } else {
-      info.textContent = '❌ Fehler';
+      info.textContent = '\u274c ' + t('logs.error');
     }
-  } catch(e) { info.textContent = '❌ ' + e.message; }
+  } catch(e) { info.textContent = '\u274c ' + e.message; }
 }

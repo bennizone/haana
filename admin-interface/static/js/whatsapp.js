@@ -21,7 +21,7 @@ async function refreshWaStatus() {
 
     if (d.status === 'connected') {
       dot.style.background = 'var(--accent)';
-      txt.textContent = 'Verbunden';
+      txt.textContent = t('whatsapp.connected');
       if (d.account_name || d.account_jid) {
         document.getElementById('wa-account-name').textContent = d.account_name || '–';
         document.getElementById('wa-account-jid').textContent  = d.account_jid  || '–';
@@ -31,7 +31,7 @@ async function refreshWaStatus() {
       stopWaPolling();
     } else if (d.status === 'qr') {
       dot.style.background = '#f59e0b';
-      txt.textContent = 'Warte auf QR-Code Scan...';
+      txt.textContent = t('whatsapp.waiting_qr');
       // QR-Code laden
       const qr = await fetch('/api/whatsapp-qr');
       const qd = await qr.json();
@@ -42,17 +42,17 @@ async function refreshWaStatus() {
       startWaPolling();
     } else if (d.status === 'offline') {
       dot.style.background = '#888';
-      txt.textContent = 'Bridge offline';
+      txt.textContent = t('whatsapp.bridge_offline');
       offl.style.display = 'block';
       stopWaPolling();
     } else {
       dot.style.background = '#ef4444';
-      txt.textContent = 'Nicht verbunden';
+      txt.textContent = t('whatsapp.not_connected');
       startWaPolling();
     }
   } catch (e) {
     dot.style.background = '#888';
-    txt.textContent = 'Bridge nicht erreichbar';
+    txt.textContent = t('whatsapp.bridge_unreachable');
     offl.style.display = 'block';
     stopWaPolling();
   }
@@ -68,14 +68,14 @@ function stopWaPolling() {
 }
 
 async function waLogout() {
-  Modal.showDangerConfirm('WhatsApp-Session wirklich trennen? Du musst danach den QR-Code erneut scannen.', async () => {
+  Modal.showDangerConfirm(t('whatsapp.disconnect_confirm'), async () => {
     const r = await fetch('/api/whatsapp-logout', { method: 'POST' });
     const d = await r.json();
     if (d.ok) {
-      toast('WhatsApp getrennt – QR-Code erscheint gleich', 'ok');
+      toast(t('whatsapp.disconnected'), 'ok');
       setTimeout(refreshWaStatus, 3000);
     } else {
-      toast('Fehler: ' + (d.error || 'Unbekannt'), 'err');
+      toast(t('whatsapp.error') + ': ' + (d.error || t('whatsapp.unknown')), 'err');
     }
   });
 }

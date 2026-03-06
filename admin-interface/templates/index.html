@@ -527,16 +527,39 @@
           </p>
         </div>
 
-        <div id="claude-auth-upload-area" style="margin-top:12px;padding:12px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border);">
-          <strong data-i18n="config_services.auth_oauth_title">Option 2: OAuth-Session (Claude Subscription)</strong>
-          <p class="form-hint" style="margin:6px 0 8px;" data-i18n="config_services.auth_upload_hint">
-            Inhalt der Datei ~/.claude/.credentials.json von einer eingeloggten Claude Code Session einfügen. Token muss regelmäßig erneuert werden.
+        <div id="claude-auth-oauth-area" style="margin-top:12px;padding:12px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border);">
+          <strong data-i18n="config_services.auth_oauth_title">Option 2: OAuth Login (Claude Subscription)</strong>
+          <p class="form-hint" style="margin:6px 0 8px;" data-i18n="config_services.oauth_login_desc">
+            OAuth-Login direkt aus dem Admin-Interface. Klicke auf "Login starten", öffne den Link, autorisiere und gib den Code hier ein.
           </p>
-          <textarea id="claude-auth-creds" rows="4" style="width:100%;font-family:monospace;font-size:12px;"
-            placeholder='{"claudeAiOauth":{"accessToken":"...","refreshToken":"...","expiresAt":...}}'></textarea>
-          <button class="btn btn-sm btn-primary" style="margin-top:8px;"
-            onclick="uploadClaudeAuth()" data-i18n="config_services.auth_upload_btn">Credentials speichern</button>
-          <span id="claude-auth-upload-result" class="form-hint" style="margin-left:12px;"></span>
+
+          <button class="btn btn-sm btn-primary" onclick="startOAuthLogin()" data-i18n="config_services.oauth_start_btn">Login starten</button>
+          <span id="oauth-login-status" class="form-hint" style="margin-left:12px;"></span>
+          <div id="oauth-login-url" style="margin-top:8px;"></div>
+
+          <div id="oauth-code-section" style="display:none;margin-top:12px;">
+            <label data-i18n="config_services.oauth_code_label">Authorization Code</label>
+            <div class="form-inline" style="gap:8px;">
+              <input type="text" id="oauth-code-input" style="flex:1;font-family:monospace;"
+                placeholder="Code hier einfügen" data-i18n-placeholder="config_services.oauth_code_placeholder">
+              <button class="btn btn-sm btn-primary" onclick="completeOAuthLogin()" data-i18n="config_services.oauth_submit_btn">Absenden</button>
+            </div>
+            <span id="oauth-code-result" class="form-hint" style="margin-top:6px;display:block;"></span>
+          </div>
+
+          <details style="margin-top:12px;">
+            <summary class="form-hint" style="cursor:pointer;" data-i18n="config_services.oauth_manual_title">Alternativ: Credentials manuell einfügen</summary>
+            <div style="margin-top:8px;">
+              <p class="form-hint" style="margin:0 0 6px;" data-i18n="config_services.auth_upload_hint">
+                Inhalt der Datei ~/.claude/.credentials.json von einer eingeloggten Claude Code Session einfügen.
+              </p>
+              <textarea id="claude-auth-creds" rows="3" style="width:100%;font-family:monospace;font-size:12px;"
+                placeholder='{"claudeAiOauth":{"accessToken":"...","refreshToken":"...","expiresAt":...}}'></textarea>
+              <button class="btn btn-sm btn-secondary" style="margin-top:6px;"
+                onclick="uploadClaudeAuth()" data-i18n="config_services.auth_upload_btn">Credentials speichern</button>
+              <span id="claude-auth-upload-result" class="form-hint" style="margin-left:12px;"></span>
+            </div>
+          </details>
         </div>
       </div>
     </div>

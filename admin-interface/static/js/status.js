@@ -2,7 +2,7 @@
 
 async function loadStatus() {
   const grid = document.getElementById('status-grid');
-  grid.innerHTML = '<div class="status-card"><div class="empty-state"><div class="icon">...</div><div>Wird geprüft...</div></div></div>';
+  grid.innerHTML = '<div class="status-card"><div class="empty-state"><div class="icon">...</div><div>' + t('status.checking') + '</div></div></div>';
   try {
     const [s, memStats] = await Promise.all([
       fetch('/api/status').then(r => r.json()),
@@ -36,9 +36,9 @@ async function loadStatus() {
       const mem = memMap[a.inst];
       const queueInfo = a.ok
         ? `<span style="font-size:11px;color:var(--muted);">Win: ${a.window_size??'?'} | Queue: ${a.pending_extractions??'?'}</span>`
-        : `<span style="font-size:11px;color:var(--muted);">offline</span>`;
+        : `<span style="font-size:11px;color:var(--muted);">${t('status.offline')}</span>`;
       const memInfo = mem
-        ? `<span style="font-size:11px;color:${mem.total_vectors===0&&mem.log_entries>0?'var(--yellow)':'var(--muted)'};">${mem.total_vectors} Vektoren</span>`
+        ? `<span style="font-size:11px;color:${mem.total_vectors===0&&mem.log_entries>0?'var(--yellow)':'var(--muted)'};">${mem.total_vectors} ${t('status.vectors')}</span>`
         : '';
       const controls = `
         <div style="display:flex;gap:4px;margin-top:6px;">
@@ -56,38 +56,38 @@ async function loadStatus() {
     }).join('');
 
     const logRows = Object.entries(logs).map(([inst, info]) =>
-      `<div class="status-row"><span>${inst}</span><span>${info.days} Tag(e), zuletzt ${info.latest||'–'}</span></div>`
+      `<div class="status-row"><span>${inst}</span><span>${info.days} ${t('status.days_last')} ${info.latest||'–'}</span></div>`
     ).join('');
 
     grid.innerHTML = `
       <div class="status-card">
         <h3 style="display:flex;justify-content:space-between;align-items:center;">
           Qdrant
-          <button class="btn btn-secondary" style="font-size:10px;padding:2px 8px;" onclick="qdrantRestart()">↺ Restart</button>
+          <button class="btn btn-secondary" style="font-size:10px;padding:2px 8px;" onclick="qdrantRestart()">\u21ba Restart</button>
         </h3>
         <div class="status-row">
           <span>Status</span>
-          <span class="${qdrant.ok ? 'status-ok' : 'status-err'}">${qdrant.ok ? '✓ Online' : '✗ ' + (qdrant.error||'Fehler')}</span>
+          <span class="${qdrant.ok ? 'status-ok' : 'status-err'}">${qdrant.ok ? '\u2713 ' + t('status.online') : '\u2717 ' + (qdrant.error||t('status.error'))}</span>
         </div>
         ${qdrant.ok ? `<div class="status-row"><span>Collections</span><div style="display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end;">
-          ${(qdrant.collections||[]).map(c => `<span class="tag" style="display:inline-flex;align-items:center;gap:4px;">${escHtml(c)}<button onclick="deleteQdrantCollection('${escAttr(c)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:11px;padding:0;" title="Löschen">✕</button></span>`).join('')||'keine'}
+          ${(qdrant.collections||[]).map(c => `<span class="tag" style="display:inline-flex;align-items:center;gap:4px;">${escHtml(c)}<button onclick="deleteQdrantCollection('${escAttr(c)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:11px;padding:0;" title="${t('status.delete_label')}">\u2715</button></span>`).join('')||t('status.no_collections')}
         </div></div>` : ''}
       </div>
       <div class="status-card">
         <h3>Ollama</h3>
         <div class="status-row">
           <span>Status</span>
-          <span class="${ollama.ok ? 'status-ok' : 'status-warn'}">${ollama.ok ? '✓ Online' : '⚠ ' + (ollama.error||'nicht erreichbar')}</span>
+          <span class="${ollama.ok ? 'status-ok' : 'status-warn'}">${ollama.ok ? '\u2713 ' + t('status.online') : '\u26a0 ' + (ollama.error||t('status.not_reachable'))}</span>
         </div>
-        ${ollama.ok ? `<div class="status-row"><span>Modelle</span><div style="text-align:right;">${models||'keine'}</div></div>` : ''}
+        ${ollama.ok ? `<div class="status-row"><span>${t('config_llm.model')}</span><div style="text-align:right;">${models||t('status.no_models')}</div></div>` : ''}
       </div>
       <div class="status-card" style="grid-column:1/-1;">
-        <h3>Agent-Instanzen</h3>
-        ${agentRows || '<div style="color:var(--muted)">Keine Instanzen</div>'}
+        <h3>${t('status.agent_instances')}</h3>
+        ${agentRows || '<div style="color:var(--muted)">' + t('status.no_instances') + '</div>'}
       </div>
       <div class="status-card">
-        <h3>Konversations-Logs</h3>
-        ${logRows || '<div style="color:var(--muted)">Noch keine Logs</div>'}
+        <h3>${t('status.conversation_logs')}</h3>
+        ${logRows || '<div style="color:var(--muted)">' + t('status.no_logs') + '</div>'}
       </div>
     `;
 
@@ -97,7 +97,7 @@ async function loadStatus() {
 
     const allOk = qdrant.ok;
     document.getElementById('header-dot').style.background = allOk ? 'var(--green)' : 'var(--red)';
-    document.getElementById('header-status').textContent = allOk ? 'System OK' : 'Fehler – Details im Status-Tab';
+    document.getElementById('header-status').textContent = allOk ? t('status.system_ok') : t('status.system_error');
   } catch(e) {
     grid.innerHTML = `<div class="status-card"><div class="empty-state"><div class="icon">!</div><div>${e.message}</div></div></div>`;
   }
@@ -107,33 +107,33 @@ async function loadStatus() {
 async function instanceControl(inst, action) {
   const r = await fetch(`/api/instances/${inst}/${action}`, { method: 'POST' });
   const d = await r.json();
-  if (d.ok) { toast(`${inst}: ${action} ✓`, 'ok'); loadStatus(); }
-  else       { toast(`${inst} ${action} fehlgeschlagen: ${(d.error||'?').substring(0,60)}`, 'err'); }
+  if (d.ok) { toast(inst + ': ' + action + ' \u2713', 'ok'); loadStatus(); }
+  else       { toast(inst + ' ' + action + ' ' + t('status.action_failed') + ': ' + (d.error||'?').substring(0,60), 'err'); }
 }
 
 async function instanceForceStop(inst) {
-  Modal.showDangerConfirm(`${inst} sofort beenden (SIGKILL)?\n\nACHTUNG: Laufende Memory-Extraktion geht verloren – Konversations-Logs bleiben erhalten.`, async () => {
+  Modal.showDangerConfirm(t('status.force_stop_confirm', {instance: inst}), async () => {
     const r = await fetch(`/api/instances/${inst}/force-stop`, { method: 'POST' });
     const d = await r.json();
-    if (d.ok) { toast(`${inst} beendet ✓`, 'ok'); loadStatus(); }
-    else       { toast(`Kill fehlgeschlagen: ${(d.error||'?').substring(0,60)}`, 'err'); }
+    if (d.ok) { toast(t('status.force_stop_done', {instance: inst}), 'ok'); loadStatus(); }
+    else       { toast(t('status.force_stop_failed') + ': ' + (d.error||'?').substring(0,60), 'err'); }
   });
 }
 
 async function qdrantRestart() {
-  Modal.showConfirm('Qdrant neu starten? Laufende Vorgänge werden unterbrochen.', async () => {
+  Modal.showConfirm(t('status.qdrant_restart_confirm'), async () => {
     const r = await fetch('/api/qdrant/restart', { method: 'POST' });
     const d = await r.json();
-    if (d.ok) { toast('Qdrant wird neu gestartet ✓', 'ok'); setTimeout(loadStatus, 3000); }
-    else       { toast(`Qdrant Restart fehlgeschlagen: ${(d.error||'?').substring(0,60)}`, 'err'); }
+    if (d.ok) { toast(t('status.qdrant_restarting') + ' \u2713', 'ok'); setTimeout(loadStatus, 3000); }
+    else       { toast(t('status.qdrant_restart_failed') + ': ' + (d.error||'?').substring(0,60), 'err'); }
   });
 }
 
 async function deleteQdrantCollection(name) {
-  Modal.showDangerConfirm(`Collection "${name}" endgültig löschen?\n\nDanach Memory-Rebuild für betroffene Instanzen erforderlich.`, async () => {
+  Modal.showDangerConfirm(t('status.delete_collection_confirm', {name: name}), async () => {
     const r = await fetch(`/api/qdrant/collections/${encodeURIComponent(name)}`, { method: 'DELETE' });
     const d = await r.json();
-    toast(d.result === true ? `"${name}" gelöscht ✓` : `Fehler: ${JSON.stringify(d).substring(0,60)}`, d.result === true ? 'ok' : 'err');
+    toast(d.result === true ? t('status.collection_deleted', {name: name}) + ' \u2713' : t('common.error') + ': ' + JSON.stringify(d).substring(0,60), d.result === true ? 'ok' : 'err');
     loadStatus();
     loadMemoryStats();
   });

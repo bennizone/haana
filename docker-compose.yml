@@ -118,6 +118,7 @@ services:
       - haana-data:/data
       - /var/run/docker.sock:/var/run/docker.sock
       - /root/.claude:/claude-auth
+      - /home/haana/.local/share/claude/versions/2.1.70:/usr/local/bin/claude:ro
     restart: unless-stopped
     depends_on:
       qdrant:

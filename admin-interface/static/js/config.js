@@ -29,12 +29,12 @@ function renderConfig(c) {
       <div id="prov-${i}-body" style="display:none;padding:12px 14px;border-top:1px solid var(--border);">
         <div class="form-row">
           <div class="form-group">
-            <label>Name</label>
+            <label>${t('config_llm.name')}</label>
             <input type="text" id="prov-${i}-name" value="${escAttr(s.name||'')}"
               oninput="document.getElementById('prov-${i}-label').textContent=this.value||'Slot ${s.slot}';document.getElementById('prov-${i}-summary').textContent=(document.getElementById('prov-${i}-type').value||'?')+' · '+(document.getElementById('prov-${i}-model').value||'–')">
           </div>
           <div class="form-group">
-            <label>Typ</label>
+            <label>${t('config_llm.type')}</label>
             <select id="prov-${i}-type" onchange="document.getElementById('prov-${i}-summary').textContent=this.value+' · '+(document.getElementById('prov-${i}-model').value||'–')">
               ${['anthropic','minimax','ollama','custom'].map(t => `<option value="${t}" ${s.type===t?'selected':''}>${t}</option>`).join('')}
             </select>
@@ -46,12 +46,12 @@ function renderConfig(c) {
             <input type="url" id="prov-${i}-url" value="${escAttr(s.url||'')}">
           </div>
           <div class="form-group">
-            <label>API Key</label>
+            <label>${t('config_llm.api_key')}</label>
             <input type="password" id="prov-${i}-key" value="${escAttr(s.key||'')}">
           </div>
         </div>
         <div class="form-group" style="margin-bottom:10px;">
-          <label>Modell</label>
+          <label>${t('config_llm.model')}</label>
           <div style="display:flex;gap:6px;">
             <input type="text" id="prov-${i}-model" value="${escAttr(s.model||'')}" list="models-${i}" style="flex:1;"
               oninput="document.getElementById('prov-${i}-summary').textContent=(document.getElementById('prov-${i}-type').value||'?')+' · '+(this.value||'–')">
@@ -599,7 +599,7 @@ async function loadSttTtsEntities() {
     });
     if (prevTts) ttsEl.value = prevTts;
 
-    statusEl.textContent = `✓ ${d.stt.length} STT, ${d.tts.length} TTS Entities`;
+    statusEl.textContent = '\u2713 ' + d.stt.length + ' ' + t('config_services.stt_tts_entities', {tts: d.tts.length});
     statusEl.style.color = 'var(--green)';
   } catch(e) {
     statusEl.textContent = '✗ ' + e.message;
@@ -611,8 +611,8 @@ async function testHaConnection() {
   const el = document.getElementById('test-ha-result');
   const ha_url   = document.getElementById('svc-ha-url')?.value?.trim();
   const ha_token = document.getElementById('svc-ha-token')?.value?.trim();
-  if (!ha_url)   { el.textContent = '⚠ URL fehlt';   el.style.color = 'var(--yellow)'; return; }
-  if (!ha_token) { el.textContent = '⚠ Token fehlt'; el.style.color = 'var(--yellow)'; return; }
+  if (!ha_url)   { el.textContent = '\u26a0 ' + t('config_services.url_missing');   el.style.color = 'var(--yellow)'; return; }
+  if (!ha_token) { el.textContent = '\u26a0 ' + t('config_services.token_missing'); el.style.color = 'var(--yellow)'; return; }
   el.textContent = '…'; el.style.color = 'var(--muted)';
   try {
     const r = await fetch('/api/test-ha', {
@@ -651,7 +651,7 @@ function autoFillMcpUrl() {
   const mcpUrl = document.getElementById('svc-mcp-url');
   const hint   = document.getElementById('svc-mcp-url-hint');
   if (!haUrl) {
-    if (hint) { hint.textContent = t('config_services.ha_url') + ' fehlt'; hint.style.display = ''; hint.style.color = 'var(--yellow)'; }
+    if (hint) { hint.textContent = t('config_services.ha_url_missing'); hint.style.display = ''; hint.style.color = 'var(--yellow)'; }
     return;
   }
   const url = `${haUrl}/mcp_server/sse`;
@@ -670,8 +670,8 @@ async function testMcpConnection() {
     const haUrl = document.getElementById('svc-ha-url')?.value?.trim().replace(/\/$/, '');
     if (haUrl) mcp_url = `${haUrl}/mcp_server/sse`;
   }
-  if (!mcp_url) { el.textContent = '⚠ MCP URL fehlt'; el.style.color = 'var(--yellow)'; return; }
-  if (!token)   { el.textContent = '⚠ Token fehlt';   el.style.color = 'var(--yellow)'; return; }
+  if (!mcp_url) { el.textContent = '\u26a0 ' + t('config_services.mcp_url_missing'); el.style.color = 'var(--yellow)'; return; }
+  if (!token)   { el.textContent = '\u26a0 ' + t('config_services.token_missing');   el.style.color = 'var(--yellow)'; return; }
   el.textContent = '…'; el.style.color = 'var(--muted)';
   try {
     const r = await fetch('/api/test-ha-mcp', {
@@ -707,7 +707,7 @@ async function testProviderConn(i) {
   };
   if (!url && defaults[type]) url = defaults[type];
 
-  if (!url) { el.textContent = '⚠ Keine URL konfiguriert'; el.style.color = 'var(--yellow)'; return; }
+  if (!url) { el.textContent = '\u26a0 ' + t('config_llm.no_url_configured'); el.style.color = 'var(--yellow)'; return; }
 
   el.textContent = '…'; el.style.color = 'var(--muted)';
 
@@ -720,7 +720,7 @@ async function testProviderConn(i) {
       });
       const d = await r.json();
       const count = d.models?.length ?? 0;
-      el.textContent = count > 0 ? `✓ Verbunden · ${count} Modelle` : '⚠ Verbunden, aber keine Modelle gefunden';
+      el.textContent = count > 0 ? '\u2713 ' + t('config_llm.connected') + ' \u00b7 ' + count + ' ' + t('config_llm.models_label') : '\u26a0 ' + t('config_llm.connected_no_models');
       el.style.color = count > 0 ? 'var(--green)' : 'var(--yellow)';
     } catch(e) { el.textContent = '✗ ' + e.message; el.style.color = 'var(--red)'; }
     return;
@@ -743,7 +743,7 @@ async function testProviderConn(i) {
 async function checkClaudeAuth() {
   const el = document.getElementById('claude-auth-status');
   if (!el) return;
-  el.textContent = 'Prüfe...';
+  el.textContent = t('config_services.auth_checking');
   el.style.color = '';
   try {
     const r = await fetch('/api/claude-auth/status');
@@ -763,9 +763,9 @@ async function uploadClaudeAuth() {
   const result = document.getElementById('claude-auth-upload-result');
   if (!textarea || !result) return;
   const raw = textarea.value.trim();
-  if (!raw) { result.textContent = 'Bitte Credentials einfügen'; result.style.color = 'var(--red)'; return; }
+  if (!raw) { result.textContent = t('config_services.auth_paste_prompt'); result.style.color = 'var(--red)'; return; }
   let creds;
-  try { creds = JSON.parse(raw); } catch(e) { result.textContent = 'Ungültiges JSON'; result.style.color = 'var(--red)'; return; }
+  try { creds = JSON.parse(raw); } catch(e) { result.textContent = t('config_services.auth_invalid_json'); result.style.color = 'var(--red)'; return; }
   try {
     const r = await fetch('/api/claude-auth/upload', {
       method: 'POST', headers: {'Content-Type':'application/json'},
@@ -776,4 +776,56 @@ async function uploadClaudeAuth() {
     result.style.color = d.ok ? 'var(--green)' : 'var(--red)';
     if (d.ok) { textarea.value = ''; checkClaudeAuth(); }
   } catch(e) { result.textContent = '✗ ' + e.message; result.style.color = 'var(--red)'; }
+}
+
+async function startOAuthLogin() {
+  const statusEl = document.getElementById('oauth-login-status');
+  const urlEl = document.getElementById('oauth-login-url');
+  const codeSection = document.getElementById('oauth-code-section');
+  if (!statusEl) return;
+
+  statusEl.innerHTML = `<span style="color:var(--muted)">${t('config_services.auth_checking')}</span>`;
+  urlEl.innerHTML = '';
+  codeSection.style.display = 'none';
+
+  try {
+    const r = await fetch('/api/claude-auth/login/start', { method: 'POST' });
+    const d = await r.json();
+    if (!d.ok) {
+      statusEl.innerHTML = `<span style="color:var(--red)">✗ ${d.detail}</span>`;
+      return;
+    }
+    statusEl.innerHTML = `<span style="color:var(--green)">${t('config_services.oauth_url_ready')}</span>`;
+    urlEl.innerHTML = `<a href="${d.url}" target="_blank" rel="noopener" style="word-break:break-all;color:var(--accent);">${t('config_services.oauth_open_link')}</a>`;
+    codeSection.style.display = 'block';
+    document.getElementById('oauth-code-input').value = '';
+    document.getElementById('oauth-code-result').textContent = '';
+  } catch(e) {
+    statusEl.innerHTML = `<span style="color:var(--red)">✗ ${e.message}</span>`;
+  }
+}
+
+async function completeOAuthLogin() {
+  const codeInput = document.getElementById('oauth-code-input');
+  const resultEl = document.getElementById('oauth-code-result');
+  if (!codeInput || !resultEl) return;
+
+  const code = codeInput.value.trim();
+  if (!code) { resultEl.textContent = t('config_services.oauth_code_missing'); resultEl.style.color = 'var(--red)'; return; }
+
+  resultEl.innerHTML = `<span style="color:var(--muted)">${t('config_services.auth_checking')}</span>`;
+  try {
+    const r = await fetch('/api/claude-auth/login/complete', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ code }),
+    });
+    const d = await r.json();
+    resultEl.textContent = d.ok ? `✓ ${d.detail}` : `✗ ${d.detail}`;
+    resultEl.style.color = d.ok ? 'var(--green)' : 'var(--red)';
+    if (d.ok) {
+      codeInput.value = '';
+      document.getElementById('oauth-code-section').style.display = 'none';
+      checkClaudeAuth();
+    }
+  } catch(e) { resultEl.textContent = '✗ ' + e.message; resultEl.style.color = 'var(--red)'; }
 }

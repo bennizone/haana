@@ -23,13 +23,18 @@ Routen:
 """
 
 import asyncio
+import http.client
 import json
 import os
+import pty
 import re
+import select
+import signal
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse, parse_qs
 import glob as _glob
 
 from fastapi import FastAPI, HTTPException, Request
@@ -1715,6 +1720,198 @@ async def claude_auth_upload(request: Request):
         return {"ok": True, "detail": "Credentials gespeichert. Container müssen neu gestartet werden."}
     except Exception as e:
         return {"ok": False, "detail": str(e)[:200]}
+
+
+# ── Claude OAuth Login Flow ──────────────────────────────────────────────────
+
+# Stores active login session: {pid, fd, port, state, url}
+_oauth_login_session: dict | None = None
+
+
+def _cleanup_oauth_session():
+    """Kill any running oauth login process."""
+    global _oauth_login_session
+    if _oauth_login_session:
+        try:
+            os.kill(_oauth_login_session["pid"], signal.SIGKILL)
+            os.waitpid(_oauth_login_session["pid"], os.WNOHANG)
+        except (ProcessLookupError, ChildProcessError):
+            pass
+        try:
+            os.close(_oauth_login_session["fd"])
+        except OSError:
+            pass
+        _oauth_login_session = None
+
+
+def _start_oauth_login_sync():
+    """Blocking: spawn claude auth login, extract URL and callback port."""
+    global _oauth_login_session
+
+    _cleanup_oauth_session()
+
+    tmp_home = "/tmp/claude-oauth-login"
+    os.makedirs(f"{tmp_home}/.claude", exist_ok=True)
+
+    env = os.environ.copy()
+    env["HOME"] = tmp_home
+
+    pid, fd = pty.fork()
+    if pid == 0:
+        for k, v in env.items():
+            os.environ[k] = v
+        os.execvp("claude", ["claude", "auth", "login"])
+        os._exit(1)
+
+    # Read output until we get the URL
+    output = b""
+    end_time = time.time() + 10
+    while time.time() < end_time:
+        r, _, _ = select.select([fd], [], [], 1)
+        if r:
+            try:
+                data = os.read(fd, 4096)
+                if not data:
+                    break
+                output += data
+            except OSError:
+                break
+
+    text = output.decode("utf-8", errors="replace")
+
+    url_match = re.search(r"(https://claude\.ai/oauth/authorize\S+)", text)
+    if not url_match:
+        _cleanup_oauth_session()
+        return {"ok": False, "detail": "Could not extract OAuth URL from claude auth login"}
+
+    auth_url = url_match.group(1)
+    parsed = urlparse(auth_url)
+    qs = parse_qs(parsed.query)
+    state_val = qs.get("state", [""])[0]
+
+    # Find the local callback port via /proc/net/tcp{,6}
+    port = None
+    time.sleep(1)  # give claude time to open the port
+    try:
+        child_inodes = set()
+        for fd_entry in Path(f"/proc/{pid}/fd").iterdir():
+            try:
+                target = os.readlink(str(fd_entry))
+                if target.startswith("socket:["):
+                    child_inodes.add(target.split("[")[1].rstrip("]"))
+            except (OSError, IndexError):
+                continue
+
+        localhost_v4 = {"0100007F", "0B00007F"}
+        localhost_v6 = {"00000000000000000000000001000000"}
+        is_ipv6 = False
+        for tcp_file in ["/proc/net/tcp", "/proc/net/tcp6"]:
+            try:
+                with open(tcp_file) as f:
+                    for line in f:
+                        parts = line.strip().split()
+                        if len(parts) < 10 or parts[3] != "0A":
+                            continue
+                        addr_hex, port_hex = parts[1].rsplit(":", 1)
+                        if parts[9] in child_inodes and (
+                            addr_hex in localhost_v4 or addr_hex in localhost_v6
+                        ):
+                            port = int(port_hex, 16)
+                            is_ipv6 = addr_hex in localhost_v6
+                            break
+            except FileNotFoundError:
+                continue
+            if port:
+                break
+    except Exception:
+        pass
+
+    if not port:
+        _cleanup_oauth_session()
+        return {"ok": False, "detail": "Could not find local callback port"}
+
+    callback_host = "::1" if is_ipv6 else "127.0.0.1"
+    _oauth_login_session = {
+        "pid": pid, "fd": fd, "port": port, "host": callback_host,
+        "state": state_val, "url": auth_url, "tmp_home": tmp_home,
+    }
+    return {"ok": True, "url": auth_url, "state": state_val}
+
+
+@app.post("/api/claude-auth/login/start")
+async def claude_auth_login_start():
+    """Start OAuth login: spawns 'claude auth login', returns the auth URL."""
+    return await asyncio.to_thread(_start_oauth_login_sync)
+
+
+def _complete_oauth_login_sync(code: str):
+    """Blocking: send authorization code to the local callback server."""
+    global _oauth_login_session
+
+    if not _oauth_login_session:
+        return {"ok": False, "detail": "No active login session. Start login first."}
+
+    port = _oauth_login_session["port"]
+    state_val = _oauth_login_session["state"]
+    fd = _oauth_login_session["fd"]
+    tmp_home = _oauth_login_session["tmp_home"]
+    callback_host = _oauth_login_session["host"]
+
+    # Send code to the local callback server
+    try:
+        conn = http.client.HTTPConnection(callback_host, port, timeout=10)
+        conn.request("GET", f"/callback?code={code}&state={state_val}")
+        resp = conn.getresponse()
+        resp.read()
+        conn.close()
+    except Exception as e:
+        _cleanup_oauth_session()
+        return {"ok": False, "detail": f"Callback failed: {e}"}
+
+    # Wait for process to finish and read remaining output
+    time.sleep(2)
+    pty_text = ""
+    try:
+        r, _, _ = select.select([fd], [], [], 3)
+        if r:
+            pty_text = os.read(fd, 8192).decode("utf-8", errors="replace")
+    except OSError:
+        pass
+
+    success = "Login failed" not in pty_text and resp.status < 400
+
+    if success:
+        tmp_creds = Path(tmp_home) / ".claude" / ".credentials.json"
+        if tmp_creds.is_file():
+            try:
+                creds_data = tmp_creds.read_text(encoding="utf-8")
+                CLAUDE_AUTH_DIR.mkdir(parents=True, exist_ok=True)
+                dest = CLAUDE_AUTH_DIR / ".credentials.json"
+                dest.write_text(creds_data, encoding="utf-8")
+                os.chmod(dest, 0o600)
+                import subprocess
+                subprocess.run(["chown", "1000:1000", str(dest)], check=False)
+            except Exception as e:
+                _cleanup_oauth_session()
+                return {"ok": False, "detail": f"Login succeeded but credential copy failed: {e}"}
+
+    _cleanup_oauth_session()
+
+    if success:
+        return {"ok": True, "detail": "Login successful. Credentials saved."}
+    # Strip ANSI escape codes from error output
+    clean = re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", pty_text).strip()
+    return {"ok": False, "detail": f"Login failed. {clean[:200]}"}
+
+
+@app.post("/api/claude-auth/login/complete")
+async def claude_auth_login_complete(request: Request):
+    """Complete OAuth login: send the authorization code to the local callback."""
+    body = await request.json()
+    code = body.get("code", "").strip()
+    if not code:
+        return {"ok": False, "detail": "Authorization code missing"}
+    return await asyncio.to_thread(_complete_oauth_login_sync, code)
 
 
 # ── SSE: Echtzeit-Konversationen ──────────────────────────────────────────────
