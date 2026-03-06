@@ -502,6 +502,36 @@
       </div>
     </div>
 
+    <!-- Claude Auth -->
+    <div class="config-section">
+      <div class="config-section-header" data-i18n="config_services.claude_auth_title">Claude OAuth</div>
+      <div class="config-section-body">
+        <p class="form-hint" style="margin-bottom:14px;" data-i18n="config_services.claude_auth_desc">
+          Claude Code Agent SDK benötigt eine gültige OAuth-Session. Der Token muss regelmäßig erneuert werden.
+        </p>
+        <div class="form-row">
+          <div class="form-group" style="flex:2;">
+            <label data-i18n="config_services.auth_status">Status</label>
+            <div class="form-inline">
+              <span id="claude-auth-status" class="form-hint">Prüfe...</span>
+              <button class="btn btn-sm btn-secondary" onclick="checkClaudeAuth()" data-i18n="config_services.auth_check">Prüfen</button>
+            </div>
+          </div>
+        </div>
+        <div id="claude-auth-upload-area" style="margin-top:12px;">
+          <label data-i18n="config_services.auth_upload_label">Credentials manuell einfügen</label>
+          <p class="form-hint" style="margin-bottom:8px;" data-i18n="config_services.auth_upload_hint">
+            Inhalt der Datei ~/.claude/.credentials.json von einer eingeloggten Claude Code Session einfügen.
+          </p>
+          <textarea id="claude-auth-creds" rows="4" style="width:100%;font-family:monospace;font-size:12px;"
+            placeholder='{"claudeAiOauth":{"accessToken":"...","refreshToken":"...","expiresAt":...}}'></textarea>
+          <button class="btn btn-sm btn-primary" style="margin-top:8px;"
+            onclick="uploadClaudeAuth()" data-i18n="config_services.auth_upload_btn">Credentials speichern</button>
+          <span id="claude-auth-upload-result" class="form-hint" style="margin-left:12px;"></span>
+        </div>
+      </div>
+    </div>
+
     <!-- Geplante Infra-Features -->
     <div class="config-section muted">
       <div class="config-section-header">Geplante Features</div>

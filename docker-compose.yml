@@ -117,6 +117,7 @@ services:
       - ./instanzen:/app/instanzen
       - haana-data:/data
       - /var/run/docker.sock:/var/run/docker.sock
+      - /root/.claude:/claude-auth
     restart: unless-stopped
     depends_on:
       qdrant:

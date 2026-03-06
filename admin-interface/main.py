@@ -1615,6 +1615,102 @@ async def agent_health(instance: str):
         return {"ok": False, "error": str(e)}
 
 
+# ── Claude Auth Management ────────────────────────────────────────────────────
+
+CLAUDE_AUTH_DIR = Path("/claude-auth")       # gemountet via docker-compose
+CLAUDE_AUTH_HOST = Path("/root/.claude")     # Host-Pfad (für Referenz)
+
+@app.get("/api/claude-auth/status")
+async def claude_auth_status():
+    """Prüft ob gültige Claude OAuth-Credentials vorliegen."""
+    creds_file = CLAUDE_AUTH_DIR / ".credentials.json"
+    if not creds_file.exists():
+        return {"ok": False, "status": "no_credentials", "detail": "Keine Credentials gefunden"}
+    try:
+        creds = json.loads(creds_file.read_text(encoding="utf-8"))
+        oauth = creds.get("claudeAiOauth", {})
+        if not oauth.get("accessToken"):
+            return {"ok": False, "status": "no_token", "detail": "Kein Access-Token"}
+        expires_at = oauth.get("expiresAt", 0) / 1000
+        now = time.time()
+        if now > expires_at:
+            hours_ago = (now - expires_at) / 3600
+            return {"ok": False, "status": "expired", "detail": f"Token abgelaufen (vor {hours_ago:.1f}h)"}
+        hours_left = (expires_at - now) / 3600
+        return {"ok": True, "status": "valid", "detail": f"Token gültig (noch {hours_left:.1f}h)",
+                "expires_in_hours": round(hours_left, 1)}
+    except Exception as e:
+        return {"ok": False, "status": "error", "detail": str(e)[:200]}
+
+
+@app.post("/api/claude-auth/refresh")
+async def claude_auth_refresh():
+    """Versucht den OAuth-Token per Refresh-Token zu erneuern.
+    Nutzt einen laufenden Agent-Container um den CLI-Befehl auszuführen."""
+    if not _docker_client:
+        return {"ok": False, "detail": "Docker nicht verfügbar"}
+
+    # Finde einen laufenden Agent-Container
+    try:
+        containers = _docker_client.containers.list(
+            filters={"status": "running", "name": "haana-instanz"})
+        if not containers:
+            return {"ok": False, "detail": "Kein laufender Agent-Container gefunden"}
+        container = containers[0]
+
+        # auth status prüfen
+        result = container.exec_run(
+            cmd=["/usr/local/lib/python3.13/site-packages/claude_agent_sdk/_bundled/claude",
+                 "auth", "status"],
+            user="haana", environment={"HOME": "/home/haana"})
+        status_out = result.output.decode("utf-8", errors="replace").strip()
+
+        try:
+            status_data = json.loads(status_out.split("\n")[0])
+        except Exception:
+            status_data = {}
+
+        if status_data.get("loggedIn"):
+            return {"ok": True, "detail": "Bereits eingeloggt", "status": status_data}
+
+        # Token ist abgelaufen - Credentials-Datei neu von laufender Session kopieren
+        # Falls eine Claude Code Session auf dem Host läuft, hat sie den Token refreshed
+        return {"ok": False, "detail": "Token abgelaufen. Bitte manuell erneuern (siehe Anleitung).",
+                "status": status_data}
+    except Exception as e:
+        return {"ok": False, "detail": str(e)[:200]}
+
+
+@app.post("/api/claude-auth/upload")
+async def claude_auth_upload(request: Request):
+    """Credentials-Datei hochladen (JSON mit claudeAiOauth)."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Ungültiges JSON")
+
+    creds = body.get("credentials")
+    if not creds or not isinstance(creds, dict):
+        raise HTTPException(400, "Feld 'credentials' fehlt oder ungültig")
+
+    # Validierung: muss claudeAiOauth mit accessToken enthalten
+    oauth = creds.get("claudeAiOauth", {})
+    if not oauth.get("accessToken") or not oauth.get("refreshToken"):
+        raise HTTPException(400, "Credentials müssen claudeAiOauth mit accessToken und refreshToken enthalten")
+
+    creds_file = CLAUDE_AUTH_DIR / ".credentials.json"
+    try:
+        CLAUDE_AUTH_DIR.mkdir(parents=True, exist_ok=True)
+        creds_file.write_text(json.dumps(creds, indent=2), encoding="utf-8")
+        # Permissions für Container-User
+        os.chmod(creds_file, 0o644)
+        import subprocess
+        subprocess.run(["chown", "1000:1000", str(creds_file)], check=False)
+        return {"ok": True, "detail": "Credentials gespeichert. Container müssen neu gestartet werden."}
+    except Exception as e:
+        return {"ok": False, "detail": str(e)[:200]}
+
+
 # ── SSE: Echtzeit-Konversationen ──────────────────────────────────────────────
 
 @app.get("/api/events/{instance}")

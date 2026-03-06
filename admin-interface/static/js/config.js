@@ -737,3 +737,43 @@ async function testProviderConn(i) {
     el.style.color = d.ok ? 'var(--green)' : 'var(--red)';
   } catch(e) { el.textContent = '✗ ' + e.message; el.style.color = 'var(--red)'; }
 }
+
+// ── Claude Auth ─────────────────────────────────────────────────────────────
+
+async function checkClaudeAuth() {
+  const el = document.getElementById('claude-auth-status');
+  if (!el) return;
+  el.textContent = 'Prüfe...';
+  el.style.color = '';
+  try {
+    const r = await fetch('/api/claude-auth/status');
+    const d = await r.json();
+    if (d.ok) {
+      el.innerHTML = `<span style="color:var(--green)">✓ ${d.detail}</span>`;
+    } else {
+      el.innerHTML = `<span style="color:var(--red)">✗ ${d.detail}</span>`;
+    }
+  } catch(e) {
+    el.innerHTML = `<span style="color:var(--red)">✗ ${e.message}</span>`;
+  }
+}
+
+async function uploadClaudeAuth() {
+  const textarea = document.getElementById('claude-auth-creds');
+  const result = document.getElementById('claude-auth-upload-result');
+  if (!textarea || !result) return;
+  const raw = textarea.value.trim();
+  if (!raw) { result.textContent = 'Bitte Credentials einfügen'; result.style.color = 'var(--red)'; return; }
+  let creds;
+  try { creds = JSON.parse(raw); } catch(e) { result.textContent = 'Ungültiges JSON'; result.style.color = 'var(--red)'; return; }
+  try {
+    const r = await fetch('/api/claude-auth/upload', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ credentials: creds }),
+    });
+    const d = await r.json();
+    result.textContent = d.ok ? `✓ ${d.detail}` : `✗ ${d.detail || d.error}`;
+    result.style.color = d.ok ? 'var(--green)' : 'var(--red)';
+    if (d.ok) { textarea.value = ''; checkClaudeAuth(); }
+  } catch(e) { result.textContent = '✗ ' + e.message; result.style.color = 'var(--red)'; }
+}

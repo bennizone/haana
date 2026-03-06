@@ -141,7 +141,14 @@
     "infra_title": "Infrastruktur",
     "ollama_url": "Ollama URL",
     "qdrant_url": "Qdrant URL",
-    "test": "Test"
+    "test": "Test",
+    "claude_auth_title": "Claude OAuth",
+    "claude_auth_desc": "Claude Code Agent SDK benötigt eine gültige OAuth-Session. Der Token muss regelmäßig erneuert werden.",
+    "auth_status": "Status",
+    "auth_check": "Prüfen",
+    "auth_upload_label": "Credentials manuell einfügen",
+    "auth_upload_hint": "Inhalt der Datei ~/.claude/.credentials.json von einer eingeloggten Claude Code Session einfügen.",
+    "auth_upload_btn": "Credentials speichern"
   },
   "config_logs": {
     "retention_title": "Log-Retention",
