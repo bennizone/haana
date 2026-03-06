@@ -21,7 +21,7 @@ function channelBadge(ch) {
 function renderConversations(records) {
   const list = document.getElementById('conv-list');
   if (!records.length) {
-    list.innerHTML = '<div class="empty-state"><div class="icon">--</div><div>Noch keine Konversationen für diese Instanz.</div></div>';
+    list.innerHTML = '<div class="empty-state"><div class="icon">--</div><div>' + t('chat.no_conversations_instance') + '</div></div>';
     return;
   }
   list.innerHTML = records.map((r, i) => {
@@ -35,7 +35,7 @@ function renderConversations(records) {
     const memHits = r.memory_hits > 0 ? ` (${r.memory_hits})` : '';
     const memBadge = r.memory_used
       ? `<span class="mem-badge mem-yes">Memory${memHits}</span>`
-      : '<span class="mem-badge mem-no">kein Memory</span>';
+      : '<span class="mem-badge mem-no">' + t('chat.no_memory') + '</span>';
 
     return `
     <div class="conv-card" id="card-${i}">
@@ -45,7 +45,7 @@ function renderConversations(records) {
           ${channelBadge(r.channel || 'repl')}
         </div>
         <div class="conv-messages">
-          <div class="conv-user"><strong>Du:</strong> ${user}${r.user?.length > 120 ? '…' : ''}</div>
+          <div class="conv-user"><strong>${t('chat.you')}</strong> ${user}${r.user?.length > 120 ? '…' : ''}</div>
           <div class="conv-assistant"><em>${asst}${r.assistant?.length > 200 ? '…' : ''}</em></div>
         </div>
         <div class="expand-icon">›</div>
@@ -53,23 +53,23 @@ function renderConversations(records) {
       <div class="conv-details">
         <div class="detail-grid">
           <div class="detail-box">
-            <div class="detail-label">User (vollständig)</div>
+            <div class="detail-label">${t('chat.user_full')}</div>
             <div class="detail-value">${escHtml(r.user || '')}</div>
           </div>
           <div class="detail-box">
-            <div class="detail-label">HAANA Antwort</div>
+            <div class="detail-label">${t('chat.haana_response')}</div>
             <div class="detail-value">${escHtml(r.assistant || '')}</div>
           </div>
           <div class="detail-box">
-            <div class="detail-label">Meta</div>
+            <div class="detail-label">${t('chat.meta')}</div>
             <div class="detail-value">
               ${memBadge}<br>
               <span class="latency">${r.latency_s ?? '–'}s</span>
             </div>
           </div>
           <div class="detail-box">
-            <div class="detail-label">Tool-Aufrufe</div>
-            <div class="detail-value">${tools || '<span style="color:var(--muted)">keine</span>'}</div>
+            <div class="detail-label">${t('chat.tool_calls')}</div>
+            <div class="detail-value">${tools || '<span style="color:var(--muted)">' + t('chat.no_tools') + '</span>'}</div>
           </div>
         </div>
       </div>
@@ -92,14 +92,14 @@ function startSSE(inst) {
     const msg = JSON.parse(e.data);
     if (msg.type === 'connected') {
       dot.classList.remove('offline');
-      label.textContent = 'Live';
+      label.textContent = t('chat.live');
     } else if (msg.type === 'conversation') {
       prependConversation(msg.record);
     }
   };
   sse.onerror = () => {
     dot.classList.add('offline');
-    label.textContent = 'Offline';
+    label.textContent = t('chat.sse_offline');
   };
 }
 
@@ -129,17 +129,17 @@ function renderSingleConv(r, cardId) {
         ${memBadge}
       </div>
       <div class="conv-messages">
-        <div class="conv-user"><strong>Du:</strong> ${user}</div>
+        <div class="conv-user"><strong>${t('chat.you')}</strong> ${user}</div>
         <div class="conv-assistant"><em>${asst}</em></div>
       </div>
       <div class="expand-icon">›</div>
     </div>
     <div class="conv-details">
       <div class="detail-grid">
-        <div class="detail-box"><div class="detail-label">User</div><div class="detail-value">${escHtml(r.user||'')}</div></div>
-        <div class="detail-box"><div class="detail-label">HAANA</div><div class="detail-value">${escHtml(r.assistant||'')}</div></div>
-        <div class="detail-box"><div class="detail-label">Latenz</div><div class="detail-value latency">${r.latency_s??'–'}s</div></div>
-        <div class="detail-box"><div class="detail-label">Tools</div><div class="detail-value">${tools||'–'}</div></div>
+        <div class="detail-box"><div class="detail-label">${t('conv.user_message')}</div><div class="detail-value">${escHtml(r.user||'')}</div></div>
+        <div class="detail-box"><div class="detail-label">${t('conv.assistant')}</div><div class="detail-value">${escHtml(r.assistant||'')}</div></div>
+        <div class="detail-box"><div class="detail-label">${t('chat.latency')}</div><div class="detail-value latency">${r.latency_s??'–'}s</div></div>
+        <div class="detail-box"><div class="detail-label">${t('conv.tools')}</div><div class="detail-value">${tools||'–'}</div></div>
       </div>
     </div>
   </div>`;
@@ -164,7 +164,7 @@ async function sendChat() {
   input.style.borderColor = 'var(--border)';
   btn.disabled = true;
   btn.textContent = '...';
-  status.textContent = `⏳ ${currentInstance} denkt nach...`;
+  status.textContent = '\u23f3 ' + currentInstance + ' ' + t('chat.thinking');
 
   // Optimistisch sofort anzeigen
   const tempId = 'pending-' + Date.now();
@@ -179,7 +179,7 @@ async function sendChat() {
 
     if (!r.ok) {
       const err = await r.json().catch(() => ({detail: r.statusText}));
-      const errMsg = err.detail || 'Unbekannter Fehler';
+      const errMsg = err.detail || t('chat.unknown_error');
       updatePendingMessage(tempId, msg, '❌ ' + errMsg, true);
       status.textContent = '❌ ' + errMsg;
     } else {
@@ -188,12 +188,12 @@ async function sendChat() {
       status.textContent = '';
     }
   } catch(e) {
-    updatePendingMessage(tempId, msg, '❌ Verbindungsfehler: ' + e.message, true);
-    status.textContent = '❌ ' + e.message;
+    updatePendingMessage(tempId, msg, '\u274c ' + t('chat.connection_error') + ': ' + e.message, true);
+    status.textContent = '\u274c ' + e.message;
   }
 
   btn.disabled = false;
-  btn.textContent = 'Senden ↵';
+  btn.textContent = t('chat.send_btn');
   input.focus();
 }
 
@@ -211,7 +211,7 @@ function prependPendingMessage(userMsg, cardId) {
         <span class="channel-badge ch-webchat">Webchat</span>
       </div>
       <div class="conv-messages">
-        <div class="conv-user"><strong>Du:</strong> ${escHtml(userMsg)}</div>
+        <div class="conv-user"><strong>${t('chat.you')}</strong> ${escHtml(userMsg)}</div>
         <div class="conv-assistant" id="${cardId}-resp" style="color:var(--muted);">
           <span style="animation:pulse 1s infinite;">…</span>
         </div>
@@ -239,8 +239,8 @@ function updatePendingMessage(cardId, userMsg, response, isError) {
     card.insertAdjacentHTML('beforeend', `
       <div class="conv-details">
         <div class="detail-grid">
-          <div class="detail-box"><div class="detail-label">User (vollständig)</div><div class="detail-value">${escHtml(userMsg)}</div></div>
-          <div class="detail-box"><div class="detail-label">HAANA Antwort</div><div class="detail-value">${escHtml(response)}</div></div>
+          <div class="detail-box"><div class="detail-label">${t('chat.user_full')}</div><div class="detail-value">${escHtml(userMsg)}</div></div>
+          <div class="detail-box"><div class="detail-label">${t('chat.haana_response')}</div><div class="detail-value">${escHtml(response)}</div></div>
         </div>
       </div>`);
     const expandIcon = document.createElement('div');
@@ -255,10 +255,10 @@ async function checkAgentHealth(inst) {
   try {
     const r = await fetch(`/api/agent-health/${inst}`);
     const d = await r.json();
-    el.textContent = d.ok ? '● Agent online' : '● Agent offline';
+    el.textContent = d.ok ? '\u25cf ' + t('chat.agent_online') : '\u25cf ' + t('chat.agent_offline');
     el.style.color  = d.ok ? 'var(--green)' : 'var(--red)';
   } catch {
-    el.textContent = '● Agent nicht erreichbar';
+    el.textContent = '\u25cf ' + t('chat.agent_unreachable');
     el.style.color = 'var(--red)';
   }
 }

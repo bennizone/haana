@@ -6,7 +6,7 @@ async function loadConfig() {
     const r = await fetch('/api/config');
     cfg = await r.json();
     renderConfig(cfg);
-  } catch(e) { toast('Config-Laden fehlgeschlagen: ' + e.message, 'err'); }
+  } catch(e) { toast(t('config.load_failed') + ': ' + e.message, 'err'); }
 }
 
 function renderConfig(c) {
@@ -42,7 +42,7 @@ function renderConfig(c) {
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label>URL <span style="font-size:11px;color:var(--muted);">(leer = Standard des Providers)</span></label>
+            <label>${t('config_llm.url')} <span style="font-size:11px;color:var(--muted);">(${t('config_llm.url_hint')})</span></label>
             <input type="url" id="prov-${i}-url" value="${escAttr(s.url||'')}">
           </div>
           <div class="form-group">
@@ -57,20 +57,20 @@ function renderConfig(c) {
               oninput="document.getElementById('prov-${i}-summary').textContent=(document.getElementById('prov-${i}-type').value||'?')+' · '+(this.value||'–')">
             <datalist id="models-${i}"></datalist>
             <button class="btn btn-secondary" style="font-size:11px;padding:4px 10px;flex-shrink:0;"
-              onclick="fetchModels(${i})">Modelle</button>
+              onclick="fetchModels(${i})">${t('config_llm.fetch_models')}</button>
             <span id="prov-${i}-models-status" style="font-size:11px;color:var(--muted);align-self:center;"></span>
           </div>
         </div>
         <div style="display:flex;gap:10px;align-items:center;">
           <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;"
-            onclick="testProviderConn(${i})">Verbindung testen</button>
+            onclick="testProviderConn(${i})">${t('config_llm.test_connection')}</button>
           <span id="prov-${i}-test" style="font-size:12px;color:var(--muted);"></span>
         </div>
       </div>
     </div>
   `).join('') + `
     <div style="margin-top:12px;">
-      <button class="btn btn-secondary" onclick="addLlmSlot()">+ Slot hinzufügen</button>
+      <button class="btn btn-secondary" onclick="addLlmSlot()">+ ${t('config_llm.add_slot')}</button>
     </div>`;
 
   // Memory
@@ -155,14 +155,14 @@ const RESTART_FIELDS = {
   'services.qdrant_url':     'Qdrant URL',
   'services.ha_url':         'Home Assistant URL',
   'services.ha_token':       'Home Assistant Token',
-  'services.ha_mcp_enabled': 'HA MCP aktiviert',
-  'services.ha_mcp_type':    'HA MCP Typ',
+  'services.ha_mcp_enabled': 'HA MCP',
+  'services.ha_mcp_type':    'HA MCP Type',
   'services.ha_mcp_url':     'HA MCP URL',
   'services.ha_mcp_token':   'HA MCP Token',
-  'memory.window_size':      'Window-Größe',
-  'memory.window_minutes':   'Window-Alter (Minuten)',
-  'embedding.model':         'Embedding-Modell',
-  'embedding.dims':          'Embedding-Dimensionen',
+  'memory.window_size':      'Window Size',
+  'memory.window_minutes':   'Window Age',
+  'embedding.model':         'Embedding Model',
+  'embedding.dims':          'Embedding Dims',
 };
 // LLM-Slot-Felder (model/url/key) erfordern ebenfalls Neustart
 const RESTART_LLM_FIELDS = ['model', 'url', 'key', 'type'];
@@ -273,46 +273,46 @@ async function saveConfig() {
     if (r.ok) {
       const restartChanges = _detectRestartChanges(cfg, newCfg);
       cfg = newCfg;
-      toast('Konfiguration gespeichert', 'ok');
-      if (statusEl) { statusEl.style.color = 'var(--green)'; statusEl.textContent = '✓ Gespeichert'; setTimeout(() => { statusEl.textContent = ''; }, 3000); }
+      toast(t('config.config_saved'), 'ok');
+      if (statusEl) { statusEl.style.color = 'var(--green)'; statusEl.textContent = '\u2713 ' + t('config.saved'); setTimeout(() => { statusEl.textContent = ''; }, 3000); }
 
       // Neustart anbieten wenn restart-relevante Felder geändert wurden
       if (restartChanges.length > 0) {
         const changedList = restartChanges.join('\n  - ');
         Modal.show({
-          title: 'Neustart erforderlich',
-          body: `<p class="modal-message">${escHtml('Folgende Änderungen erfordern einen Neustart:\n\n- ' + changedList + '\n\nBeim Neustart wird das Sliding Window ins Memory extrahiert. Der Konversationskontext geht verloren.').replace(/\n/g, '<br>')}</p>`,
-          confirmText: 'Jetzt neu starten',
+          title: t('config.restart_title'),
+          body: `<p class="modal-message">${escHtml(t('config.restart_changes_intro') + '\n\n- ' + changedList + '\n\n' + t('config.restart_changes_warning')).replace(/\n/g, '<br>')}</p>`,
+          confirmText: t('config.restart_now'),
           onConfirm: async () => { await restartAllAgents(); },
-          onCancel: () => { toast('Neustart ausstehend – Änderungen erst nach manuellem Neustart wirksam', 'warn'); },
+          onCancel: () => { toast(t('config.restart_pending'), 'warn'); },
         });
       }
     } else {
-      toast('Fehler beim Speichern', 'err');
-      if (statusEl) { statusEl.style.color = 'var(--red)'; statusEl.textContent = '✗ Fehler'; }
+      toast(t('config.save_error'), 'err');
+      if (statusEl) { statusEl.style.color = 'var(--red)'; statusEl.textContent = '\u2717 ' + t('config.error_label'); }
     }
   } catch(e) {
     toast(e.message, 'err');
-    if (statusEl) { statusEl.style.color = 'var(--red)'; statusEl.textContent = '✗ ' + e.message; }
+    if (statusEl) { statusEl.style.color = 'var(--red)'; statusEl.textContent = '\u2717 ' + e.message; }
   }
 }
 
 async function restartAllAgents() {
-  toast('Agenten werden neu gestartet...', 'ok');
+  toast(t('config.restarting'), 'ok');
   try {
     const r = await fetch('/api/instances/restart-all', { method: 'POST' });
     const data = await r.json();
     if (data.ok) {
-      toast('Alle Agenten neu gestartet', 'ok');
+      toast(t('config.restart_success'), 'ok');
     } else {
       const failed = Object.entries(data.results || {})
         .filter(([, v]) => !v.ok)
-        .map(([k, v]) => `${k}: ${v.error || 'Fehler'}`)
+        .map(([k, v]) => `${k}: ${v.error || t('common.error')}`)
         .join(', ');
-      toast('Teilweise fehlgeschlagen: ' + (failed || 'Unbekannter Fehler'), 'err');
+      toast(t('config.restart_partial') + ': ' + (failed || t('chat.unknown_error')), 'err');
     }
   } catch(e) {
-    toast('Neustart fehlgeschlagen: ' + e.message, 'err');
+    toast(t('config.restart_failed') + ': ' + e.message, 'err');
   }
 }
 
@@ -327,13 +327,13 @@ function selectClaudeMd(inst) {
 async function loadClaudeMd(inst) {
   const ed = document.getElementById('claude-md-editor');
   const st = document.getElementById('claude-md-status');
-  st.textContent = 'Wird geladen...';
+  st.textContent = t('common.loading');
   try {
     const r = await fetch(`/api/claude-md/${inst}`);
     if (!r.ok) throw new Error(await r.text());
     const data = await r.json();
     ed.value = data.content;
-    st.textContent = `${inst}/CLAUDE.md geladen`;
+    st.textContent = t('config_claude_md.loaded', {instance: inst});
   } catch(e) { st.textContent = '❌ ' + e.message; }
 }
 
@@ -346,8 +346,8 @@ async function saveClaudeMd() {
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ content }),
     });
-    if (r.ok) { st.textContent = '✓ Gespeichert – sofort aktiv'; toast('CLAUDE.md gespeichert ✓', 'ok'); }
-    else       { st.textContent = '❌ Fehler beim Speichern'; toast('Fehler', 'err'); }
+    if (r.ok) { st.textContent = '\u2713 ' + t('config_claude_md.saved'); toast(t('config_claude_md.saved_toast'), 'ok'); }
+    else       { st.textContent = '\u274c ' + t('config_claude_md.save_error'); toast(t('common.error'), 'err'); }
   } catch(e) { toast(e.message, 'err'); }
 }
 
@@ -362,7 +362,7 @@ function scrollToRebuild() {
 async function loadMemoryStats() {
   const list = document.getElementById('rebuild-instance-list');
   if (!list) return;
-  list.innerHTML = '<div style="color:var(--muted);font-size:12px;">Wird geladen…</div>';
+  list.innerHTML = '<div style="color:var(--muted);font-size:12px;">' + t('common.loading') + '</div>';
   try {
     const r = await fetch('/api/memory-stats');
     _memStats = await r.json();
@@ -372,20 +372,20 @@ async function loadMemoryStats() {
       ).join(' ');
       const logColor = m.log_entries > 0 ? 'var(--text)' : 'var(--muted)';
       const emptyWarn = m.rebuild_suggested
-        ? `<span style="color:var(--yellow);font-size:11px;"> ⚠ leer</span>` : '';
+        ? `<span style="color:var(--yellow);font-size:11px;"> \u26a0 ${t('config_memory.empty_warning')}</span>` : '';
       return `
       <label style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;cursor:pointer;${m.rebuild_suggested?'border-color:var(--yellow);':''}">
         <input type="checkbox" class="rebuild-cb" data-inst="${escAttr(m.instance)}" ${m.rebuild_suggested?'checked':''} style="margin-top:2px;flex-shrink:0;">
         <div style="flex:1;min-width:0;">
           <div style="font-weight:500;font-size:13px;">${escHtml(m.instance)}${emptyWarn}</div>
           <div style="font-size:11px;color:${logColor};margin-top:2px;">
-            ${m.log_entries} Log-Einträge (${m.log_days} Tage) · ${scopeStr}
+            ${m.log_entries} ${t('config_memory.log_entries')} (${m.log_days} ${t('config_memory.days')}) · ${scopeStr}
           </div>
         </div>
       </label>`;
     }).join('');
   } catch(e) {
-    list.innerHTML = `<div style="color:var(--red);font-size:12px;">Fehler: ${e.message}</div>`;
+    list.innerHTML = `<div style="color:var(--red);font-size:12px;">${t('config_memory.error_label')}: ${e.message}</div>`;
   }
 }
 
@@ -400,27 +400,27 @@ function rebuildSelectNone() { document.querySelectorAll('.rebuild-cb').forEach(
 
 async function startRebuild() {
   const selected = [...document.querySelectorAll('.rebuild-cb:checked')].map(cb => cb.dataset.inst);
-  if (!selected.length) { toast('Keine Instanz ausgewählt', 'err'); return; }
+  if (!selected.length) { toast(t('config_memory.rebuild_no_instance'), 'err'); return; }
 
   const totalEntries = selected.reduce((sum, inst) => {
     const m = _memStats.find(x => x.instance === inst);
     return sum + (m?.log_entries || 0);
   }, 0);
 
-  Modal.showConfirm(`Memory für ${selected.length} Instanz(en) neu aufbauen?\n${selected.join(', ')}\n\n${totalEntries} Einträge total – kann Minuten bis Stunden dauern.`, async () => {
+  Modal.showConfirm(t('config_memory.rebuild_confirm', {count: selected.length, instances: selected.join(', '), total: totalEntries}), async () => {
     const btn    = document.getElementById('rebuild-btn');
     const cancel = document.getElementById('rebuild-cancel-btn');
     const overall = document.getElementById('rebuild-overall-status');
     btn.disabled = true;
     cancel.style.display = '';
     document.getElementById('rebuild-progress-wrap').style.display = '';
-    overall.textContent = `0 / ${selected.length} Instanzen`;
+    overall.textContent = '0 / ' + selected.length + ' ' + t('config_memory.rebuild_instances_label');
 
     // Instanzen sequenziell abarbeiten
     for (let i = 0; i < selected.length; i++) {
       const inst = selected[i];
-      overall.textContent = `${i+1} / ${selected.length}: ${inst}`;
-      setRebuildProgress(0, 0, null, `Starte ${inst}…`);
+      overall.textContent = (i+1) + ' / ' + selected.length + ': ' + inst;
+      setRebuildProgress(0, 0, null, t('config_memory.rebuild_starting') + ' ' + inst + '\u2026');
       try {
         const r = await fetch(`/api/rebuild-memory/${inst}`, { method: 'POST' });
         const d = await r.json();
@@ -434,7 +434,7 @@ async function startRebuild() {
       }
     }
 
-    overall.textContent = `✓ Fertig (${selected.length} Instanzen)`;
+    overall.textContent = '\u2713 ' + t('config_memory.rebuild_done') + ' (' + selected.length + ' ' + t('config_memory.rebuild_instances_label') + ')';
     btn.disabled = false;
     cancel.style.display = 'none';
     loadMemoryStats();
@@ -448,7 +448,7 @@ async function cancelRebuild() {
   for (const inst of selected) {
     await fetch(`/api/rebuild-cancel/${inst}`, { method: 'POST' }).catch(() => {});
   }
-  setRebuildProgress(0, 0, null, '■ Abgebrochen');
+  setRebuildProgress(0, 0, null, '\u25a0 ' + t('config_memory.rebuild_cancelled'));
   document.getElementById('rebuild-btn').disabled = false;
   document.getElementById('rebuild-cancel-btn').style.display = 'none';
 }
@@ -458,14 +458,14 @@ function startRebuildSSE(inst, onDone) {
   _rebuildSSE = new EventSource(`/api/rebuild-progress/${inst}`);
   _rebuildSSE.onmessage = (e) => {
     const d = JSON.parse(e.data);
-    const errSuffix = d.errors > 0 ? ` (${d.errors} Fehler)` : '';
+    const errSuffix = d.errors > 0 ? ' (' + d.errors + ' ' + t('config_memory.rebuild_error') + ')' : '';
     setRebuildProgress(d.done, d.total, d.eta_s, statusLabel(d.status, d.error) + errSuffix);
     if (['done','error','cancelled'].includes(d.status)) {
       _rebuildSSE.close(); _rebuildSSE = null;
       if (d.status === 'done') {
         const msg = d.errors > 0
-          ? `${inst}: Rebuild abgeschlossen – ${d.errors} Einträge fehlgeschlagen (Agent erreichbar?)`
-          : `${inst}: Rebuild abgeschlossen ✓`;
+          ? inst + ': ' + t('config_memory.rebuild_complete_errors', {errors: d.errors})
+          : inst + ': ' + t('config_memory.rebuild_complete') + ' \u2713';
         toast(msg, d.errors > 0 ? 'warn' : 'ok');
       }
       if (d.status === 'error') toast(`${inst}: ${d.error}`, 'err');
@@ -479,18 +479,18 @@ function setRebuildProgress(done, total, eta_s, statusText) {
   const pct = total > 0 ? Math.round(done / total * 100) : 0;
   document.getElementById('rebuild-bar').style.width = pct + '%';
   document.getElementById('rebuild-progress-label').textContent = total > 0
-    ? `${done} / ${total} Einträge (${pct}%)`
+    ? done + ' / ' + total + ' ' + t('logs.entries') + ' (' + pct + '%)'
     : (statusText || '');
   document.getElementById('rebuild-eta').textContent = eta_s != null && eta_s > 0
-    ? `noch ca. ${eta_s > 60 ? Math.round(eta_s/60) + ' min' : eta_s + ' s'}` : '';
+    ? (eta_s > 60 ? t('config_memory.rebuild_eta_min', {min: Math.round(eta_s/60)}) : t('config_memory.rebuild_eta_sec', {sec: eta_s})) : '';
   document.getElementById('rebuild-status-text').textContent = total > 0 ? statusText : '';
 }
 
 function statusLabel(status, error) {
-  if (status === 'running')   return '⏳ Läuft…';
-  if (status === 'done')      return '✓ Fertig';
-  if (status === 'error')     return '❌ Fehler: ' + (error || '');
-  if (status === 'cancelled') return '■ Abgebrochen';
+  if (status === 'running')   return '\u23f3 ' + t('config_memory.rebuild_running');
+  if (status === 'done')      return '\u2713 ' + t('config_memory.rebuild_done');
+  if (status === 'error')     return '\u274c ' + t('config_memory.rebuild_error') + ': ' + (error || '');
+  if (status === 'cancelled') return '\u25a0 ' + t('config_memory.rebuild_cancelled');
   return '';
 }
 
@@ -518,7 +518,7 @@ function addLlmSlot() {
 
 function removeLlmSlot(i) {
   if (!cfg) return;
-  if (cfg.llm_providers.length <= 1) { toast('Mindestens ein Slot muss vorhanden sein', 'err'); return; }
+  if (cfg.llm_providers.length <= 1) { toast(t('config_llm.min_one_slot'), 'err'); return; }
   cfg.llm_providers.splice(i, 1);
   // Slot-Nummern neu vergeben
   cfg.llm_providers.forEach((s, idx) => s.slot = idx + 1);
@@ -538,13 +538,13 @@ async function fetchModels(i) {
     });
     const d = await r.json();
     if (d.manual || !d.models?.length) {
-      st.textContent = d.error ? `⚠ ${d.error.substring(0,60)}` : '⚠ Keine Modelle – manuell eingeben';
+      st.textContent = d.error ? '\u26a0 ' + d.error.substring(0,60) : '\u26a0 ' + t('config_llm.no_models_manual');
       st.style.color = 'var(--yellow)';
       return;
     }
     const datalist = document.getElementById(`models-${i}`);
     datalist.innerHTML = d.models.map(m => `<option value="${escAttr(m)}">`).join('');
-    st.textContent = d.fallback ? `✓ ${d.models.length} bekannte Modelle` : `✓ ${d.models.length} Modelle`;
+    st.textContent = d.fallback ? '\u2713 ' + d.models.length + ' ' + t('config_llm.known_models') : '\u2713 ' + d.models.length + ' ' + t('config_llm.models_label');
     st.style.color = d.fallback ? 'var(--yellow)' : 'var(--green)';
   } catch(e) {
     st.textContent = '✗ ' + e.message.substring(0,40);
@@ -555,7 +555,7 @@ async function fetchModels(i) {
 // ── Verbindungstest ────────────────────────────────────────────────────────
 async function testSvcConn(type, url, resultId) {
   const el = document.getElementById(resultId);
-  if (!url) { el.textContent = '⚠ URL fehlt'; el.style.color = 'var(--yellow)'; return; }
+  if (!url) { el.textContent = '\u26a0 ' + t('config_services.url_missing'); el.style.color = 'var(--yellow)'; return; }
   el.textContent = '…'; el.style.color = 'var(--muted)';
   try {
     const r = await fetch('/api/test-connection', {
@@ -570,13 +570,13 @@ async function testSvcConn(type, url, resultId) {
 
 async function loadSttTtsEntities() {
   const statusEl = document.getElementById('stt-tts-load-status');
-  statusEl.textContent = 'Lade...';
+  statusEl.textContent = t('config_services.stt_tts_loading');
   statusEl.style.color = 'var(--muted)';
   try {
     const r = await fetch('/api/ha-stt-tts');
     const d = await r.json();
     if (!d.ok) {
-      statusEl.textContent = '✗ ' + (d.error || 'Fehler');
+      statusEl.textContent = '\u2717 ' + (d.error || t('config_services.stt_tts_error'));
       statusEl.style.color = 'var(--red)';
       return;
     }
@@ -586,14 +586,14 @@ async function loadSttTtsEntities() {
     const prevTts = ttsEl.value;
 
     // STT Dropdown befüllen
-    sttEl.innerHTML = '<option value="">– nicht konfiguriert –</option>';
+    sttEl.innerHTML = '<option value="">' + t('config_services.not_configured') + '</option>';
     d.stt.forEach(e => {
       sttEl.add(new Option(`${e.name} (${e.id})`, e.id));
     });
     if (prevStt) sttEl.value = prevStt;
 
     // TTS Dropdown befüllen
-    ttsEl.innerHTML = '<option value="">– nicht konfiguriert –</option>';
+    ttsEl.innerHTML = '<option value="">' + t('config_services.not_configured') + '</option>';
     d.tts.forEach(e => {
       ttsEl.add(new Option(`${e.name} (${e.id})`, e.id));
     });

@@ -1381,7 +1381,11 @@ def _start_agent_container(user: dict, cfg: dict) -> dict:
     if not is_minimax:
         volumes[host_claude_config]  = {"bind": "/home/haana/.claude",    "mode": "rw"}
         claude_json_host = Path("/root/.claude.json")
-        if claude_json_host.is_file():
+        try:
+            has_claude_json = claude_json_host.is_file()
+        except PermissionError:
+            has_claude_json = False
+        if has_claude_json:
             volumes[str(claude_json_host)] = {"bind": "/home/haana/.claude.json", "mode": "rw"}
 
     try:
