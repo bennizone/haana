@@ -30,6 +30,7 @@ const {
   fetchLatestBaileysVersion,
   isJidBroadcast,
   isJidGroup,
+  downloadMediaMessage,
 } = require("@whiskeysockets/baileys");
 
 const http     = require("http");
@@ -64,6 +65,9 @@ let _routes     = new Map();
 let _waMode     = "separate";
 let _selfPrefix = "!h ";
 
+// ── STT-Konfiguration (Home Assistant) ───────────────────────────────────
+let _sttConfig  = null; // { ha_url, ha_token, stt_entity, stt_language }
+
 // ── LID → Phone Mapping ───────────────────────────────────────────────────
 // Neuere WhatsApp-Versionen senden LID (Linked ID) statt phone@s.whatsapp.net.
 // Strategie nach NanoClaw: lokaler Cache + signalRepository.lidMapping Fallback.
@@ -72,21 +76,17 @@ const _lidToPhone = {};  // lidUser → "491XXXXXXXXX@s.whatsapp.net"
 async function translateJid(jid, sock) {
   if (!jid.endsWith("@lid")) return jid;
   const lidUser = jid.split("@")[0].split(":")[0];
-  log.info({ lidJid: jid, lidUser, cacheKeys: Object.keys(_lidToPhone) }, "translateJid aufgerufen");
 
   // Lokaler Cache
   const cached = _lidToPhone[lidUser];
   if (cached) {
-    log.info({ lidJid: jid, phoneJid: cached }, "LID→Phone (cached)");
+    log.debug({ lidJid: jid, phoneJid: cached }, "LID→Phone (cached)");
     return cached;
   }
 
   // Baileys signalRepository Fallback
-  const hasMapping = !!sock?.signalRepository?.lidMapping;
-  log.info({ hasMapping, hasRepo: !!sock?.signalRepository }, "signalRepository check");
   try {
     const pn = await sock?.signalRepository?.lidMapping?.getPNForLID(jid);
-    log.info({ pn, lidJid: jid }, "getPNForLID Ergebnis");
     if (pn) {
       const phoneJid = `${pn.split("@")[0].split(":")[0]}@s.whatsapp.net`;
       _lidToPhone[lidUser] = phoneJid;
@@ -118,7 +118,14 @@ async function refreshConfig() {
     _routes     = newRoutes;
     _waMode     = data.mode       || "separate";
     _selfPrefix = data.self_prefix || "!h ";
-    log.info({ routes: _routes.size, mode: _waMode }, "WhatsApp-Routing aktualisiert");
+
+    // STT-Konfiguration aus Admin-Interface übernehmen
+    if (data.stt) {
+      _sttConfig = data.stt;
+      log.info({ entity: _sttConfig.stt_entity, lang: _sttConfig.stt_language }, "STT-Konfiguration geladen");
+    }
+
+    log.info({ routes: _routes.size, mode: _waMode, stt: !!_sttConfig }, "WhatsApp-Routing aktualisiert");
   } catch (e) {
     log.warn({ err: e.message }, "Routing-Refresh fehlgeschlagen");
   }
@@ -151,6 +158,71 @@ async function queryAgent(agentUrl, message, channel = "whatsapp") {
   return json.response || "[Keine Antwort]";
 }
 
+// ── STT via Home Assistant ────────────────────────────────────────────────
+
+async function sttViaHA(audioBuffer) {
+  if (!_sttConfig || !_sttConfig.ha_url || !_sttConfig.ha_token || !_sttConfig.stt_entity) {
+    log.warn("STT nicht konfiguriert – Sprachnachricht kann nicht transkribiert werden");
+    return null;
+  }
+
+  const { ha_url, ha_token, stt_entity, stt_language } = _sttConfig;
+  const lang = stt_language || "de-DE";
+  const url = `${ha_url}/api/stt/${stt_entity}`;
+
+  log.info({ url, lang, bytes: audioBuffer.length }, "STT-Anfrage an Home Assistant");
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${ha_token}`,
+      "X-Speech-Content": `format=ogg; codec=opus; sample_rate=16000; bit_rate=16; channel=1; language=${lang}`,
+      "Content-Type": "application/octet-stream",
+    },
+    body: audioBuffer,
+    timeout: 30_000,
+  });
+
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`HA STT HTTP ${res.status}: ${txt.slice(0, 200)}`);
+  }
+
+  const json = await res.json();
+  if (json.result === "success" && json.text) {
+    log.info({ text: json.text.slice(0, 100) }, "STT-Transkription erfolgreich");
+    return json.text;
+  }
+
+  log.warn({ result: json.result }, "STT-Transkription fehlgeschlagen");
+  return null;
+}
+
+async function transcribeVoiceMessage(msg, sock) {
+  try {
+    const buffer = await downloadMediaMessage(
+      msg,
+      "buffer",
+      {},
+      {
+        logger: pino({ level: "silent" }),
+        reuploadRequest: sock.updateMediaMessage,
+      },
+    );
+
+    if (!buffer || buffer.length === 0) {
+      log.error("Audio-Download fehlgeschlagen – leerer Buffer");
+      return null;
+    }
+
+    log.info({ bytes: buffer.length }, "Audio heruntergeladen");
+    return await sttViaHA(buffer);
+  } catch (err) {
+    log.error({ err: err.message }, "Fehler bei Sprachnachricht-Verarbeitung");
+    return null;
+  }
+}
+
 // ── Nachrichtentext extrahieren ────────────────────────────────────────────
 
 function extractText(msg) {
@@ -159,9 +231,13 @@ function extractText(msg) {
   if (m.conversation) return m.conversation;
   if (m.extendedTextMessage?.text) return m.extendedTextMessage.text;
   if (m.imageMessage?.caption) return m.imageMessage.caption;
-  if (m.audioMessage) return "[Sprachnachricht – wird noch nicht unterstützt]";
   if (m.documentMessage?.caption) return m.documentMessage.caption;
+  // audioMessage wird separat im Message-Handler verarbeitet (STT)
   return null;
+}
+
+function isVoiceMessage(msg) {
+  return !!msg.message?.audioMessage;
 }
 
 // ── HTTP-API ───────────────────────────────────────────────────────────────
@@ -361,12 +437,6 @@ async function startBridge() {
       const rawFrom      = msg.key.remoteJid;
       const from         = await translateJid(rawFrom, sock);
       const fromNorm     = normalizeJid(from);
-      let   text         = extractText(msg);
-
-      if (!text) {
-        log.debug({ from, type: Object.keys(msg.message || {}) }, "Kein verarbeitbarer Text – ignoriert");
-        continue;
-      }
 
       // ── Sicherheitsfilter: nur bekannte Nummern ──────────────────────────
       if (_routes.size === 0) {
@@ -377,6 +447,31 @@ async function startBridge() {
       const route = _routes.get(fromNorm);
       if (!route) {
         log.warn({ from: fromNorm }, "Unbekannte Nummer – Nachricht ignoriert (Sicherheitsfilter)");
+        continue;
+      }
+
+      // ── Text oder Sprachnachricht verarbeiten ─────────────────────────────
+      let text = extractText(msg);
+
+      if (!text && isVoiceMessage(msg)) {
+        // Sprachnachricht: Audio herunterladen und via HA STT transkribieren
+        log.info({ from: fromNorm }, "Sprachnachricht empfangen – starte Transkription");
+        await sock.sendPresenceUpdate("composing", from);
+        const transcript = await transcribeVoiceMessage(msg, sock);
+        if (transcript) {
+          text = `[Sprachnachricht: ${transcript}]`;
+        } else {
+          text = null;
+          await sock.sendMessage(from, {
+            text: "Ich konnte die Sprachnachricht leider nicht verarbeiten. Bitte schreib mir stattdessen.",
+          });
+          await sock.sendPresenceUpdate("paused", from);
+          continue;
+        }
+      }
+
+      if (!text) {
+        log.debug({ from, type: Object.keys(msg.message || {}) }, "Kein verarbeitbarer Text – ignoriert");
         continue;
       }
 

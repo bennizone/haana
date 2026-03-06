@@ -894,7 +894,20 @@ async def whatsapp_config_endpoint():
         if lid:
             lid_jid = lid if "@" in lid else f"{lid}@lid"
             routes.append({"jid": lid_jid, **target})
-    return {"mode": wa.get("mode", "separate"), "self_prefix": wa.get("self_prefix", "!h "), "routes": routes}
+    # STT-Konfiguration aus services-Sektion für die Bridge bereitstellen
+    services = cfg.get("services", {})
+    stt = None
+    ha_url   = services.get("ha_url", "").strip()
+    ha_token = services.get("ha_token", "").strip()
+    if ha_url and ha_token:
+        stt = {
+            "ha_url":       ha_url,
+            "ha_token":     ha_token,
+            "stt_entity":   services.get("stt_entity", "stt.home_assistant_cloud"),
+            "stt_language": services.get("stt_language", "de-DE"),
+        }
+
+    return {"mode": wa.get("mode", "separate"), "self_prefix": wa.get("self_prefix", "!h "), "routes": routes, "stt": stt}
 
 
 # ── WhatsApp Bridge Proxy (Status / QR / Logout) ──────────────────────────────
