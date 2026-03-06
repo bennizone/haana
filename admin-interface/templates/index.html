@@ -550,6 +550,57 @@
       </div>
     </div>
 
+    <!-- STT / TTS -->
+    <div class="config-section">
+      <div class="config-section-header">🎙 Sprache (STT / TTS)</div>
+      <div class="config-section-body">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
+          Speech-to-Text und Text-to-Speech über Home Assistant. Entities werden automatisch aus HA geladen.
+        </p>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;">
+          <button class="btn btn-secondary" style="font-size:11px;padding:4px 12px;"
+            onclick="loadSttTtsEntities()">🔄 Entities laden</button>
+          <span id="stt-tts-load-status" style="font-size:12px;color:var(--muted);"></span>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>STT Entity <span style="font-size:11px;color:var(--muted);">(Spracherkennung)</span></label>
+            <select id="svc-stt-entity">
+              <option value="">– nicht konfiguriert –</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>TTS Entity <span style="font-size:11px;color:var(--muted);">(Sprachausgabe)</span></label>
+            <select id="svc-tts-entity">
+              <option value="">– nicht konfiguriert –</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Sprache</label>
+            <select id="svc-stt-language">
+              <option value="de-DE">Deutsch (de-DE)</option>
+              <option value="en-US">English (en-US)</option>
+              <option value="en-GB">English UK (en-GB)</option>
+              <option value="fr-FR">Français (fr-FR)</option>
+              <option value="es-ES">Español (es-ES)</option>
+              <option value="it-IT">Italiano (it-IT)</option>
+              <option value="nl-NL">Nederlands (nl-NL)</option>
+              <option value="pl-PL">Polski (pl-PL)</option>
+              <option value="pt-BR">Português (pt-BR)</option>
+            </select>
+          </div>
+          <div class="form-group" style="display:flex;align-items:flex-end;">
+            <div style="font-size:11px;color:var(--muted);padding-bottom:8px;">
+              Sprache gilt für STT und TTS. WhatsApp-Sprachnachrichten werden per STT transkribiert,
+              Agent-Antworten optional per TTS als Sprachnachricht zurückgeschickt.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="config-section">
       <div class="config-section-header">📱 WhatsApp Bridge</div>
       <div class="config-section-body">
@@ -1176,6 +1227,27 @@ function renderConfig(c) {
   const mcpTok = document.getElementById('svc-mcp-token');
   if (mcpTok) mcpTok.value = sv.ha_mcp_token || '';
 
+  // STT / TTS
+  const sttEl = document.getElementById('svc-stt-entity');
+  const ttsEl = document.getElementById('svc-tts-entity');
+  const langEl = document.getElementById('svc-stt-language');
+  if (sv.stt_entity && sttEl) {
+    // Sicherstellen dass der gespeicherte Wert als Option existiert
+    if (![...sttEl.options].some(o => o.value === sv.stt_entity)) {
+      sttEl.add(new Option(sv.stt_entity, sv.stt_entity));
+    }
+    sttEl.value = sv.stt_entity;
+  }
+  if (sv.tts_entity && ttsEl) {
+    if (![...ttsEl.options].some(o => o.value === sv.tts_entity)) {
+      ttsEl.add(new Option(sv.tts_entity, sv.tts_entity));
+    }
+    ttsEl.value = sv.tts_entity;
+  }
+  if (sv.stt_language && langEl) langEl.value = sv.stt_language;
+  // Entities automatisch laden wenn HA konfiguriert ist
+  if (sv.ha_url && sv.ha_token) loadSttTtsEntities();
+
   // WhatsApp global
   const wa = c.whatsapp || {};
   const waMode = document.getElementById('svc-wa-mode');
@@ -1237,6 +1309,9 @@ async function saveConfig() {
       ha_mcp_enabled:  document.getElementById('svc-mcp-enabled')?.checked ?? false,
       ha_mcp_url:      document.getElementById('svc-mcp-url')?.value || '',
       ha_mcp_token:    document.getElementById('svc-mcp-token')?.value || '',
+      stt_entity:      document.getElementById('svc-stt-entity')?.value || '',
+      tts_entity:      document.getElementById('svc-tts-entity')?.value || '',
+      stt_language:    document.getElementById('svc-stt-language')?.value || 'de-DE',
       ollama_url:      document.getElementById('svc-ollama-url').value,
       qdrant_url:      document.getElementById('svc-qdrant-url').value,
     },
@@ -1829,6 +1904,45 @@ async function testSvcConn(type, url, resultId) {
     el.textContent = d.ok ? `✓ ${d.detail}` : `✗ ${d.detail}`;
     el.style.color = d.ok ? 'var(--green)' : 'var(--red)';
   } catch(e) { el.textContent = '✗ ' + e.message; el.style.color = 'var(--red)'; }
+}
+
+async function loadSttTtsEntities() {
+  const statusEl = document.getElementById('stt-tts-load-status');
+  statusEl.textContent = 'Lade...';
+  statusEl.style.color = 'var(--muted)';
+  try {
+    const r = await fetch('/api/ha-stt-tts');
+    const d = await r.json();
+    if (!d.ok) {
+      statusEl.textContent = '✗ ' + (d.error || 'Fehler');
+      statusEl.style.color = 'var(--red)';
+      return;
+    }
+    const sttEl = document.getElementById('svc-stt-entity');
+    const ttsEl = document.getElementById('svc-tts-entity');
+    const prevStt = sttEl.value;
+    const prevTts = ttsEl.value;
+
+    // STT Dropdown befüllen
+    sttEl.innerHTML = '<option value="">– nicht konfiguriert –</option>';
+    d.stt.forEach(e => {
+      sttEl.add(new Option(`${e.name} (${e.id})`, e.id));
+    });
+    if (prevStt) sttEl.value = prevStt;
+
+    // TTS Dropdown befüllen
+    ttsEl.innerHTML = '<option value="">– nicht konfiguriert –</option>';
+    d.tts.forEach(e => {
+      ttsEl.add(new Option(`${e.name} (${e.id})`, e.id));
+    });
+    if (prevTts) ttsEl.value = prevTts;
+
+    statusEl.textContent = `✓ ${d.stt.length} STT, ${d.tts.length} TTS Entities`;
+    statusEl.style.color = 'var(--green)';
+  } catch(e) {
+    statusEl.textContent = '✗ ' + e.message;
+    statusEl.style.color = 'var(--red)';
+  }
 }
 
 async function testHaConnection() {

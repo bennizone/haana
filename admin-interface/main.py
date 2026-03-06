@@ -840,6 +840,40 @@ async def test_ha_mcp(request: Request):
         return {"ok": False, "detail": str(e)[:200]}
 
 
+@app.get("/api/ha-stt-tts")
+async def ha_stt_tts():
+    """Listet verfügbare STT- und TTS-Entitäten aus Home Assistant auf."""
+    cfg = load_config()
+    ha_url   = cfg.get("services", {}).get("ha_url",   "").rstrip("/")
+    ha_token = cfg.get("services", {}).get("ha_token", "").strip()
+    if not ha_url or not ha_token:
+        return {"ok": False, "error": "HA URL oder Token nicht konfiguriert", "stt": [], "tts": []}
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            r = await client.get(
+                f"{ha_url}/api/states",
+                headers={"Authorization": f"Bearer {ha_token}"},
+            )
+            if r.status_code == 401:
+                return {"ok": False, "error": "HA Token ungültig", "stt": [], "tts": []}
+            r.raise_for_status()
+            stt_entities = []
+            tts_entities = []
+            for state in r.json():
+                eid = state.get("entity_id", "")
+                name = state.get("attributes", {}).get("friendly_name", eid)
+                if eid.startswith("stt."):
+                    stt_entities.append({"id": eid, "name": name})
+                elif eid.startswith("tts."):
+                    tts_entities.append({"id": eid, "name": name})
+            return {"ok": True, "stt": stt_entities, "tts": tts_entities}
+    except httpx.ConnectError:
+        return {"ok": False, "error": "HA nicht erreichbar", "stt": [], "tts": []}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200], "stt": [], "tts": []}
+
+
 @app.get("/api/ha-users")
 async def ha_users():
     """Listet Home Assistant Person-Entitäten für User-Mapping auf."""
@@ -894,20 +928,31 @@ async def whatsapp_config_endpoint():
         if lid:
             lid_jid = lid if "@" in lid else f"{lid}@lid"
             routes.append({"jid": lid_jid, **target})
-    # STT-Konfiguration aus services-Sektion für die Bridge bereitstellen
+    # STT/TTS-Konfiguration aus services-Sektion für die Bridge bereitstellen
     services = cfg.get("services", {})
     stt = None
+    tts = None
     ha_url   = services.get("ha_url", "").strip()
     ha_token = services.get("ha_token", "").strip()
     if ha_url and ha_token:
-        stt = {
-            "ha_url":       ha_url,
-            "ha_token":     ha_token,
-            "stt_entity":   services.get("stt_entity", "stt.home_assistant_cloud"),
-            "stt_language": services.get("stt_language", "de-DE"),
-        }
+        stt_entity = services.get("stt_entity", "").strip()
+        tts_entity = services.get("tts_entity", "").strip()
+        if stt_entity:
+            stt = {
+                "ha_url":       ha_url,
+                "ha_token":     ha_token,
+                "stt_entity":   stt_entity,
+                "stt_language": services.get("stt_language", "de-DE"),
+            }
+        if tts_entity:
+            tts = {
+                "ha_url":       ha_url,
+                "ha_token":     ha_token,
+                "tts_entity":   tts_entity,
+                "tts_language": services.get("stt_language", "de-DE"),
+            }
 
-    return {"mode": wa.get("mode", "separate"), "self_prefix": wa.get("self_prefix", "!h "), "routes": routes, "stt": stt}
+    return {"mode": wa.get("mode", "separate"), "self_prefix": wa.get("self_prefix", "!h "), "routes": routes, "stt": stt, "tts": tts}
 
 
 # ── WhatsApp Bridge Proxy (Status / QR / Logout) ──────────────────────────────

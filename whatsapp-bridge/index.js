@@ -65,8 +65,9 @@ let _routes     = new Map();
 let _waMode     = "separate";
 let _selfPrefix = "!h ";
 
-// ── STT-Konfiguration (Home Assistant) ───────────────────────────────────
+// ── STT/TTS-Konfiguration (Home Assistant) ───────────────────────────────
 let _sttConfig  = null; // { ha_url, ha_token, stt_entity, stt_language }
+let _ttsConfig  = null; // { ha_url, ha_token, tts_entity, tts_language }
 
 // ── LID → Phone Mapping ───────────────────────────────────────────────────
 // Neuere WhatsApp-Versionen senden LID (Linked ID) statt phone@s.whatsapp.net.
@@ -119,13 +120,13 @@ async function refreshConfig() {
     _waMode     = data.mode       || "separate";
     _selfPrefix = data.self_prefix || "!h ";
 
-    // STT-Konfiguration aus Admin-Interface übernehmen
-    if (data.stt) {
-      _sttConfig = data.stt;
-      log.info({ entity: _sttConfig.stt_entity, lang: _sttConfig.stt_language }, "STT-Konfiguration geladen");
-    }
+    // STT/TTS-Konfiguration aus Admin-Interface übernehmen
+    _sttConfig = data.stt || null;
+    _ttsConfig = data.tts || null;
+    if (_sttConfig) log.info({ entity: _sttConfig.stt_entity, lang: _sttConfig.stt_language }, "STT konfiguriert");
+    if (_ttsConfig) log.info({ entity: _ttsConfig.tts_entity, lang: _ttsConfig.tts_language }, "TTS konfiguriert");
 
-    log.info({ routes: _routes.size, mode: _waMode, stt: !!_sttConfig }, "WhatsApp-Routing aktualisiert");
+    log.info({ routes: _routes.size, mode: _waMode, stt: !!_sttConfig, tts: !!_ttsConfig }, "WhatsApp-Routing aktualisiert");
   } catch (e) {
     log.warn({ err: e.message }, "Routing-Refresh fehlgeschlagen");
   }
@@ -221,6 +222,61 @@ async function transcribeVoiceMessage(msg, sock) {
     log.error({ err: err.message }, "Fehler bei Sprachnachricht-Verarbeitung");
     return null;
   }
+}
+
+// ── TTS via Home Assistant ────────────────────────────────────────────────
+
+async function ttsViaHA(text) {
+  if (!_ttsConfig || !_ttsConfig.ha_url || !_ttsConfig.ha_token || !_ttsConfig.tts_entity) {
+    return null;
+  }
+
+  const { ha_url, ha_token, tts_entity, tts_language } = _ttsConfig;
+  const lang = tts_language || "de-DE";
+
+  log.info({ entity: tts_entity, lang, chars: text.length }, "TTS-Anfrage an Home Assistant");
+
+  // Schritt 1: Audio-URL via tts_get_url generieren
+  const urlRes = await fetch(`${ha_url}/api/tts_get_url`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${ha_token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      engine_id: tts_entity,
+      platform: tts_entity.replace("tts.", ""),
+      message: text,
+      language: lang,
+    }),
+    timeout: 30_000,
+  });
+
+  if (!urlRes.ok) {
+    const txt = await urlRes.text();
+    throw new Error(`HA TTS HTTP ${urlRes.status}: ${txt.slice(0, 200)}`);
+  }
+
+  const urlJson = await urlRes.json();
+  const audioUrl = urlJson.url || urlJson.path;
+  if (!audioUrl) {
+    throw new Error("HA TTS: keine Audio-URL in Antwort");
+  }
+
+  // Schritt 2: Audio herunterladen
+  const fullUrl = audioUrl.startsWith("http") ? audioUrl : `${ha_url}${audioUrl}`;
+  const audioRes = await fetch(fullUrl, {
+    headers: { "Authorization": `Bearer ${ha_token}` },
+    timeout: 30_000,
+  });
+
+  if (!audioRes.ok) {
+    throw new Error(`Audio-Download HTTP ${audioRes.status}`);
+  }
+
+  const audioBuffer = Buffer.from(await audioRes.arrayBuffer());
+  log.info({ bytes: audioBuffer.length, url: audioUrl }, "TTS-Audio heruntergeladen");
+  return audioBuffer;
 }
 
 // ── Nachrichtentext extrahieren ────────────────────────────────────────────
@@ -484,14 +540,38 @@ async function startBridge() {
         text = text.slice(_selfPrefix.length).trim();
       }
 
-      log.info({ from: fromNorm, user: route.user_id, text: text.slice(0, 100) }, "Eingehende Nachricht");
+      const wasVoice = isVoiceMessage(msg);
+      log.info({ from: fromNorm, user: route.user_id, voice: wasVoice, text: text.slice(0, 100) }, "Eingehende Nachricht");
 
       await sock.sendPresenceUpdate("composing", from);
 
       try {
         const response = await queryAgent(route.agent_url, text, "whatsapp");
         log.info({ from: fromNorm, response: response.slice(0, 100) }, "Agent-Antwort");
-        await sock.sendMessage(from, { text: response });
+
+        // TTS: Sprachnachricht zurücksenden wenn Input Voice war und TTS konfiguriert
+        let sentVoice = false;
+        if (wasVoice && _ttsConfig) {
+          try {
+            const audioBuffer = await ttsViaHA(response);
+            if (audioBuffer && audioBuffer.length > 0) {
+              await sock.sendMessage(from, {
+                audio: audioBuffer,
+                mimetype: "audio/mp4",
+                ptt: true, // Push-to-Talk = als Sprachnachricht anzeigen
+              });
+              sentVoice = true;
+              log.info({ from: fromNorm, bytes: audioBuffer.length }, "TTS-Sprachnachricht gesendet");
+            }
+          } catch (ttsErr) {
+            log.warn({ err: ttsErr.message }, "TTS fehlgeschlagen – sende Text stattdessen");
+          }
+        }
+
+        // Text als Fallback oder wenn kein Voice gewünscht
+        if (!sentVoice) {
+          await sock.sendMessage(from, { text: response });
+        }
       } catch (err) {
         log.error({ err: err.message, from, agent: route.agent_url }, "Fehler bei Agent-Anfrage");
         await sock.sendMessage(from, {
