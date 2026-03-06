@@ -110,6 +110,7 @@ services:
       HAANA_DATA_VOLUME:      haana_haana-data
       HAANA_COMPOSE_NETWORK:  haana_default
       HAANA_AGENT_IMAGE:      haana-instanz-alice  # wird beim ersten Start auto-detected
+      WHATSAPP_BRIDGE_URL:    http://whatsapp-bridge:3001
     ports:
       - "8080:8080"
     volumes:
@@ -130,6 +131,7 @@ services:
     environment:
       ADMIN_URL:         http://admin-interface:8080
       BRIDGE_LOG_LEVEL:  ${BRIDGE_LOG_LEVEL:-info}
+      BRIDGE_HTTP_PORT:  "3001"
     volumes:
       - haana-whatsapp-session:/app/session
     restart: unless-stopped

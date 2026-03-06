@@ -10,10 +10,16 @@
  * Sicherheit: Nachrichten von unbekannten Nummern werden stillschweigend
  * ignoriert – nur konfigurierte User können die Brücke nutzen.
  *
+ * HTTP-API (Port 3001):
+ *   GET  /status  → Verbindungsstatus + Account-Info
+ *   GET  /qr      → aktueller QR-Code als Base64 Data-URL (PNG)
+ *   POST /logout   → Session trennen, Daten löschen
+ *
  * Env-Vars:
  *   ADMIN_URL         Admin-Interface URL (default: http://admin-interface:8080)
  *   BRIDGE_LOG_LEVEL  pino log level (default: info)
  *   SESSION_DIR       Session-Verzeichnis (default: /app/session)
+ *   BRIDGE_HTTP_PORT  HTTP-API Port (default: 3001)
  */
 
 const {
@@ -25,24 +31,35 @@ const {
   isJidGroup,
 } = require("@whiskeysockets/baileys");
 
-const qrcode = require("qrcode-terminal");
-const fetch  = require("node-fetch");
-const pino   = require("pino");
-const path   = require("path");
-const fs     = require("fs");
+const http     = require("http");
+const qrcode   = require("qrcode");
+const qrTerm   = require("qrcode-terminal");
+const fetch    = require("node-fetch");
+const pino     = require("pino");
+const path     = require("path");
+const fs       = require("fs");
 
 // ── Konfiguration ──────────────────────────────────────────────────────────
 
 const ADMIN_URL   = (process.env.ADMIN_URL || "http://admin-interface:8080").replace(/\/$/, "");
 const SESSION_DIR = path.resolve(process.env.SESSION_DIR || "/app/session");
 const LOG_LEVEL   = process.env.BRIDGE_LOG_LEVEL || "info";
+const HTTP_PORT   = parseInt(process.env.BRIDGE_HTTP_PORT || "3001", 10);
 
 const log = pino({ level: LOG_LEVEL, transport: { target: "pino-pretty", options: { colorize: false } } });
+
+// ── Bridge State ────────────────────────────────────────────────────────────
+
+let _status      = "disconnected"; // "disconnected" | "qr" | "connected"
+let _qrDataUrl   = null;           // Base64 Data-URL des aktuellen QR-Codes
+let _accountJid  = null;           // JID des verbundenen Accounts
+let _accountName = null;           // Push-Name des Accounts
+let _sock        = null;           // aktuelle Baileys-Socket-Instanz
 
 // ── Routing-Tabelle ────────────────────────────────────────────────────────
 // Map: sender-jid (normalized) → { agent_url, user_id }
 
-let _routes     = new Map();  // jid → { agent_url, user_id }
+let _routes     = new Map();
 let _waMode     = "separate";
 let _selfPrefix = "!h ";
 
@@ -57,7 +74,6 @@ async function refreshConfig() {
 
     const newRoutes = new Map();
     for (const route of (data.routes || [])) {
-      // Normalize JID: strip device-suffix if present (e.g. "49xxx@s.whatsapp.net:1" → "49xxx@s.whatsapp.net")
       const jid = normalizeJid(route.jid);
       if (jid) newRoutes.set(jid, { agent_url: route.agent_url, user_id: route.user_id });
     }
@@ -72,7 +88,6 @@ async function refreshConfig() {
 
 function normalizeJid(jid) {
   if (!jid) return null;
-  // Strip device suffix: "491234@s.whatsapp.net:5" → "491234@s.whatsapp.net"
   return jid.split(":")[0];
 }
 
@@ -111,6 +126,82 @@ function extractText(msg) {
   return null;
 }
 
+// ── HTTP-API ───────────────────────────────────────────────────────────────
+
+function startHttpServer() {
+  const server = http.createServer(async (req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    const url = req.url.split("?")[0];
+
+    if (req.method === "GET" && url === "/status") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        status: _status,
+        account_jid: _accountJid,
+        account_name: _accountName,
+        has_qr: _qrDataUrl !== null,
+        routes: _routes.size,
+      }));
+      return;
+    }
+
+    if (req.method === "GET" && url === "/qr") {
+      if (!_qrDataUrl) {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Kein QR-Code verfügbar", status: _status }));
+        return;
+      }
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ qr: _qrDataUrl, status: _status }));
+      return;
+    }
+
+    if (req.method === "POST" && url === "/logout") {
+      log.info("Logout angefordert via HTTP-API");
+      try {
+        if (_sock) {
+          await _sock.logout();
+        }
+      } catch (e) {
+        log.warn({ err: e.message }, "Logout-Fehler (Session wird trotzdem gelöscht)");
+      }
+      // Session-Daten löschen
+      fs.rmSync(SESSION_DIR, { recursive: true, force: true });
+      fs.mkdirSync(SESSION_DIR, { recursive: true });
+      _status = "disconnected";
+      _qrDataUrl = null;
+      _accountJid = null;
+      _accountName = null;
+      _sock = null;
+
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, message: "Session getrennt. Bridge startet neu..." }));
+
+      // Neustart nach kurzer Verzögerung
+      setTimeout(() => {
+        startBridge();
+      }, 2000);
+      return;
+    }
+
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Not found" }));
+  });
+
+  server.listen(HTTP_PORT, () => {
+    log.info({ port: HTTP_PORT }, "Bridge HTTP-API gestartet");
+  });
+}
+
 // ── Haupt-Loop ─────────────────────────────────────────────────────────────
 
 async function startBridge() {
@@ -118,10 +209,15 @@ async function startBridge() {
     fs.mkdirSync(SESSION_DIR, { recursive: true });
   }
 
+  _status = "disconnected";
+  _qrDataUrl = null;
+  _accountJid = null;
+  _accountName = null;
+
   // Initiales Routing laden
   await refreshConfig();
   // Alle 5 Minuten aktualisieren
-  setInterval(refreshConfig, 5 * 60 * 1000);
+  const configInterval = setInterval(refreshConfig, 5 * 60 * 1000);
 
   const { version } = await fetchLatestBaileysVersion();
   log.info({ version }, "Baileys Version");
@@ -138,24 +234,38 @@ async function startBridge() {
     markOnlineOnConnect: false,
   });
 
+  _sock = sock;
+
   sock.ev.on("creds.update", saveCreds);
 
   // ── Verbindungsstatus ────────────────────────────────────────────────────
 
-  sock.ev.on("connection.update", (update) => {
+  sock.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      console.log("\n\n========================================");
+      _status = "qr";
+      // QR-Code als Base64 Data-URL generieren
+      try {
+        _qrDataUrl = await qrcode.toDataURL(qr, { width: 256, margin: 2 });
+      } catch (e) {
+        log.error({ err: e.message }, "QR-Code Generierung fehlgeschlagen");
+        _qrDataUrl = null;
+      }
+      // Auch weiterhin im Terminal anzeigen (für docker logs)
+      console.log("\n========================================");
       console.log("  HAANA WhatsApp – QR-Code scannen:");
       console.log("========================================\n");
-      qrcode.generate(qr, { small: true });
-      console.log("\n(QR-Code verfällt nach ~60 Sekunden – bei Timeout neu starten)\n");
+      qrTerm.generate(qr, { small: true });
+      console.log("\n(QR-Code auch im Admin-Interface verfügbar)\n");
     }
 
     if (connection === "open") {
-      const jid = sock.user?.id || "?";
-      log.info({ jid }, "WhatsApp verbunden");
+      _status = "connected";
+      _qrDataUrl = null;  // QR nicht mehr nötig
+      _accountJid = sock.user?.id || null;
+      _accountName = sock.user?.name || null;
+      log.info({ jid: _accountJid, name: _accountName }, "WhatsApp verbunden");
     }
 
     if (connection === "close") {
@@ -163,12 +273,20 @@ async function startBridge() {
       const reason = Object.keys(DisconnectReason).find((k) => DisconnectReason[k] === code);
       const logout = code === DisconnectReason.loggedOut;
 
+      _status = "disconnected";
+      _qrDataUrl = null;
+      _accountJid = null;
+      _accountName = null;
+      _sock = null;
+
       log.warn({ code, reason }, "Verbindung getrennt");
+      clearInterval(configInterval);
 
       if (logout) {
         log.error("Session ungültig (ausgeloggt). Session löschen und neu starten.");
         fs.rmSync(SESSION_DIR, { recursive: true, force: true });
-        process.exit(1);
+        fs.mkdirSync(SESSION_DIR, { recursive: true });
+        setTimeout(startBridge, 3_000);
       } else {
         log.info("Verbinde in 5 Sekunden neu...");
         setTimeout(startBridge, 5_000);
@@ -182,7 +300,6 @@ async function startBridge() {
     if (type !== "notify") return;
 
     for (const msg of messages) {
-      // Eigene Nachrichten und Broadcasts ignorieren
       if (msg.key.fromMe)                        continue;
       if (isJidBroadcast(msg.key.remoteJid))     continue;
       if (isJidGroup(msg.key.remoteJid))          continue;
@@ -198,7 +315,6 @@ async function startBridge() {
 
       // ── Sicherheitsfilter: nur bekannte Nummern ──────────────────────────
       if (_routes.size === 0) {
-        // Keine Routen konfiguriert → alle ignorieren (fail-safe)
         log.warn({ from }, "Keine Routen konfiguriert – Nachricht ignoriert");
         continue;
       }
@@ -240,8 +356,9 @@ async function startBridge() {
 
 // ── Start ──────────────────────────────────────────────────────────────────
 
-log.info({ adminUrl: ADMIN_URL, sessionDir: SESSION_DIR }, "HAANA WhatsApp Bridge startet");
+log.info({ adminUrl: ADMIN_URL, sessionDir: SESSION_DIR, httpPort: HTTP_PORT }, "HAANA WhatsApp Bridge startet");
 
+startHttpServer();
 startBridge().catch((err) => {
   log.error({ err: err.message }, "Fataler Fehler – Bridge beendet");
   process.exit(1);

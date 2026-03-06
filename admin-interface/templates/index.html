@@ -553,6 +553,33 @@
     <div class="config-section">
       <div class="config-section-header">📱 WhatsApp Bridge</div>
       <div class="config-section-body">
+
+        <!-- Verbindungsstatus -->
+        <div id="wa-connection" style="margin-bottom:18px;padding:14px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border);">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span id="wa-status-dot" style="width:10px;height:10px;border-radius:50%;background:#888;display:inline-block;"></span>
+              <strong id="wa-status-text" style="font-size:13px;">Status wird geladen...</strong>
+            </div>
+            <div style="display:flex;gap:6px;">
+              <button class="btn btn-secondary" style="font-size:11px;padding:4px 10px;" onclick="refreshWaStatus()">Aktualisieren</button>
+              <button class="btn btn-secondary" id="wa-logout-btn" style="font-size:11px;padding:4px 10px;display:none;" onclick="waLogout()">Trennen</button>
+            </div>
+          </div>
+          <div id="wa-account-info" style="font-size:12px;color:var(--muted);display:none;">
+            Verbunden als: <span id="wa-account-name"></span> (<span id="wa-account-jid"></span>)
+          </div>
+          <div id="wa-qr-container" style="text-align:center;display:none;margin-top:12px;">
+            <p style="font-size:12px;color:var(--muted);margin-bottom:8px;">QR-Code mit WhatsApp scannen (Verknüpfte Geräte → Gerät hinzufügen):</p>
+            <img id="wa-qr-img" style="max-width:256px;border-radius:8px;border:1px solid var(--border);" alt="QR-Code">
+            <p style="font-size:11px;color:var(--muted);margin-top:6px;">Code wird automatisch aktualisiert...</p>
+          </div>
+          <div id="wa-offline-info" style="font-size:12px;color:var(--muted);display:none;">
+            Bridge-Container nicht erreichbar. Starte mit: <code>docker compose --profile agents up -d</code>
+          </div>
+        </div>
+
+        <!-- Modus-Konfiguration -->
         <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
           Globaler Modus für die WhatsApp-Bridge. Pro User wird nur die Rufnummer hinterlegt (Routing eingehender Nachrichten).
         </p>
@@ -2226,6 +2253,87 @@ async function stopUserContainer(userId) {
   else       { toast(`Fehler: ${(d.error || '?').substring(0,80)}`, 'err'); }
 }
 
+// ── WhatsApp Bridge Status ─────────────────────────────────────────────────
+
+let _waPolling = null;
+
+async function refreshWaStatus() {
+  const dot   = document.getElementById('wa-status-dot');
+  const txt   = document.getElementById('wa-status-text');
+  const info  = document.getElementById('wa-account-info');
+  const qrBox = document.getElementById('wa-qr-container');
+  const offl  = document.getElementById('wa-offline-info');
+  const logoutBtn = document.getElementById('wa-logout-btn');
+
+  try {
+    const r = await fetch('/api/whatsapp-status');
+    const d = await r.json();
+
+    info.style.display  = 'none';
+    qrBox.style.display = 'none';
+    offl.style.display  = 'none';
+    logoutBtn.style.display = 'none';
+
+    if (d.status === 'connected') {
+      dot.style.background = 'var(--accent)';
+      txt.textContent = 'Verbunden';
+      if (d.account_name || d.account_jid) {
+        document.getElementById('wa-account-name').textContent = d.account_name || '–';
+        document.getElementById('wa-account-jid').textContent  = d.account_jid  || '–';
+        info.style.display = 'block';
+      }
+      logoutBtn.style.display = 'inline-block';
+      stopWaPolling();
+    } else if (d.status === 'qr') {
+      dot.style.background = '#f59e0b';
+      txt.textContent = 'Warte auf QR-Code Scan...';
+      // QR-Code laden
+      const qr = await fetch('/api/whatsapp-qr');
+      const qd = await qr.json();
+      if (qd.qr) {
+        document.getElementById('wa-qr-img').src = qd.qr;
+        qrBox.style.display = 'block';
+      }
+      startWaPolling();
+    } else if (d.status === 'offline') {
+      dot.style.background = '#888';
+      txt.textContent = 'Bridge offline';
+      offl.style.display = 'block';
+      stopWaPolling();
+    } else {
+      dot.style.background = '#ef4444';
+      txt.textContent = 'Nicht verbunden';
+      startWaPolling();
+    }
+  } catch (e) {
+    dot.style.background = '#888';
+    txt.textContent = 'Bridge nicht erreichbar';
+    offl.style.display = 'block';
+    stopWaPolling();
+  }
+}
+
+function startWaPolling() {
+  if (_waPolling) return;
+  _waPolling = setInterval(refreshWaStatus, 3000);
+}
+
+function stopWaPolling() {
+  if (_waPolling) { clearInterval(_waPolling); _waPolling = null; }
+}
+
+async function waLogout() {
+  if (!confirm('WhatsApp-Session wirklich trennen? Du musst danach den QR-Code erneut scannen.')) return;
+  const r = await fetch('/api/whatsapp-logout', { method: 'POST' });
+  const d = await r.json();
+  if (d.ok) {
+    toast('WhatsApp getrennt – QR-Code erscheint gleich', 'ok');
+    setTimeout(refreshWaStatus, 3000);
+  } else {
+    toast('Fehler: ' + (d.error || 'Unbekannt'), 'err');
+  }
+}
+
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   loadConversations(currentInstance);
@@ -2234,6 +2342,7 @@ document.addEventListener('DOMContentLoaded', () => {
   checkAgentHealth(currentInstance);
   loadStatus();
   loadClaudeMd(currentMdInst);
+  refreshWaStatus();
 });
 </script>
 </body>

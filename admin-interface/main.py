@@ -17,6 +17,9 @@ Routen:
   PATCH /api/users/{user_id}         → User aktualisieren (Container-Restart)
   DELETE /api/users/{user_id}        → User löschen (Container entfernen)
   POST /api/users/{user_id}/restart  → Container neu starten
+  GET  /api/whatsapp-status          → Bridge-Verbindungsstatus (Proxy)
+  GET  /api/whatsapp-qr              → QR-Code als Base64 Data-URL (Proxy)
+  POST /api/whatsapp-logout          → WhatsApp-Session trennen (Proxy)
 """
 
 import asyncio
@@ -884,6 +887,53 @@ async def whatsapp_config_endpoint():
         port      = user.get("api_port", 8001)
         routes.append({"jid": jid, "agent_url": f"http://{container}:{port}", "user_id": user["id"]})
     return {"mode": wa.get("mode", "separate"), "self_prefix": wa.get("self_prefix", "!h "), "routes": routes}
+
+
+# ── WhatsApp Bridge Proxy (Status / QR / Logout) ──────────────────────────────
+
+_WA_BRIDGE_URL = os.environ.get("WHATSAPP_BRIDGE_URL", "http://whatsapp-bridge:3001")
+
+
+@app.get("/api/whatsapp-status")
+async def whatsapp_status():
+    """Proxy: Bridge-Verbindungsstatus abfragen."""
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=5) as c:
+            r = await c.get(f"{_WA_BRIDGE_URL}/status")
+            return r.json()
+    except httpx.ConnectError:
+        return {"status": "offline", "error": "Bridge nicht erreichbar"}
+    except Exception as e:
+        return {"status": "offline", "error": str(e)[:200]}
+
+
+@app.get("/api/whatsapp-qr")
+async def whatsapp_qr():
+    """Proxy: aktuellen QR-Code als Base64 Data-URL abrufen."""
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=5) as c:
+            r = await c.get(f"{_WA_BRIDGE_URL}/qr")
+            return r.json()
+    except httpx.ConnectError:
+        return {"error": "Bridge nicht erreichbar", "status": "offline"}
+    except Exception as e:
+        return {"error": str(e)[:200], "status": "offline"}
+
+
+@app.post("/api/whatsapp-logout")
+async def whatsapp_logout():
+    """Proxy: WhatsApp-Session trennen."""
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await c.post(f"{_WA_BRIDGE_URL}/logout")
+            return r.json()
+    except httpx.ConnectError:
+        return {"ok": False, "error": "Bridge nicht erreichbar"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
 
 
 @app.post("/api/rebuild-memory/{instance}")

@@ -17,5 +17,6 @@ COPY index.js .
 RUN mkdir -p /app/session
 
 ENV NODE_ENV=production
+EXPOSE 3001
 
 CMD ["node", "index.js"]
