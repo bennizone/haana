@@ -1380,7 +1380,9 @@ def _start_agent_container(user: dict, cfg: dict) -> dict:
     # Claude OAuth-Credentials nur für nicht-MiniMax Provider mounten
     if not is_minimax:
         volumes[host_claude_config]  = {"bind": "/home/haana/.claude",    "mode": "rw"}
-        volumes["/root/.claude.json"] = {"bind": "/home/haana/.claude.json", "mode": "rw"}
+        claude_json_host = Path("/root/.claude.json")
+        if claude_json_host.is_file():
+            volumes[str(claude_json_host)] = {"bind": "/home/haana/.claude.json", "mode": "rw"}
 
     try:
         # Eventuell alten Container entfernen
