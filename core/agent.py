@@ -280,7 +280,7 @@ class HaanaAgent:
         elapsed = time.monotonic() - t_start
         logger.info(f"[{self.instance}] Antwort in {elapsed:.2f}s")
 
-        response_text = "".join(response_parts)
+        response_text = "".join(response_parts).strip()
 
         # Memory: Konversation async im Hintergrund speichern (non-blocking)
         if response_text:
