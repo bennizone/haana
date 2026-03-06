@@ -273,7 +273,7 @@ Fallback: täglich um 03:00 Uhr (auch wenn Subscription nicht ausgelöst hat)
 4. Protokoll im Admin-Interface
 ```
 
-**LLM-Auswahl:** ministral-3:3b reicht für Deduplizierung und einfache Muster. Für komplexe Widerspruchsauflösung kann im Admin-Interface temporär auf ministral-3:8b oder Sonnet umgeschaltet werden – Ollama lädt das Modell automatisch.
+**LLM-Auswahl:** ministral-3-32k:3b reicht für Deduplizierung und einfache Muster. Für komplexe Widerspruchsauflösung kann im Admin-Interface temporär auf ministral-3:8b oder Sonnet umgeschaltet werden – Ollama lädt das Modell automatisch.
 
 ---
 
@@ -490,7 +490,7 @@ haana/
 
 ## Admin-Webinterface
 
-Erreichbar unter `http://10.83.1.11:8080`. Nur im LAN. Kein externer Zugang über Pangolin geplant. Simpле Auth (Username/Password) oder zunächst offen – beides akzeptabel.
+Erreichbar unter `http://10.83.1.11:8080`. Nur im LAN. Kein externer Zugang über Pangolin geplant. Simple Auth (Username/Password) oder zunächst offen – beides akzeptabel.
 
 ### Chat-Tab
 
@@ -660,28 +660,70 @@ Schritt 7: Privacy
 
 ### Phase 1 – Fundament ✅ Abgeschlossen
 
-- Docker-LXC aufgesetzt (haana, 10.83.1.11, Debian 13, Docker 29.2.1)
-- Claude Code SDK Agent läuft
-- Mem0 + Qdrant: Memory schreiben und lesen, Scope-Erkennung funktioniert
-- infer=True mit ministral-3:8b: strukturierte Faktenextraktion läuft, Sessions-übergreifend bestätigt
-- Feedback beim Speichern, Korrektur möglich
-- SSH-Zugang funktioniert
+**Core Agent (`core/agent.py`):**
+- `HaanaAgent` auf Basis Claude Code SDK – persistenter Subprocess (kein ~5s Startup-Overhead pro Nachricht)
+- Session-Kontinuität, Lazy-Init, Graceful Shutdown mit flush → persist → close
+- REPL-Modus für lokale Tests, API-Modus wenn `HAANA_API_PORT` gesetzt (Docker-kompatibel)
+- Memory-Kontext wird dem Prompt vorangestellt (`<relevante_erinnerungen>`)
+
+**Memory-Layer (`core/memory.py`):**
+- Mem0 + Qdrant, Collections: `alice_memory`, `bob_memory`, `household_memory`
+- Embeddings: bge-m3 via Ollama (1024 dims)
+- Extraktion: ministral-3-32k:3b mit `infer=True`, async nach Antwort, blockiert nichts
+- Sliding Window (20 Nachrichten / 60 min): non-blocking async Extraktion im Hintergrund
+- `flush_all()` beim Shutdown: alle Window-Einträge zu Qdrant extrahieren (kein Datenverlust)
+- Context-File (`data/context/alice.json`): Window-State überlebt Container-Restarts
+- Pending-Extraktion beim Startup: unfertige Einträge aus letzter Session werden nachgeholt
+- Scope-Erkennung via Regex aus Agent-Antwort
+
+**Agent HTTP-API (`core/api.py`):**
+- FastAPI pro Agent-Instanz
+- `POST /chat` → `{"message": "...", "channel": "webchat|whatsapp|..."}` → `{"response": "..."}`
+- `WS /ws` → WebSocket bidirektional
+- `GET /health` → Instanz-Status
+
+**Logging (`core/logger.py`):**
+- 4 JSONL-Kategorien mit Daily Rotation, nie gelöscht:
+  - `conversations/{instance}/YYYY-MM-DD.jsonl`
+  - `memory-ops/YYYY-MM-DD.jsonl`
+  - `tool-calls/YYYY-MM-DD.jsonl`
+  - `llm-calls/YYYY-MM-DD.jsonl`
+
+**Admin-Interface (`admin-interface/`):**
+- FastAPI + Jinja2 + Vanilla JS, Port 8080
+- Tabs: Chat, Logs, Config (Sub-Tabs: LLMs / Memory / Dienste / Logs / CLAUDE.md), Status, Users
+- Config → LLMs: 4 Provider-Slots als Akkordeon, LLM-Zuordnung per User (nicht global)
+- Config → Dienste: HA REST API + Test-Button, HA MCP-Konfiguration + Test
+- Users-Tab: Expandierbare Karten, CLAUDE.md Inline-Editor pro User, Dropdown HA Person-Entity
+- Chat-Tab: kanalübergreifend, SSE Live-Updates, Agent-Online/Offline-Status
+
+**Docker Compose:**
+- `qdrant`, `admin-interface` immer aktiv
+- `instanz-alice` (Port 8001), `instanz-bob` (Port 8002), `whatsapp-bridge` unter Profil `agents`
+- `instanz-ha-assist`, `instanz-ha-advanced` vorbereitet (System-Instanzen, nicht user-erstellbar)
+
+**WhatsApp-Sicherheit:**
+- JID-Allowlist: Bridge ignoriert Nachrichten von unbekannten Nummern stillschweigend
+- Routing-Tabelle: Bridge pollt `/api/whatsapp-config` alle 5 Min. → kein Neustart bei neuem User
+- WhatsApp-Modus global konfiguriert (Separate Nummer / An mich selbst + Prefix)
 
 ---
 
 ### Phase 2 – Erster Alltagskanal
 
-**Ziel:** Alice hört auf SSH. Erster echter Alltagskanal. Admin-Interface als Gerüst.
+**Ziel:** Alice hört auf SSH. Erster echter Alltagskanal.
 
-**Aufgaben:**
-- WhatsApp-Bridge (Baileys): QR-Code Scan, Nachrichten-Routing zur Alice-Instanz
+**Bereits in Phase 1 vorgezogen ✅:**
+- Sliding Window + Async Extraktion
+- Logging-Infrastruktur (alle 4 Kategorien)
+- Admin-Interface inkl. Config-Tab, Users-Tab, CLAUDE.md-Editor
+- LLM-Provider-Slots (4x Akkordeon), LLM-Zuordnung per User
+- WhatsApp-Bridge Grundgerüst inkl. JID-Allowlist + Config-Polling
+
+**Noch offen:**
+- WhatsApp-Bridge: QR-Code Scan + Inbetriebnahme
 - STT: WhatsApp Sprachnachricht (.ogg) → `POST /api/stt` an HA → Transkription
 - TTS: Antwort → `POST /api/tts_proxy` an HA → Audio → WhatsApp (konfigurierbar)
-- Sliding Window + Async Extraktion implementieren
-- Logging-Infrastruktur: alle Kategorien, täglich rotiert
-- Admin-Interface Gerüst: Chat-Tab (kanalübergreifend, aufklappbar), Config-Tab
-- LLM-Konfiguration im Config-Tab: Provider-Slots, Use-Case-Zuordnung
-- Setup-Wizard: Schritte 1–5 funktionsfähig
 - Backup auf TrueNAS: SMB/CIFS, täglich, Logs unbegrenzt / Qdrant 7 Tage
 
 **Ergebnis:** Alice chattet per WhatsApp. Agent kennt ihn bereits (Phase 1 Memory). Admin-Interface unter `http://10.83.1.11:8080` zugänglich.
@@ -771,7 +813,7 @@ Schritt 7: Privacy
 ### Phase 7 – Optimierung + Community
 
 - OLLAMA_KEEP_ALIVE und OLLAMA_NUM_PARALLEL tunen
-- Vision-Modell evaluieren: ministral-3:3b vs ministral-3:8b vs qwen3-vl:8b im echten Betrieb
+- Vision-Modell evaluieren: ministral-3-32k:3b vs ministral-3:8b vs qwen3-vl:8b im echten Betrieb
 - Daily Brief persönlicher, kontextsensitiver
 - Setup-Wizard polieren, README für Community
 - GitHub Repo public
@@ -800,6 +842,7 @@ Schritt 7: Privacy
 - bge-m3 + ministral-3-32k:3b als lokaler Stack: Extraktion und Voice bestätigt, Vision noch zu evaluieren
 - Vision-Qualität: ministral-3-32k:3b vs ministral-3:8b vs qwen3-vl:8b im echten Betrieb
 - Traumprozess-Qualität: ministral-3-32k:3b ausreichend oder größeres Modell nötig?
+- HA MCP vs REST API für Chat-Instanzen: MCP-Endpunkt in HA vorhanden, ob sauberer als REST zeigt der Betrieb
 
 ---
 
