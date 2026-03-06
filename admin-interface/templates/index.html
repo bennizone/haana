@@ -220,8 +220,9 @@
     transition: opacity .3s; opacity: 0; pointer-events: none; z-index: 999;
   }
   #toast.show { opacity: 1; }
-  #toast.ok   { border-color: var(--green); color: var(--green); }
-  #toast.err  { border-color: var(--red);   color: var(--red); }
+  #toast.ok   { border-color: var(--green);  color: var(--green); }
+  #toast.err  { border-color: var(--red);    color: var(--red); }
+  #toast.warn { border-color: var(--yellow); color: var(--yellow); }
 
   /* ── Scrollbar ── */
   ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -1270,6 +1271,57 @@ function renderConfig(c) {
   if (waPfxGrp) waPfxGrp.style.display = (wa.mode === 'self') ? '' : 'none';
 }
 
+// Felder, deren Änderung einen Container-Neustart erfordert
+// (werden als Env-Vars beim Container-Start gesetzt)
+const RESTART_FIELDS = {
+  'services.ollama_url':     'Ollama URL',
+  'services.qdrant_url':     'Qdrant URL',
+  'services.ha_url':         'Home Assistant URL',
+  'services.ha_token':       'Home Assistant Token',
+  'services.ha_mcp_enabled': 'HA MCP aktiviert',
+  'services.ha_mcp_url':     'HA MCP URL',
+  'services.ha_mcp_token':   'HA MCP Token',
+  'memory.window_size':      'Window-Größe',
+  'memory.window_minutes':   'Window-Alter (Minuten)',
+  'embedding.model':         'Embedding-Modell',
+  'embedding.dims':          'Embedding-Dimensionen',
+};
+// LLM-Slot-Felder (model/url/key) erfordern ebenfalls Neustart
+const RESTART_LLM_FIELDS = ['model', 'url', 'key', 'type'];
+
+function _getNestedValue(obj, path) {
+  return path.split('.').reduce((o, k) => o && o[k], obj);
+}
+
+function _detectRestartChanges(oldCfg, newCfg) {
+  const changes = [];
+
+  // Dienste-Felder prüfen
+  for (const [path, label] of Object.entries(RESTART_FIELDS)) {
+    const oldVal = _getNestedValue(oldCfg, path) ?? '';
+    const newVal = _getNestedValue(newCfg, path) ?? '';
+    if (String(oldVal) !== String(newVal)) {
+      changes.push(label);
+    }
+  }
+
+  // LLM-Provider-Slots prüfen (Änderungen an model/url/key betreffen Container)
+  const oldSlots = oldCfg.llm_providers || [];
+  const newSlots = newCfg.llm_providers || [];
+  for (let i = 0; i < Math.max(oldSlots.length, newSlots.length); i++) {
+    const os = oldSlots[i] || {};
+    const ns = newSlots[i] || {};
+    for (const f of RESTART_LLM_FIELDS) {
+      if ((os[f] ?? '') !== (ns[f] ?? '')) {
+        changes.push(`LLM Slot ${ns.slot || os.slot || i+1}: ${f}`);
+        break; // nur einmal pro Slot melden
+      }
+    }
+  }
+
+  return changes;
+}
+
 async function saveConfig() {
   if (!cfg) return;
   // Lese Slots dynamisch aus DOM (Anzahl kann sich geändert haben)
@@ -1339,9 +1391,26 @@ async function saveConfig() {
   try {
     const r = await fetch('/api/config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(newCfg) });
     if (r.ok) {
+      const restartChanges = _detectRestartChanges(cfg, newCfg);
       cfg = newCfg;
-      toast('Konfiguration gespeichert ✓', 'ok');
+      toast('Konfiguration gespeichert', 'ok');
       if (statusEl) { statusEl.style.color = 'var(--green)'; statusEl.textContent = '✓ Gespeichert'; setTimeout(() => { statusEl.textContent = ''; }, 3000); }
+
+      // Neustart anbieten wenn restart-relevante Felder geändert wurden
+      if (restartChanges.length > 0) {
+        const changedList = restartChanges.join('\n  - ');
+        const doRestart = confirm(
+          `Folgende Änderungen erfordern einen Neustart der Agenten:\n\n  - ${changedList}\n\n` +
+          `Beim Neustart wird das aktuelle Sliding Window ins Memory extrahiert. ` +
+          `Der Konversationskontext geht dabei verloren.\n\n` +
+          `Agenten jetzt neu starten?`
+        );
+        if (doRestart) {
+          await restartAllAgents();
+        } else {
+          toast('Neustart ausstehend – Änderungen werden erst nach manuellem Neustart wirksam', 'warn');
+        }
+      }
     } else {
       toast('Fehler beim Speichern', 'err');
       if (statusEl) { statusEl.style.color = 'var(--red)'; statusEl.textContent = '✗ Fehler'; }
@@ -1349,6 +1418,25 @@ async function saveConfig() {
   } catch(e) {
     toast(e.message, 'err');
     if (statusEl) { statusEl.style.color = 'var(--red)'; statusEl.textContent = '✗ ' + e.message; }
+  }
+}
+
+async function restartAllAgents() {
+  toast('Agenten werden neu gestartet...', 'ok');
+  try {
+    const r = await fetch('/api/instances/restart-all', { method: 'POST' });
+    const data = await r.json();
+    if (data.ok) {
+      toast('Alle Agenten neu gestartet', 'ok');
+    } else {
+      const failed = Object.entries(data.results || {})
+        .filter(([, v]) => !v.ok)
+        .map(([k, v]) => `${k}: ${v.error || 'Fehler'}`)
+        .join(', ');
+      toast('Teilweise fehlgeschlagen: ' + (failed || 'Unbekannter Fehler'), 'err');
+    }
+  } catch(e) {
+    toast('Neustart fehlgeschlagen: ' + e.message, 'err');
   }
 }
 

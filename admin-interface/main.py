@@ -637,6 +637,36 @@ async def force_stop_instance(instance: str):
         return {"ok": False, "error": str(e)[:200]}
 
 
+@app.post("/api/instances/restart-all")
+async def restart_all_instances():
+    """Alle Agent-Container mit aktueller Config neu erstellen (neue Env-Vars)."""
+    if not _docker_client:
+        return {"ok": False, "error": "Docker nicht verfügbar"}
+
+    cfg = load_config()
+    results = {}
+
+    # Dynamische User-Container
+    for user in cfg.get("users", []):
+        uid = user["id"]
+        result = _start_agent_container(user, cfg)
+        results[uid] = result
+
+    # Statische Compose-Instanzen (ohne User-Config)
+    for inst in INSTANCES:
+        if inst not in results:
+            container_name = _get_instance_container(inst)
+            try:
+                c = _docker_client.containers.get(container_name)
+                c.restart(timeout=10)
+                results[inst] = {"ok": True, "container": container_name}
+            except Exception as e:
+                results[inst] = {"ok": False, "error": str(e)[:200]}
+
+    all_ok = all(r.get("ok", False) for r in results.values())
+    return {"ok": all_ok, "results": results}
+
+
 @app.post("/api/qdrant/restart")
 async def restart_qdrant():
     """Qdrant-Container neu starten."""
@@ -1269,11 +1299,27 @@ def _start_agent_container(user: dict, cfg: dict) -> dict:
         "HAANA_READ_SCOPES":      read_scopes,
         "HAANA_MODEL":            pslot.get("model", "claude-sonnet-4-6"),
         "HAANA_MEMORY_MODEL":     eslot.get("model", "ministral-3-32k:3b"),
+        "HAANA_WINDOW_SIZE":      str(cfg.get("memory", {}).get("window_size", 20)),
+        "HAANA_WINDOW_MINUTES":   str(cfg.get("memory", {}).get("window_minutes", 60)),
+        "HAANA_EMBEDDING_MODEL":  cfg.get("embedding", {}).get("model", "bge-m3"),
+        "HAANA_EMBEDDING_DIMS":   str(cfg.get("embedding", {}).get("dims", 1024)),
         "QDRANT_URL":             cfg.get("services", {}).get("qdrant_url", "http://qdrant:6333"),
         "OLLAMA_URL":             cfg.get("services", {}).get("ollama_url", ""),
         "HA_URL":                 cfg.get("services", {}).get("ha_url", ""),
         "HA_TOKEN":               cfg.get("services", {}).get("ha_token", ""),
     }
+
+    # HA MCP-Server URL (optional)
+    services = cfg.get("services", {})
+    if services.get("ha_mcp_enabled"):
+        ha_mcp_url = services.get("ha_mcp_url", "").strip()
+        if not ha_mcp_url:
+            # Default: {ha_url}/mcp_server/sse
+            ha_url = services.get("ha_url", "").rstrip("/")
+            if ha_url:
+                ha_mcp_url = f"{ha_url}/mcp_server/sse"
+        if ha_mcp_url:
+            env["HA_MCP_URL"] = ha_mcp_url
 
     # Anthropic API-Key oder Custom URL
     if pslot.get("key"):
