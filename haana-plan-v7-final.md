@@ -413,10 +413,10 @@ Anfrage eingehend
 ### Provider-Konfiguration
 
 ```
-Slot 1 – Primär:   Anthropic API (anthropic-kompatibel)
-Slot 2 – Fallback: MiniMax (anthropic-kompatibel, custom URL)
-Slot 3 – Lokal:    Ollama GPU-Server (openai-kompatibel, dynamische Modellliste)
-Slot 4 – Custom:   [frei – Groq, Together AI, LM Studio, vLLM, ...]
+Slot 1 – Primär:   Anthropic claude-sonnet-4-6 (OAuth via Claude Code CLI)
+Slot 2 – Fallback: Anthropic claude-haiku-4-5 (OAuth)
+Slot 3 – Lokal:    Ollama ministral-3-32k:3b (GPU-Server, openai-kompatibel)
+Slot 4 – Custom:   MiniMax MiniMax-M2.5 (anthropic-kompatibel, custom URL + Key)
 ```
 
 Jeder Slot: Typ / Base URL / API-Key / Modell (Freitextfeld, überschreibbar). "Teste Verbindung" Button pro Slot.
@@ -451,10 +451,8 @@ TTS: Text → POST /api/tts_proxy an HA → Audio → WhatsApp / Lautsprecher
 haana/
 ├── skills/
 │   ├── kalender/              ← CalDAV, user-spezifisch (3 Kalender)
-│   ├── home-assistant/        ← Entities steuern via HA API (Chat-Instanzen)
-│   ├── ha-automations/        ← Automationen per Chat erstellen (mit Auto-Backup)
+│   ├── [home-assistant/]       ← via MCP (89 Tools): Entities, Automationen, Shopping, Backup
 │   ├── ha-subscriptions/      ← Entity-Abonnements, Webhooks, proaktive Reaktionen
-│   ├── einkaufsliste/         ← HA Shopping List (Basis), später Bring!
 │   ├── morning-brief/         ← Daily Brief (Termine, Wetter, Erinnerungen)
 │   ├── monitoring/            ← Proxmox, TrueNAS, OPNsense-Status
 │   ├── rezepte/               ← Foto → Vision → Wissensbasis (Phase 6)
@@ -747,10 +745,21 @@ Schritt 7: Privacy
 - TTS auch als Text: Antwort wahlweise zusätzlich als Textnachricht (neben Sprachnachricht)
 - Admin-Interface modernisiert: CSS/JS extrahiert, i18n-System, Modal-System, Responsive Design, Design-Modernisierung, Restart-Detection
 
+**Weitere erledigte Aufgaben ✅:**
+- JS-Extraktion: ~1700 Zeilen inline JS in 7 separate Module extrahiert (app.js, chat.js, config.js, users.js, status.js, logs.js, whatsapp.js)
+- HA MCP Integration: Dual-Support für Built-in (6 Tools, SSE) und Extended ha-mcp Add-on (89 Tools, HTTP). Typ-Auswahl im Admin-Interface
+- Config-Tabs umstrukturiert: Services → Home Assistant / WhatsApp / Infra (logische Gruppierung)
+- HA Auto-Backup: Konfigurierbar im Admin-Interface, Agent erstellt HA-Backup vor Automations-/Script-Änderungen
+- MCP-Typ-Auswahl: Admin kann zwischen Built-in (SSE, 6 Tools) und Extended (HTTP, 89 Tools) MCP wählen
+- Test-Suite: 44 Unit-Tests (test_agent, test_config, test_i18n, test_memory)
+- Integration-Test: Automatisierter End-to-End-Test (User-CRUD, Chat, MiniMax, MCP, Memory, User-Setup-Verifizierung)
+- Multi-Agent Development: 4 spezialisierte Agenten (Webinterface, Review, Test, Docs) mit Briefing-Dokumenten
+
 **Noch offen:**
-- Admin-Interface: JS-Code (~1700 Zeilen) noch inline in index.html → in separate Module extrahieren
 - Admin-Interface: Restliche hardcoded deutsche Strings in dynamischem JS durch `t()`-Aufrufe ersetzen
+- Admin-Interface: Claude Code OAuth-Login im Webinterface ermöglichen (Token-Refresh ohne SSH)
 - Backup auf TrueNAS: SMB/CIFS, täglich, Logs unbegrenzt / Qdrant 7 Tage
+- Docker Image Optimierung: Agent-Images 10.5 GB wegen PyTorch/CUDA (sentence-transformers). CPU-only oder entfernen → ~1-2 GB
 
 **Ergebnis:** Alice chattet per WhatsApp (Text + Sprache, bidirektional). Agent kennt ihn bereits (Phase 1 Memory). STT + TTS via Nabu Casa. Admin-Interface unter `http://10.83.1.11:8080` zugänglich, responsiv, mehrsprachig vorbereitet.
 
@@ -777,11 +786,11 @@ Schritt 7: Privacy
 
 **Ziel:** HA-Steuerung per Chat, HAANA in Voice Pipeline, proaktive Benachrichtigungen.
 
-**HA Chat-Steuerung:**
-- HA-Skill: Entities steuern, Status abfragen, Szenen aktivieren
-- HA-Skill: Automationen per Chat erstellen (mit automatischem HA-Backup)
-- Monitoring-Skill: Proxmox, TrueNAS, OPNsense Uptime
-- Einkaufsliste-Skill: HA Shopping List (Basis für Bring! in Phase später)
+**HA Chat-Steuerung (großteils durch MCP abgedeckt ✅):**
+- ~~HA-Skill: Entities steuern, Status abfragen, Szenen aktivieren~~ → MCP Tools (89 Tools via ha-mcp Add-on)
+- ~~HA-Skill: Automationen per Chat erstellen~~ → MCP Tools + Auto-Backup (konfigurierbar im Admin-Interface)
+- ~~Einkaufsliste-Skill: HA Shopping List~~ → MCP Tools (todo/shopping list)
+- Monitoring-Skill: Proxmox, TrueNAS, OPNsense Uptime (nicht HA, separater Skill nötig)
 
 **HAANA Voice Backend:**
 - Drei Fake-Modelle: HAANA-Alice, HAANA-Bob, HAANA-HA
@@ -869,7 +878,7 @@ Schritt 7: Privacy
 - bge-m3 + ministral-3-32k:3b als lokaler Stack: Extraktion und Voice bestätigt, Vision noch zu evaluieren
 - Vision-Qualität: ministral-3-32k:3b vs ministral-3:8b vs qwen3-vl:8b im echten Betrieb
 - Traumprozess-Qualität: ministral-3-32k:3b ausreichend oder größeres Modell nötig?
-- HA MCP vs REST API für Chat-Instanzen: MCP-Endpunkt in HA vorhanden, ob sauberer als REST zeigt der Betrieb
+- HA MCP vs REST API: ✅ Evaluiert – Extended ha-mcp Add-on (89 Tools) als Standard, Built-in (6 Tools) als Fallback. MCP macht viele geplante Skills obsolet (ha-automations, einkaufsliste, HA-Steuerung)
 
 ---
 

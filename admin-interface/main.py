@@ -841,32 +841,52 @@ async def test_ha_mcp(request: Request):
     if not token:
         return {"ok": False, "detail": "Token fehlt"}
 
+    mcp_type = (body.get("mcp_type") or "extended").strip()
+
     import httpx
-    headers = {"Authorization": f"Bearer {token}", "Accept": "text/event-stream"}
     try:
-        # SSE ist ein Endlos-Stream → nur Response-Headers auswerten, Body nicht lesen
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(connect=8.0, read=5.0, write=5.0, pool=5.0)
         ) as client:
-            async with client.stream("GET", mcp_url, headers=headers) as r:
-                ct = r.headers.get("content-type", "")
+            if mcp_type == "builtin":
+                # Built-in HA MCP: SSE (GET), Bearer auth
+                headers = {"Authorization": f"Bearer {token}", "Accept": "text/event-stream"}
+                async with client.stream("GET", mcp_url, headers=headers) as r:
+                    ct = r.headers.get("content-type", "")
+                    sc = r.status_code
+                    if sc == 401:
+                        return {"ok": False, "detail": "Token ungültig (401 Unauthorized)"}
+                    if sc == 404:
+                        return {"ok": False, "detail": "Endpunkt nicht gefunden (404) – MCP Server in HA aktiviert?"}
+                    if sc in (200, 206):
+                        if "event-stream" in ct:
+                            return {"ok": True, "detail": "MCP Server erreichbar ✓ (SSE)"}
+                        return {"ok": True, "detail": f"Erreichbar · HTTP {sc} · {ct or 'kein Content-Type'}"}
+                    return {"ok": sc < 400, "detail": f"HTTP {sc}"}
+            else:
+                # Extended ha-mcp: Streamable HTTP (POST), MCP initialize
+                headers = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
+                init_msg = {"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                            "params": {"protocolVersion": "2025-03-26",
+                                       "capabilities": {},
+                                       "clientInfo": {"name": "haana-test", "version": "1.0"}}}
+                r = await client.post(mcp_url, json=init_msg, headers=headers)
                 sc = r.status_code
-                # Stream sofort schließen – wir brauchen nur den Status
                 if sc == 401:
-                    return {"ok": False, "detail": "Token ungültig (401 Unauthorized)"}
+                    return {"ok": False, "detail": "Token ungültig (401)"}
                 if sc == 404:
-                    return {"ok": False, "detail": "Endpunkt nicht gefunden (404) – MCP Server in HA aktiviert?"}
-                if sc in (200, 206):
-                    if "event-stream" in ct:
-                        return {"ok": True, "detail": f"MCP Server erreichbar ✓ (SSE)"}
-                    return {"ok": True, "detail": f"Erreichbar · HTTP {sc} · {ct or 'kein Content-Type'}"}
+                    return {"ok": False, "detail": "Endpunkt nicht gefunden (404)"}
+                if sc in (200, 202):
+                    return {"ok": True, "detail": f"MCP Server erreichbar ✓ (HTTP, Status {sc})"}
+                # SSE-formatted response (ha-mcp returns SSE even over POST)
+                ct = r.headers.get("content-type", "")
+                if "event-stream" in ct:
+                    return {"ok": True, "detail": "MCP Server erreichbar ✓ (SSE-over-HTTP)"}
                 return {"ok": sc < 400, "detail": f"HTTP {sc}"}
     except httpx.ConnectError:
         return {"ok": False, "detail": "Verbindung abgelehnt – HA erreichbar?"}
     except httpx.ReadTimeout:
-        # Read-Timeout bei SSE ist normal wenn kein initiales Event kommt,
-        # aber connect hat funktioniert → Server ist erreichbar
-        return {"ok": True, "detail": "MCP Server erreichbar ✓ (kein initiales Event innerhalb 5s – normal)"}
+        return {"ok": True, "detail": "MCP Server erreichbar ✓ (Timeout nach Connect – normal bei SSE)"}
     except httpx.TimeoutException:
         return {"ok": False, "detail": "Connect-Timeout – HA erreichbar?"}
     except Exception as e:
@@ -1329,13 +1349,19 @@ def _start_agent_container(user: dict, cfg: dict) -> dict:
             env["HA_MCP_TYPE"] = ha_mcp_type  # agent needs this for SSE vs HTTP
 
     # Anthropic API-Key oder Custom URL
-    if pslot.get("key"):
-        env["ANTHROPIC_API_KEY"] = pslot["key"]
-    if pslot.get("url"):
-        env["ANTHROPIC_BASE_URL"] = pslot["url"]
-    if pslot.get("type") == "minimax" or (pslot.get("url", "") and "minimax" in pslot.get("url", "").lower()):
-        env["ANTHROPIC_BASE_URL"]  = pslot.get("url", "https://api.minimax.io/anthropic")
+    is_minimax = pslot.get("type") == "minimax" or (pslot.get("url", "") and "minimax" in pslot.get("url", "").lower())
+    if is_minimax:
+        # MiniMax: Anthropic-kompatibel, eigene Auth + Env-Vars
+        env["ANTHROPIC_BASE_URL"]  = pslot.get("url") or "https://api.minimax.io/anthropic"
         env["ANTHROPIC_AUTH_TOKEN"] = pslot.get("key", "")
+        env["ANTHROPIC_MODEL"]     = pslot.get("model", "MiniMax-M2.5")
+        env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
+        # ANTHROPIC_API_KEY darf bei MiniMax NICHT gesetzt sein
+    else:
+        if pslot.get("key"):
+            env["ANTHROPIC_API_KEY"] = pslot["key"]
+        if pslot.get("url"):
+            env["ANTHROPIC_BASE_URL"] = pslot["url"]
 
     image = _get_agent_image()
     network = _get_compose_network()
@@ -1348,9 +1374,13 @@ def _start_agent_container(user: dict, cfg: dict) -> dict:
     volumes = {
         host_claude_md:     {"bind": "/app/CLAUDE.md",        "mode": "ro"},
         host_skills:        {"bind": "/app/skills",            "mode": "ro"},
-        host_claude_config: {"bind": "/home/haana/.claude",   "mode": "ro"},
         DATA_VOLUME:        {"bind": "/data",                  "mode": "rw"},
     }
+
+    # Claude OAuth-Credentials nur für nicht-MiniMax Provider mounten
+    if not is_minimax:
+        volumes[host_claude_config]  = {"bind": "/home/haana/.claude",    "mode": "rw"}
+        volumes["/root/.claude.json"] = {"bind": "/home/haana/.claude.json", "mode": "rw"}
 
     try:
         # Eventuell alten Container entfernen
