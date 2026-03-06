@@ -284,6 +284,36 @@ async function ttsViaHA(text) {
   return audioBuffer;
 }
 
+/**
+ * Konvertiert Audio (MP3/WAV/etc.) zu OGG Opus für WhatsApp Sprachnachrichten.
+ * WhatsApp erwartet OGG/Opus für ptt (Push-to-Talk) Nachrichten.
+ */
+function convertToOggOpus(inputBuffer) {
+  return new Promise((resolve, reject) => {
+    const { spawn } = require("child_process");
+    const proc = spawn("ffmpeg", [
+      "-i", "pipe:0",
+      "-c:a", "libopus",
+      "-b:a", "32k",
+      "-ar", "48000",
+      "-ac", "1",
+      "-f", "ogg",
+      "pipe:1",
+    ], { stdio: ["pipe", "pipe", "pipe"] });
+
+    const chunks = [];
+    proc.stdout.on("data", (chunk) => chunks.push(chunk));
+    proc.stderr.on("data", () => {}); // ffmpeg stderr ignorieren (Fortschrittsinfos)
+    proc.on("close", (code) => {
+      if (code === 0) resolve(Buffer.concat(chunks));
+      else reject(new Error(`ffmpeg exit code ${code}`));
+    });
+    proc.on("error", reject);
+    proc.stdin.write(inputBuffer);
+    proc.stdin.end();
+  });
+}
+
 // ── Nachrichtentext extrahieren ────────────────────────────────────────────
 
 function extractText(msg) {
@@ -558,15 +588,17 @@ async function startBridge() {
         let sentVoice = false;
         if (wasVoice && _ttsConfig) {
           try {
-            const audioBuffer = await ttsViaHA(response);
-            if (audioBuffer && audioBuffer.length > 0) {
+            const mp3Buffer = await ttsViaHA(response);
+            if (mp3Buffer && mp3Buffer.length > 0) {
+              const oggBuffer = await convertToOggOpus(mp3Buffer);
+              log.info({ mp3: mp3Buffer.length, ogg: oggBuffer.length }, "Audio konvertiert (MP3 → OGG Opus)");
               await sock.sendMessage(from, {
-                audio: audioBuffer,
-                mimetype: "audio/mp4",
-                ptt: true, // Push-to-Talk = als Sprachnachricht anzeigen
+                audio: oggBuffer,
+                mimetype: "audio/ogg; codecs=opus",
+                ptt: true,
               });
               sentVoice = true;
-              log.info({ from: fromNorm, bytes: audioBuffer.length }, "TTS-Sprachnachricht gesendet");
+              log.info({ from: fromNorm, bytes: oggBuffer.length }, "TTS-Sprachnachricht gesendet");
             }
           } catch (ttsErr) {
             log.warn({ err: ttsErr.message }, "TTS fehlgeschlagen – sende Text stattdessen");

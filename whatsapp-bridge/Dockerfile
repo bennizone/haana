@@ -3,7 +3,7 @@ FROM node:22-slim
 WORKDIR /app
 
 # git wird für npm-Pakete mit Git-Abhängigkeiten benötigt (z.B. Baileys)
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates ffmpeg \
     && rm -rf /var/lib/apt/lists/* \
     && git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
 
