@@ -25,6 +25,7 @@
 const {
   default: makeWASocket,
   useMultiFileAuthState,
+  makeCacheableSignalKeyStore,
   DisconnectReason,
   fetchLatestBaileysVersion,
   isJidBroadcast,
@@ -62,6 +63,43 @@ let _sock        = null;           // aktuelle Baileys-Socket-Instanz
 let _routes     = new Map();
 let _waMode     = "separate";
 let _selfPrefix = "!h ";
+
+// ── LID → Phone Mapping ───────────────────────────────────────────────────
+// Neuere WhatsApp-Versionen senden LID (Linked ID) statt phone@s.whatsapp.net.
+// Strategie nach NanoClaw: lokaler Cache + signalRepository.lidMapping Fallback.
+const _lidToPhone = {};  // lidUser → "491XXXXXXXXX@s.whatsapp.net"
+
+async function translateJid(jid, sock) {
+  if (!jid.endsWith("@lid")) return jid;
+  const lidUser = jid.split("@")[0].split(":")[0];
+  log.info({ lidJid: jid, lidUser, cacheKeys: Object.keys(_lidToPhone) }, "translateJid aufgerufen");
+
+  // Lokaler Cache
+  const cached = _lidToPhone[lidUser];
+  if (cached) {
+    log.info({ lidJid: jid, phoneJid: cached }, "LID→Phone (cached)");
+    return cached;
+  }
+
+  // Baileys signalRepository Fallback
+  const hasMapping = !!sock?.signalRepository?.lidMapping;
+  log.info({ hasMapping, hasRepo: !!sock?.signalRepository }, "signalRepository check");
+  try {
+    const pn = await sock?.signalRepository?.lidMapping?.getPNForLID(jid);
+    log.info({ pn, lidJid: jid }, "getPNForLID Ergebnis");
+    if (pn) {
+      const phoneJid = `${pn.split("@")[0].split(":")[0]}@s.whatsapp.net`;
+      _lidToPhone[lidUser] = phoneJid;
+      log.info({ lidJid: jid, phoneJid }, "LID→Phone (signalRepository)");
+      return phoneJid;
+    }
+  } catch (err) {
+    log.warn({ err: err.message, jid }, "LID-Resolve via signalRepository fehlgeschlagen");
+  }
+
+  log.warn({ lidJid: jid }, "LID konnte nicht aufgelöst werden");
+  return jid;
+}
 
 async function refreshConfig() {
   try {
@@ -226,7 +264,10 @@ async function startBridge() {
 
   const sock = makeWASocket({
     version,
-    auth: state,
+    auth: {
+      creds: state.creds,
+      keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" })),
+    },
     logger: pino({ level: "silent" }),
     printQRInTerminal: false,
     browser: ["HAANA", "Chrome", "1.0.0"],
@@ -266,6 +307,19 @@ async function startBridge() {
       _accountJid = sock.user?.id || null;
       _accountName = sock.user?.name || null;
       log.info({ jid: _accountJid, name: _accountName }, "WhatsApp verbunden");
+
+      // LID→Phone Mapping für eigenen Account aufbauen (NanoClaw-Strategie)
+      if (sock.user) {
+        const phoneUser = sock.user.id?.split(":")[0];
+        const lidUser = sock.user.lid?.split(":")[0];
+        if (lidUser && phoneUser) {
+          _lidToPhone[lidUser] = `${phoneUser}@s.whatsapp.net`;
+          log.info({ lidUser, phoneUser }, "Eigene LID→Phone Zuordnung gesetzt");
+        }
+      }
+
+      // Routing direkt nach Verbindung aktualisieren
+      refreshConfig();
     }
 
     if (connection === "close") {
@@ -304,7 +358,8 @@ async function startBridge() {
       if (isJidBroadcast(msg.key.remoteJid))     continue;
       if (isJidGroup(msg.key.remoteJid))          continue;
 
-      const from         = msg.key.remoteJid;
+      const rawFrom      = msg.key.remoteJid;
+      const from         = await translateJid(rawFrom, sock);
       const fromNorm     = normalizeJid(from);
       let   text         = extractText(msg);
 

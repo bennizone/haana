@@ -702,10 +702,15 @@ Schritt 7: Privacy
 - `instanz-alice` (Port 8001), `instanz-bob` (Port 8002), `whatsapp-bridge` unter Profil `agents`
 - `instanz-ha-assist`, `instanz-ha-advanced` vorbereitet (System-Instanzen, nicht user-erstellbar)
 
-**WhatsApp-Sicherheit:**
+**WhatsApp-Bridge (`whatsapp-bridge/`):**
+- Baileys + Node.js, Routing via Admin-Interface `/api/whatsapp-config`
 - JID-Allowlist: Bridge ignoriert Nachrichten von unbekannten Nummern stillschweigend
 - Routing-Tabelle: Bridge pollt `/api/whatsapp-config` alle 5 Min. → kein Neustart bei neuem User
 - WhatsApp-Modus global konfiguriert (Separate Nummer / An mich selbst + Prefix)
+- HTTP-API (Port 3001): `/status`, `/qr` (Base64-PNG), `/logout`
+- LID-Handling: Neuere WhatsApp-Versionen senden LID statt Phone-JID → `translateJid()` mit lokalem Cache + `signalRepository`-Fallback (nach NanoClaw-Strategie), pro User optionales `whatsapp_lid` Feld als Routing-Fallback
+- QR-Code Linking/Unlinking im Admin-Interface (Dienste-Tab): Status-Anzeige, QR-Code scanbar, Trennen-Button, Auto-Polling
+- `makeCacheableSignalKeyStore` für besseres Key-Caching (NanoClaw-Strategie)
 
 ---
 
@@ -718,10 +723,14 @@ Schritt 7: Privacy
 - Logging-Infrastruktur (alle 4 Kategorien)
 - Admin-Interface inkl. Config-Tab, Users-Tab, CLAUDE.md-Editor
 - LLM-Provider-Slots (4x Akkordeon), LLM-Zuordnung per User
-- WhatsApp-Bridge Grundgerüst inkl. JID-Allowlist + Config-Polling
+- WhatsApp-Bridge komplett inkl. JID-Allowlist, Config-Polling, LID-Handling, QR-Code im Admin-Interface
+
+**Bereits in Phase 2 erledigt ✅:**
+- WhatsApp-Bridge: QR-Code Linking/Unlinking im Admin-Interface
+- WhatsApp-Bridge: Inbetriebnahme, Alice chattet per WhatsApp mit Agent
+- LID→Phone-Auflösung (NanoClaw-Strategie), Dual-Routing (Phone-JID + LID)
 
 **Noch offen:**
-- WhatsApp-Bridge: QR-Code Scan + Inbetriebnahme
 - STT: WhatsApp Sprachnachricht (.ogg) → `POST /api/stt` an HA → Transkription
 - TTS: Antwort → `POST /api/tts_proxy` an HA → Audio → WhatsApp (konfigurierbar)
 - Backup auf TrueNAS: SMB/CIFS, täglich, Logs unbegrenzt / Qdrant 7 Tage

@@ -874,7 +874,9 @@ async def ha_users():
 
 @app.get("/api/whatsapp-config")
 async def whatsapp_config_endpoint():
-    """Liefert WhatsApp-Routing-Konfiguration für die Bridge."""
+    """Liefert WhatsApp-Routing-Konfiguration für die Bridge.
+    Pro User wird sowohl die Phone-JID als auch eine optionale LID als Route geliefert,
+    da neuere WhatsApp-Versionen LID statt Phone-JID senden."""
     cfg = load_config()
     wa  = cfg.get("whatsapp", {"mode": "separate", "self_prefix": "!h "})
     routes = []
@@ -885,7 +887,13 @@ async def whatsapp_config_endpoint():
         jid = phone if "@" in phone else f"{phone}@s.whatsapp.net"
         container = user.get("container_name", f"haana-instanz-{user['id']}-1")
         port      = user.get("api_port", 8001)
-        routes.append({"jid": jid, "agent_url": f"http://{container}:{port}", "user_id": user["id"]})
+        target = {"agent_url": f"http://{container}:{port}", "user_id": user["id"]}
+        routes.append({"jid": jid, **target})
+        # Optionale LID als zweite Route registrieren
+        lid = user.get("whatsapp_lid", "").strip()
+        if lid:
+            lid_jid = lid if "@" in lid else f"{lid}@lid"
+            routes.append({"jid": lid_jid, **target})
     return {"mode": wa.get("mode", "separate"), "self_prefix": wa.get("self_prefix", "!h "), "routes": routes}
 
 
