@@ -4,238 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HAANA Admin</title>
-<style>
-  :root {
-    --bg:       #0f1117;
-    --surface:  #1a1d27;
-    --border:   #2a2d3e;
-    --accent:   #6c63ff;
-    --accent2:  #a78bfa;
-    --text:     #e2e8f0;
-    --muted:    #64748b;
-    --green:    #4ade80;
-    --red:      #f87171;
-    --yellow:   #fbbf24;
-    --blue:     #60a5fa;
-    --font:     'Inter', system-ui, sans-serif;
-    --mono:     'JetBrains Mono', 'Fira Code', monospace;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; line-height: 1.5; }
-
-  /* ── Header ── */
-  header {
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    padding: 0 24px;
-    display: flex; align-items: center; gap: 16px; height: 52px;
-    position: sticky; top: 0; z-index: 100;
-  }
-  header h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
-  header h1 span { color: var(--accent2); }
-  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
-  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
-
-  /* ── Tabs ── */
-  .tabs {
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    padding: 0 24px;
-    display: flex; gap: 4px;
-  }
-  .tab-btn {
-    background: none; border: none; color: var(--muted); cursor: pointer;
-    padding: 10px 16px; font-size: 13px; font-weight: 500;
-    border-bottom: 2px solid transparent; margin-bottom: -1px;
-    transition: color .15s, border-color .15s;
-  }
-  .tab-btn.active { color: var(--accent2); border-color: var(--accent2); }
-  .tab-btn:hover:not(.active) { color: var(--text); }
-
-  /* ── Config Sub-Tabs ── */
-  .cfg-tab-btn {
-    background: none; border: none; color: var(--muted); cursor: pointer;
-    padding: 8px 14px; font-size: 13px; font-weight: 500;
-    border-bottom: 2px solid transparent; margin-bottom: -1px;
-    transition: color .15s, border-color .15s;
-  }
-  .cfg-tab-btn.active { color: var(--accent2); border-color: var(--accent2); }
-  .cfg-tab-btn:hover:not(.active) { color: var(--text); }
-  .cfg-tab-panel { max-width: 1100px; margin: 0 auto; }
-
-  /* ── Panels ── */
-  .panel { display: none; padding: 24px; max-width: 1200px; margin: 0 auto; }
-  .panel.active { display: block; }
-  #panel-config.active { padding: 0; max-width: none; }
-
-  /* ── Instance Selector ── */
-  .instance-bar { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
-  .inst-btn {
-    background: var(--surface); border: 1px solid var(--border); color: var(--muted);
-    padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px;
-    transition: all .15s;
-  }
-  .inst-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .inst-btn:hover:not(.active) { border-color: var(--accent2); color: var(--text); }
-
-  /* ── Conversation Cards ── */
-  #conv-list { display: flex; flex-direction: column; gap: 12px; }
-  .conv-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    overflow: hidden;
-  }
-  .conv-header {
-    padding: 12px 16px;
-    display: flex; gap: 12px; align-items: flex-start;
-    cursor: pointer; user-select: none;
-  }
-  .conv-header:hover { background: rgba(255,255,255,.02); }
-  .conv-meta { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
-  .conv-time { color: var(--muted); font-size: 12px; font-family: var(--mono); white-space: nowrap; }
-  .channel-badge {
-    font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600;
-    text-transform: uppercase; letter-spacing: .5px; flex-shrink: 0;
-  }
-  .ch-repl    { background: #1e293b; color: var(--muted); }
-  .ch-whatsapp{ background: #14532d; color: var(--green); }
-  .ch-webchat { background: #1e3a5f; color: var(--blue); }
-  .ch-ha_app  { background: #3b1f5e; color: var(--accent2); }
-  .conv-messages { flex: 1; min-width: 0; }
-  .conv-user { color: var(--text); margin-bottom: 4px; }
-  .conv-user strong { color: var(--accent2); }
-  .conv-assistant { color: var(--muted); font-size: 13px; }
-  .conv-assistant em { color: var(--text); font-style: normal; }
-  .expand-icon { color: var(--muted); font-size: 18px; flex-shrink: 0; transition: transform .2s; }
-  .conv-card.expanded .expand-icon { transform: rotate(90deg); }
-
-  .conv-details {
-    display: none; padding: 0 16px 14px 16px;
-    border-top: 1px solid var(--border);
-  }
-  .conv-card.expanded .conv-details { display: block; }
-
-  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
-  @media (max-width: 640px) { .detail-grid { grid-template-columns: 1fr; } }
-  .detail-box {
-    background: var(--bg); border: 1px solid var(--border);
-    border-radius: 6px; padding: 10px 12px;
-  }
-  .detail-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
-  .detail-value { font-size: 13px; color: var(--text); font-family: var(--mono); white-space: pre-wrap; word-break: break-word; }
-  .tool-chip {
-    display: inline-block; background: #1e1b4b; border: 1px solid #4338ca;
-    color: var(--accent2); font-size: 11px; padding: 2px 8px; border-radius: 4px;
-    font-family: var(--mono); margin: 2px;
-  }
-  .mem-badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 4px; }
-  .mem-yes { background: #14532d; color: var(--green); }
-  .mem-no  { background: #1a1d27; color: var(--muted); }
-  .latency { color: var(--yellow); font-family: var(--mono); }
-
-  /* ── Leerer Zustand ── */
-  .empty-state {
-    text-align: center; padding: 60px 20px; color: var(--muted);
-  }
-  .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
-
-  /* ── Live-Indicator ── */
-  .live-bar {
-    display: flex; align-items: center; gap: 8px;
-    color: var(--muted); font-size: 12px; margin-left: auto;
-  }
-  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
-  .live-dot.offline { background: var(--muted); animation: none; }
-  .live-dot { animation: pulse 2s infinite; }
-
-  /* ── Config Tab ── */
-  .config-section {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 10px; margin-bottom: 20px; overflow: hidden;
-  }
-  .config-section-header {
-    padding: 14px 18px; border-bottom: 1px solid var(--border);
-    font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px;
-  }
-  .config-section-body { padding: 18px; }
-
-  .provider-slot {
-    background: var(--bg); border: 1px solid var(--border);
-    border-radius: 8px; padding: 14px; margin-bottom: 12px;
-  }
-  .provider-slot:last-child { margin-bottom: 0; }
-  .slot-header { font-weight: 600; color: var(--accent2); margin-bottom: 12px; font-size: 13px; }
-  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
-  .form-row.three { grid-template-columns: 1fr 1fr 1fr; }
-  @media (max-width: 640px) { .form-row, .form-row.three { grid-template-columns: 1fr; } }
-  .form-group { display: flex; flex-direction: column; gap: 4px; }
-  .form-group label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
-  .form-group input, .form-group select, .form-group textarea {
-    background: var(--surface); border: 1px solid var(--border);
-    color: var(--text); padding: 7px 10px; border-radius: 6px; font-size: 13px;
-    font-family: inherit; transition: border-color .15s; width: 100%;
-  }
-  .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
-    outline: none; border-color: var(--accent2);
-  }
-  .form-group textarea { font-family: var(--mono); font-size: 12px; resize: vertical; min-height: 300px; }
-
-  .btn {
-    padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer;
-    font-size: 13px; font-weight: 500; transition: all .15s;
-  }
-  .btn-primary { background: var(--accent); color: #fff; }
-  .btn-primary:hover { background: #5a52d5; }
-  .btn-secondary { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
-  .btn-secondary:hover { border-color: var(--accent2); }
-  .btn-danger { background: #7f1d1d; color: var(--red); border: 1px solid #991b1b; }
-
-  .use-case-row {
-    display: grid; grid-template-columns: 200px 1fr 1fr; gap: 10px;
-    align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border);
-  }
-  .use-case-row:last-child { border-bottom: none; }
-  .use-case-label { font-size: 13px; color: var(--text); }
-
-  /* ── Status Tab ── */
-  .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  @media (max-width: 640px) { .status-grid { grid-template-columns: 1fr; } }
-  .status-card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 10px; padding: 16px;
-  }
-  .status-card h3 { font-size: 13px; color: var(--muted); margin-bottom: 12px; text-transform: uppercase; letter-spacing: .5px; }
-  .status-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 13px; }
-  .status-ok   { color: var(--green); }
-  .status-err  { color: var(--red); }
-  .status-warn { color: var(--yellow); }
-  .tag { font-size: 11px; background: var(--bg); border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; font-family: var(--mono); }
-
-  /* ── Toast ── */
-  #toast {
-    position: fixed; bottom: 24px; right: 24px;
-    background: var(--surface); border: 1px solid var(--border);
-    padding: 12px 18px; border-radius: 8px; font-size: 13px;
-    transition: opacity .3s; opacity: 0; pointer-events: none; z-index: 999;
-  }
-  #toast.show { opacity: 1; }
-  #toast.ok   { border-color: var(--green);  color: var(--green); }
-  #toast.err  { border-color: var(--red);    color: var(--red); }
-  #toast.warn { border-color: var(--yellow); color: var(--yellow); }
-
-  /* ── Scrollbar ── */
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: var(--bg); }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-</style>
+<link rel="stylesheet" href="/static/css/admin.css">
 </head>
 <body>
 
 <header>
   <div class="status-dot" id="header-dot" title="System-Status"></div>
   <h1>HAANA <span>Admin</span></h1>
-  <span style="color:var(--muted);font-size:12px;" id="header-status">Verbinde...</span>
+  <span class="header-status" id="header-status">Verbinde...</span>
+  <select class="header-lang" id="lang-selector" onchange="I18n.load(this.value)">
+    <option value="de">DE</option>
+    <option value="en">EN</option>
+  </select>
 </header>
 
 <div class="tabs">
@@ -255,11 +35,9 @@
       {{ inst }}
     </button>
     {% endfor %}
-    <div style="display:flex;align-items:center;gap:6px;margin-left:8px;">
-      <label style="font-size:11px;color:var(--muted);">Letzte</label>
-      <select id="conv-limit" onchange="loadConversations(currentInstance)"
-        style="background:var(--surface);border:1px solid var(--border);color:var(--text);
-               padding:4px 8px;border-radius:6px;font-size:12px;cursor:pointer;">
+    <div class="limit-selector">
+      <label>Letzte</label>
+      <select id="conv-limit" onchange="loadConversations(currentInstance)">
         <option value="10">10</option>
         <option value="25">25</option>
         <option value="50" selected>50</option>
@@ -270,43 +48,32 @@
     <div class="live-bar">
       <div class="live-dot offline" id="live-dot"></div>
       <span id="live-label">Live</span>
-      <span id="agent-status" style="margin-left:8px;font-size:11px;color:var(--muted);"></span>
+      <span id="agent-status" class="agent-status"></span>
     </div>
   </div>
 
-  <!-- Rebuild-Banner (erscheint wenn Qdrant leer aber Logs vorhanden) -->
-  <div id="rebuild-banner" style="display:none;background:#1c1a00;border:1px solid var(--yellow);
-       border-radius:8px;padding:12px 16px;margin-bottom:14px;display:none;
-       justify-content:space-between;align-items:center;gap:12px;">
-    <span style="color:var(--yellow);font-size:13px;">
-      ⚠ Qdrant ist leer – Memory kann aus Konversations-Logs neu aufgebaut werden.
-    </span>
-    <div style="display:flex;gap:8px;flex-shrink:0;">
-      <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;border-color:var(--yellow);color:var(--yellow);"
-        onclick="showTab('config');scrollToRebuild()">Jetzt rebuilden</button>
-      <button class="btn btn-secondary" style="font-size:12px;padding:5px 10px;"
-        onclick="document.getElementById('rebuild-banner').style.display='none'">✕</button>
+  <!-- Rebuild-Banner -->
+  <div id="rebuild-banner" class="rebuild-banner">
+    <span class="rebuild-banner-text">Qdrant ist leer – Memory kann aus Konversations-Logs neu aufgebaut werden.</span>
+    <div class="rebuild-banner-actions">
+      <button class="btn btn-sm btn-secondary" onclick="showTab('config');scrollToRebuild()">Jetzt rebuilden</button>
+      <button class="btn btn-sm btn-secondary" onclick="document.getElementById('rebuild-banner').classList.remove('active')">✕</button>
     </div>
   </div>
 
   <!-- Chat-Eingabe -->
-  <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px;">
-    <div style="display:flex;gap:10px;align-items:flex-end;">
-      <textarea id="chat-input"
+  <div class="chat-box">
+    <div class="chat-input-row">
+      <textarea id="chat-input" class="chat-input"
         placeholder="Nachricht an HAANA... (Enter senden, Shift+Enter Zeilenumbruch)"
         rows="2"
-        style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);
-               padding:10px 12px;border-radius:8px;font-family:inherit;font-size:14px;
-               resize:none;line-height:1.4;transition:border-color .15s;"
         onkeydown="handleChatKey(event)"
-        onfocus="this.style.borderColor='var(--accent2)'"
-        onblur="this.style.borderColor='var(--border)'"
       ></textarea>
-      <button class="btn btn-primary" id="send-btn" onclick="sendChat()" style="height:44px;padding:0 20px;flex-shrink:0;">
+      <button class="btn btn-primary chat-send-btn" id="send-btn" onclick="sendChat()">
         Senden ↵
       </button>
     </div>
-    <div id="chat-status" style="margin-top:8px;font-size:12px;color:var(--muted);min-height:18px;"></div>
+    <div id="chat-status" class="chat-status"></div>
   </div>
 
   <div id="conv-list">
@@ -318,12 +85,12 @@
 
   <!-- Log-Dateien (editierbar) -->
   <div style="margin-top:20px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-      <span style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Log-Dateien</span>
-      <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" onclick="loadLogFiles(currentInstance)">↺</button>
+    <div class="section-header">
+      <span class="section-label">Log-Dateien</span>
+      <button class="btn btn-sm btn-secondary" onclick="loadLogFiles(currentInstance)">↺</button>
     </div>
-    <div id="log-files-list" style="display:flex;flex-wrap:wrap;gap:6px;">
-      <span style="font-size:12px;color:var(--muted);">Wird geladen…</span>
+    <div id="log-files-list" class="log-files-list">
+      <span class="log-files-loading">Wird geladen…</span>
     </div>
   </div>
 </div>
@@ -344,23 +111,23 @@
 <div id="panel-config" class="panel" style="padding:0;">
 
   <!-- Sticky save bar -->
-  <div style="position:sticky;top:52px;z-index:50;background:var(--surface);border-bottom:1px solid var(--border);padding:10px 24px;display:flex;gap:10px;align-items:center;">
-    <button class="btn btn-primary" onclick="saveConfig()">💾 Konfiguration speichern</button>
+  <div class="config-save-bar">
+    <button class="btn btn-primary" onclick="saveConfig()">Konfiguration speichern</button>
     <button class="btn btn-secondary" onclick="loadConfig()">↺ Zurücksetzen</button>
-    <span id="config-save-status" style="font-size:12px;color:var(--muted);margin-left:4px;"></span>
+    <span id="config-save-status" class="config-save-status"></span>
   </div>
 
   <!-- Config Sub-Tabs -->
-  <div style="background:var(--bg);border-bottom:1px solid var(--border);padding:0 24px;display:flex;gap:2px;">
-    <button class="cfg-tab-btn active" onclick="showCfgTab('llms')"     id="cfgtab-llms">🤖 LLMs</button>
-    <button class="cfg-tab-btn"        onclick="showCfgTab('memory')"   id="cfgtab-memory">🧠 Memory</button>
-    <button class="cfg-tab-btn"        onclick="showCfgTab('dienste')"  id="cfgtab-dienste">🔌 Dienste</button>
-    <button class="cfg-tab-btn"        onclick="showCfgTab('logs')"     id="cfgtab-logs">🗂 Logs</button>
-    <button class="cfg-tab-btn"        onclick="showCfgTab('claudemd')" id="cfgtab-claudemd">📝 CLAUDE.md</button>
+  <div class="cfg-tabs">
+    <button class="cfg-tab-btn active" onclick="showCfgTab('llms')"     id="cfgtab-llms">LLMs</button>
+    <button class="cfg-tab-btn"        onclick="showCfgTab('memory')"   id="cfgtab-memory">Memory</button>
+    <button class="cfg-tab-btn"        onclick="showCfgTab('dienste')"  id="cfgtab-dienste">Dienste</button>
+    <button class="cfg-tab-btn"        onclick="showCfgTab('logs')"     id="cfgtab-logs">Logs</button>
+    <button class="cfg-tab-btn"        onclick="showCfgTab('claudemd')" id="cfgtab-claudemd">CLAUDE.md</button>
   </div>
 
   <!-- ── Sub-Tab: LLMs ── -->
-  <div id="cfgpanel-llms" class="cfg-tab-panel" style="padding:24px;">
+  <div id="cfgpanel-llms" class="cfg-tab-panel">
 
     <!-- LLM Provider Slots -->
     <div class="config-section">
@@ -376,7 +143,7 @@
   </div>
 
   <!-- ── Sub-Tab: Memory ── -->
-  <div id="cfgpanel-memory" class="cfg-tab-panel" style="display:none;padding:24px;">
+  <div id="cfgpanel-memory" class="cfg-tab-panel" style="display:none;">
 
     <!-- Memory Settings -->
     <div class="config-section">
@@ -429,8 +196,8 @@
           <label>Modell-Name (manuell)</label>
           <input type="text" id="embed-model-custom" placeholder="z.B. mxbai-embed-large">
         </div>
-        <p style="font-size:12px;color:var(--yellow);margin-top:10px;">
-          ⚠ Beim Wechsel des Embedding-Modells müssen alle Qdrant-Collections neu aufgebaut werden
+        <p class="form-warning">
+          Beim Wechsel des Embedding-Modells müssen alle Qdrant-Collections neu aufgebaut werden
           (andere Dimensionen sind nicht kompatibel).
         </p>
       </div>
@@ -440,40 +207,40 @@
     <div class="config-section" id="rebuild-section">
       <div class="config-section-header">🔄 Memory Rebuild aus Konversations-Logs</div>
       <div class="config-section-body">
-        <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">
+        <p class="form-hint" style="margin-bottom:14px;">
           Baut Qdrant komplett neu auf – nützlich nach Datenverlust oder Embedding-Modell-Wechsel.
           Konversations-Logs sind die Source of Truth.<br>
-          <strong style="color:var(--yellow);">⚠ Kann je nach Anzahl der Konversationen und LLM-Geschwindigkeit Minuten bis Stunden dauern.</strong>
+          <strong class="form-warning" style="margin-top:4px;display:inline-block;">Kann je nach Anzahl der Konversationen und LLM-Geschwindigkeit Minuten bis Stunden dauern.</strong>
         </p>
 
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <span style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Instanzen</span>
-          <div style="display:flex;gap:8px;">
-            <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" onclick="rebuildSelectEmpty()">Alle leeren wählen</button>
-            <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" onclick="rebuildSelectAll()">Alle wählen</button>
-            <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" onclick="rebuildSelectNone()">Keine</button>
-            <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" onclick="loadMemoryStats()">↺ Aktualisieren</button>
+        <div class="section-header" style="margin-bottom:8px;">
+          <span class="section-label">Instanzen</span>
+          <div class="form-inline">
+            <button class="btn btn-sm btn-secondary" onclick="rebuildSelectEmpty()">Alle leeren wählen</button>
+            <button class="btn btn-sm btn-secondary" onclick="rebuildSelectAll()">Alle wählen</button>
+            <button class="btn btn-sm btn-secondary" onclick="rebuildSelectNone()">Keine</button>
+            <button class="btn btn-sm btn-secondary" onclick="loadMemoryStats()">↺ Aktualisieren</button>
           </div>
         </div>
         <div id="rebuild-instance-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;">
-          <div style="color:var(--muted);font-size:12px;">Wird geladen…</div>
+          <span class="form-hint">Wird geladen…</span>
         </div>
 
-        <div style="display:flex;gap:8px;align-items:center;">
-          <button class="btn btn-primary" id="rebuild-btn" onclick="startRebuild()">🔄 Rebuild starten</button>
-          <button class="btn btn-danger" id="rebuild-cancel-btn" style="display:none;" onclick="cancelRebuild()">■ Abbrechen</button>
-          <span id="rebuild-overall-status" style="font-size:12px;color:var(--muted);"></span>
+        <div class="form-inline">
+          <button class="btn btn-primary" id="rebuild-btn" onclick="startRebuild()">Rebuild starten</button>
+          <button class="btn btn-danger" id="rebuild-cancel-btn" style="display:none;" onclick="cancelRebuild()">Abbrechen</button>
+          <span id="rebuild-overall-status" class="form-hint"></span>
         </div>
 
-        <div id="rebuild-progress-wrap" style="display:none;margin-top:12px;">
-          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:4px;">
+        <div id="rebuild-progress-wrap" class="progress-wrap" style="display:none;">
+          <div class="progress-label">
             <span id="rebuild-progress-label">0 / 0 Einträge</span>
             <span id="rebuild-eta"></span>
           </div>
-          <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;height:12px;overflow:hidden;">
-            <div id="rebuild-bar" style="height:100%;background:var(--accent);width:0%;transition:width .4s;"></div>
+          <div class="progress-bar-outer">
+            <div id="rebuild-bar" class="progress-bar-inner"></div>
           </div>
-          <div id="rebuild-status-text" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>
+          <div id="rebuild-status-text" class="progress-status"></div>
         </div>
       </div>
     </div>
@@ -481,7 +248,7 @@
   </div>
 
   <!-- ── Sub-Tab: Dienste ── -->
-  <div id="cfgpanel-dienste" class="cfg-tab-panel" style="display:none;padding:24px;">
+  <div id="cfgpanel-dienste" class="cfg-tab-panel" style="display:none;">
 
     <div class="config-section">
       <div class="config-section-header">🏠 Home Assistant</div>
@@ -496,55 +263,48 @@
             <input type="password" id="svc-ha-token" placeholder="••••••••">
           </div>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
-          <button class="btn btn-secondary" style="font-size:11px;padding:4px 12px;"
-            onclick="testHaConnection()">🔌 Verbindung testen</button>
-          <span id="test-ha-result" style="font-size:12px;color:var(--muted);"></span>
+        <div class="form-inline" style="margin-top:4px;">
+          <button class="btn btn-sm btn-secondary" onclick="testHaConnection()">Verbindung testen</button>
+          <span id="test-ha-result" class="form-hint"></span>
         </div>
 
         <!-- MCP Server -->
-        <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border);">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-            <span style="font-size:12px;font-weight:600;color:var(--text);">MCP Server</span>
-            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;">
+        <div class="mcp-subsection">
+          <div class="mcp-header">
+            <span class="label">MCP Server</span>
+            <label class="checkbox-label">
               <input type="checkbox" id="svc-mcp-enabled" onchange="toggleMcpSection(this.checked)">
               aktiviert
             </label>
-            <a href="https://www.home-assistant.io/integrations/mcp_server/" target="_blank"
-               style="font-size:11px;color:var(--accent2);text-decoration:none;margin-left:auto;">
-              📖 HA MCP Docs &nearr;
-            </a>
-            <a href="https://github.com/home-assistant/core/tree/dev/homeassistant/components/mcp_server" target="_blank"
-               style="font-size:11px;color:var(--muted);text-decoration:none;">
-              GitHub &nearr;
-            </a>
+            <div class="mcp-links">
+              <a href="https://www.home-assistant.io/integrations/mcp_server/" target="_blank">HA MCP Docs</a>
+              <a href="https://github.com/home-assistant/core/tree/dev/homeassistant/components/mcp_server" target="_blank">GitHub</a>
+            </div>
           </div>
           <div id="mcp-section" style="display:none;">
-            <p style="font-size:12px;color:var(--muted);margin-bottom:10px;">
+            <p class="form-hint" style="margin-bottom:10px;">
               Home Assistant MCP Server ist ab HA 2025.1 eingebaut.
               In HA unter <strong>Einstellungen → Integrationen → Model Context Protocol Server</strong> aktivieren.
-              Der Endpunkt ist typischerweise <code style="background:rgba(255,255,255,.06);padding:1px 5px;border-radius:3px;">{HA-URL}/mcp_server/sse</code>.
+              Der Endpunkt ist typischerweise <code class="tag">{HA-URL}/mcp_server/sse</code>.
             </p>
             <div class="form-row">
               <div class="form-group">
                 <label>MCP Server URL</label>
-                <div style="display:flex;gap:6px;">
+                <div class="form-inline">
                   <input type="url" id="svc-mcp-url" placeholder="http://homeassistant.local:8123/mcp_server/sse" style="flex:1;"
                     oninput="document.getElementById('svc-mcp-url-hint').style.display='none'">
-                  <button class="btn btn-secondary" style="font-size:11px;padding:4px 8px;flex-shrink:0;"
-                    onclick="autoFillMcpUrl()">Auto</button>
+                  <button class="btn btn-sm btn-secondary" onclick="autoFillMcpUrl()">Auto</button>
                 </div>
-                <span id="svc-mcp-url-hint" style="font-size:11px;color:var(--muted);"></span>
+                <span id="svc-mcp-url-hint" class="form-hint"></span>
               </div>
               <div class="form-group">
-                <label>Auth-Token <span style="font-size:11px;color:var(--muted);">(gleicher Token wie HA REST API)</span></label>
+                <label>Auth-Token <span class="hint">(gleicher Token wie HA REST API)</span></label>
                 <input type="password" id="svc-mcp-token" placeholder="leer = HA-Token verwenden">
               </div>
             </div>
-            <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
-              <button class="btn btn-secondary" style="font-size:11px;padding:4px 12px;"
-                onclick="testMcpConnection()">🔌 MCP testen</button>
-              <span id="test-mcp-result" style="font-size:12px;color:var(--muted);"></span>
+            <div class="form-inline" style="margin-top:4px;">
+              <button class="btn btn-sm btn-secondary" onclick="testMcpConnection()">MCP testen</button>
+              <span id="test-mcp-result" class="form-hint"></span>
             </div>
           </div>
         </div>
@@ -555,23 +315,22 @@
     <div class="config-section">
       <div class="config-section-header">🎙 Sprache (STT / TTS)</div>
       <div class="config-section-body">
-        <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
+        <p class="form-hint" style="margin-bottom:14px;">
           Speech-to-Text und Text-to-Speech über Home Assistant. Entities werden automatisch aus HA geladen.
         </p>
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;">
-          <button class="btn btn-secondary" style="font-size:11px;padding:4px 12px;"
-            onclick="loadSttTtsEntities()">🔄 Entities laden</button>
-          <span id="stt-tts-load-status" style="font-size:12px;color:var(--muted);"></span>
+        <div class="form-inline" style="margin-bottom:14px;">
+          <button class="btn btn-sm btn-secondary" onclick="loadSttTtsEntities()">Entities laden</button>
+          <span id="stt-tts-load-status" class="form-hint"></span>
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label>STT Entity <span style="font-size:11px;color:var(--muted);">(Spracherkennung)</span></label>
+            <label>STT Entity <span class="hint">(Spracherkennung)</span></label>
             <select id="svc-stt-entity">
               <option value="">– nicht konfiguriert –</option>
             </select>
           </div>
           <div class="form-group">
-            <label>TTS Entity <span style="font-size:11px;color:var(--muted);">(Sprachausgabe)</span></label>
+            <label>TTS Entity <span class="hint">(Sprachausgabe)</span></label>
             <select id="svc-tts-entity">
               <option value="">– nicht konfiguriert –</option>
             </select>
@@ -593,16 +352,16 @@
             </select>
           </div>
           <div class="form-group">
-            <label>TTS Stimme <span style="font-size:11px;color:var(--muted);">(optional)</span></label>
+            <label>TTS Stimme <span class="hint">(optional)</span></label>
             <input type="text" id="svc-tts-voice" placeholder="z.B. DeAmala, DeKatja, DeConrad">
-            <span style="font-size:11px;color:var(--muted);">
+            <span class="form-hint">
               Nabu Casa Stimmen findest du in der HA App unter Einstellungen → Sprachassistenten → TTS.
               Leer = Standardstimme.
             </span>
           </div>
         </div>
         <div style="margin-top:10px;">
-          <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;">
+          <label class="checkbox-label">
             <input type="checkbox" id="svc-tts-also-text">
             Antwort zusätzlich als Text senden (neben der Sprachnachricht)
           </label>
@@ -615,32 +374,32 @@
       <div class="config-section-body">
 
         <!-- Verbindungsstatus -->
-        <div id="wa-connection" style="margin-bottom:18px;padding:14px;border-radius:8px;background:var(--bg-secondary);border:1px solid var(--border);">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-            <div style="display:flex;align-items:center;gap:8px;">
-              <span id="wa-status-dot" style="width:10px;height:10px;border-radius:50%;background:#888;display:inline-block;"></span>
-              <strong id="wa-status-text" style="font-size:13px;">Status wird geladen...</strong>
+        <div id="wa-connection" class="wa-connection">
+          <div class="wa-status-row">
+            <div class="wa-status-indicator">
+              <span id="wa-status-dot" class="wa-status-dot"></span>
+              <strong id="wa-status-text">Status wird geladen...</strong>
             </div>
-            <div style="display:flex;gap:6px;">
-              <button class="btn btn-secondary" style="font-size:11px;padding:4px 10px;" onclick="refreshWaStatus()">Aktualisieren</button>
-              <button class="btn btn-secondary" id="wa-logout-btn" style="font-size:11px;padding:4px 10px;display:none;" onclick="waLogout()">Trennen</button>
+            <div class="form-inline">
+              <button class="btn btn-sm btn-secondary" onclick="refreshWaStatus()">Aktualisieren</button>
+              <button class="btn btn-sm btn-secondary" id="wa-logout-btn" style="display:none;" onclick="waLogout()">Trennen</button>
             </div>
           </div>
-          <div id="wa-account-info" style="font-size:12px;color:var(--muted);display:none;">
+          <div id="wa-account-info" class="wa-account-info" style="display:none;">
             Verbunden als: <span id="wa-account-name"></span> (<span id="wa-account-jid"></span>)
           </div>
-          <div id="wa-qr-container" style="text-align:center;display:none;margin-top:12px;">
-            <p style="font-size:12px;color:var(--muted);margin-bottom:8px;">QR-Code mit WhatsApp scannen (Verknüpfte Geräte → Gerät hinzufügen):</p>
-            <img id="wa-qr-img" style="max-width:256px;border-radius:8px;border:1px solid var(--border);" alt="QR-Code">
-            <p style="font-size:11px;color:var(--muted);margin-top:6px;">Code wird automatisch aktualisiert...</p>
+          <div id="wa-qr-container" class="wa-qr-container" style="display:none;">
+            <p class="form-hint" style="margin-bottom:8px;">QR-Code mit WhatsApp scannen (Verknüpfte Geräte → Gerät hinzufügen):</p>
+            <img id="wa-qr-img" alt="QR-Code">
+            <p class="form-hint" style="margin-top:6px;">Code wird automatisch aktualisiert...</p>
           </div>
-          <div id="wa-offline-info" style="font-size:12px;color:var(--muted);display:none;">
-            Bridge-Container nicht erreichbar. Starte mit: <code>docker compose --profile agents up -d</code>
+          <div id="wa-offline-info" class="form-hint" style="display:none;">
+            Bridge-Container nicht erreichbar. Starte mit: <code class="tag">docker compose --profile agents up -d</code>
           </div>
         </div>
 
         <!-- Modus-Konfiguration -->
-        <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
+        <p class="form-hint" style="margin-bottom:14px;">
           Globaler Modus für die WhatsApp-Bridge. Pro User wird nur die Rufnummer hinterlegt (Routing eingehender Nachrichten).
         </p>
         <div class="form-row">
@@ -652,7 +411,7 @@
             </select>
           </div>
           <div class="form-group" id="svc-wa-prefix-group">
-            <label>Selbst-Prefix <span style="color:var(--muted);font-size:11px;">(nur bei Modus "Selbst")</span></label>
+            <label>Selbst-Prefix <span class="hint">(nur bei Modus "Selbst")</span></label>
             <input type="text" id="svc-wa-prefix" placeholder="!h " value="!h ">
           </div>
         </div>
@@ -665,37 +424,37 @@
         <div class="form-row">
           <div class="form-group">
             <label>Ollama URL</label>
-            <div style="display:flex;gap:6px;">
+            <div class="form-inline">
               <input type="url" id="svc-ollama-url" placeholder="http://10.83.1.110:11434" style="flex:1;">
-              <button class="btn btn-secondary" style="font-size:11px;padding:4px 10px;flex-shrink:0;"
+              <button class="btn btn-sm btn-secondary"
                 onclick="testSvcConn('ollama', document.getElementById('svc-ollama-url').value, 'test-ollama')">Test</button>
             </div>
-            <span id="test-ollama" style="font-size:11px;color:var(--muted);"></span>
+            <span id="test-ollama" class="form-hint"></span>
           </div>
           <div class="form-group">
             <label>Qdrant URL</label>
-            <div style="display:flex;gap:6px;">
+            <div class="form-inline">
               <input type="url" id="svc-qdrant-url" placeholder="http://qdrant:6333" style="flex:1;">
-              <button class="btn btn-secondary" style="font-size:11px;padding:4px 10px;flex-shrink:0;"
+              <button class="btn btn-sm btn-secondary"
                 onclick="testSvcConn('qdrant', document.getElementById('svc-qdrant-url').value, 'test-qdrant')">Test</button>
             </div>
-            <span id="test-qdrant" style="font-size:11px;color:var(--muted);"></span>
+            <span id="test-qdrant" class="form-hint"></span>
           </div>
         </div>
       </div>
     </div>
 
     <!-- Geplante Dienste -->
-    <div class="config-section" style="opacity:0.55;">
-      <div class="config-section-header">🔮 Geplante Integrationen</div>
+    <div class="config-section muted">
+      <div class="config-section-header">Geplante Integrationen</div>
       <div class="config-section-body" style="display:flex;flex-direction:column;gap:12px;">
-        <div style="padding:10px 14px;background:rgba(108,99,255,.06);border-radius:8px;border:1px solid rgba(108,99,255,.15);">
-          <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:3px;">🏠 HA Subscriptions <span style="font-weight:400;">· Phase 4+</span></div>
-          <div style="font-size:12px;color:var(--muted);">Echtzeit-Subscriptions auf HA-Ereignisse (Türklingel, Bewegungsmelder, …). Der Agent wird proaktiv benachrichtigt.</div>
+        <div class="planned-card">
+          <div class="planned-card-title">HA Subscriptions · Phase 4+</div>
+          <div class="planned-card-desc">Echtzeit-Subscriptions auf HA-Ereignisse (Türklingel, Bewegungsmelder, …). Der Agent wird proaktiv benachrichtigt.</div>
         </div>
-        <div style="padding:10px 14px;background:rgba(108,99,255,.06);border-radius:8px;border:1px solid rgba(108,99,255,.15);">
-          <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:3px;">💾 Backup <span style="font-weight:400;">· Phase 2+</span></div>
-          <div style="font-size:12px;color:var(--muted);">Automatisches Backup der Qdrant-Collections auf TrueNAS (SMB).</div>
+        <div class="planned-card">
+          <div class="planned-card-title">Backup · Phase 2+</div>
+          <div class="planned-card-desc">Automatisches Backup der Qdrant-Collections auf TrueNAS (SMB).</div>
         </div>
       </div>
     </div>
@@ -703,14 +462,14 @@
   </div>
 
   <!-- ── Sub-Tab: Logs ── -->
-  <div id="cfgpanel-logs" class="cfg-tab-panel" style="display:none;padding:24px;">
+  <div id="cfgpanel-logs" class="cfg-tab-panel" style="display:none;">
 
     <!-- Log-Retention -->
     <div class="config-section">
       <div class="config-section-header">🗂 Log-Retention</div>
       <div class="config-section-body">
-        <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
-          Konversations-Logs werden <strong style="color:var(--green)">niemals gelöscht</strong> (Source of Truth für Memory-Rebuild).
+        <p class="form-hint" style="margin-bottom:14px;">
+          Konversations-Logs werden <strong class="status-ok">niemals gelöscht</strong> (Source of Truth für Memory-Rebuild).
           Operative Logs (LLM-Calls, Tools, Memory) werden nach konfigurierbaren Tagen bereinigt.
         </p>
         <div class="form-row three">
@@ -731,16 +490,16 @@
     </div>
 
     <!-- Geplante Log-Features -->
-    <div class="config-section" style="opacity:0.55;">
-      <div class="config-section-header">🔮 Geplante Log-Features</div>
+    <div class="config-section muted">
+      <div class="config-section-header">Geplante Log-Features</div>
       <div class="config-section-body" style="display:flex;flex-direction:column;gap:12px;">
-        <div style="padding:10px 14px;background:rgba(108,99,255,.06);border-radius:8px;border:1px solid rgba(108,99,255,.15);">
-          <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:3px;">🔒 Anonymisierer <span style="font-weight:400;">· Phase 2+</span></div>
-          <div style="font-size:12px;color:var(--muted);">Entfernt personenbezogene Daten aus Logs bevor sie gespeichert werden.</div>
+        <div class="planned-card">
+          <div class="planned-card-title">Anonymisierer · Phase 2+</div>
+          <div class="planned-card-desc">Entfernt personenbezogene Daten aus Logs bevor sie gespeichert werden.</div>
         </div>
-        <div style="padding:10px 14px;background:rgba(108,99,255,.06);border-radius:8px;border:1px solid rgba(108,99,255,.15);">
-          <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:3px;">🌙 Traumprozess <span style="font-weight:400;">· Phase 3+</span></div>
-          <div style="font-size:12px;color:var(--muted);">Nächtliche Konsolidierung: Konversationen werden zu dauerhaften Erinnerungen verdichtet und verknüpft.</div>
+        <div class="planned-card">
+          <div class="planned-card-title">Traumprozess · Phase 3+</div>
+          <div class="planned-card-desc">Nächtliche Konsolidierung: Konversationen werden zu dauerhaften Erinnerungen verdichtet und verknüpft.</div>
         </div>
       </div>
     </div>
@@ -748,7 +507,7 @@
   </div>
 
   <!-- ── Sub-Tab: CLAUDE.md ── -->
-  <div id="cfgpanel-claudemd" class="cfg-tab-panel" style="display:none;padding:24px;">
+  <div id="cfgpanel-claudemd" class="cfg-tab-panel" style="display:none;">
 
     <div class="config-section">
       <div class="config-section-header">📝 CLAUDE.md Editor</div>
@@ -778,8 +537,8 @@
 <!-- ═══════════════════════════════════════════════════════════════ USERS -->
 <div id="panel-users" class="panel">
 
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-    <h2 style="font-size:16px;font-weight:600;">👥 User-Verwaltung</h2>
+  <div class="users-header">
+    <h2>User-Verwaltung</h2>
     <button class="btn" onclick="showNewUserCard()">+ Neuer User</button>
   </div>
 
@@ -790,7 +549,7 @@
       <div class="config-section-body">
         <div class="form-row">
           <div class="form-group">
-            <label>ID <span style="color:var(--muted);font-size:11px;">(einmalig, nur a-z 0-9 -)</span></label>
+            <label>ID <span class="hint">(einmalig, nur a-z 0-9 -)</span></label>
             <input type="text" id="nuf-id" placeholder="z.B. anna" pattern="[a-z0-9-]+" maxlength="30">
           </div>
           <div class="form-group">
@@ -814,17 +573,17 @@
             </select>
           </div>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
+        <div class="form-inline" style="margin-top:4px;">
           <button class="btn" onclick="submitNewUser()">User anlegen</button>
           <button class="btn btn-secondary" onclick="document.getElementById('new-user-card').style.display='none'">Abbrechen</button>
-          <span id="nuf-status" style="font-size:12px;color:var(--muted);"></span>
+          <span id="nuf-status" class="form-hint"></span>
         </div>
       </div>
     </div>
   </div>
 
   <!-- User-Liste (expandierbare Karten) -->
-  <div id="user-list" style="display:flex;flex-direction:column;gap:10px;">
+  <div id="user-list" class="user-list">
     <div class="empty-state"><div class="icon">⏳</div><div>Wird geladen...</div></div>
   </div>
 
@@ -844,29 +603,31 @@
 
 <div id="toast"></div>
 
-<!-- ── Log-Editor Modal ── -->
-<div id="log-editor-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center;">
-  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:min(860px,96vw);max-height:90vh;display:flex;flex-direction:column;overflow:hidden;">
-    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+<!-- Log-Editor Modal -->
+<div id="log-editor-modal" class="modal-overlay">
+  <div class="modal-dialog wide">
+    <div class="modal-header">
       <div>
-        <div style="font-weight:600;" id="log-editor-title">Log Editor</div>
-        <div style="font-size:11px;color:var(--yellow);margin-top:2px;">⚠ Nach dem Bearbeiten Memory-Rebuild empfohlen</div>
+        <div class="modal-title" id="log-editor-title">Log Editor</div>
+        <div class="log-editor-warning">Nach dem Bearbeiten Memory-Rebuild empfohlen</div>
       </div>
-      <button class="btn btn-secondary" style="font-size:12px;padding:4px 12px;" onclick="closeLogEditor()">✕ Schließen</button>
+      <button class="btn btn-sm btn-secondary" onclick="closeLogEditor()">✕ Schließen</button>
     </div>
-    <div style="padding:12px 16px;background:rgba(251,191,36,.05);border-bottom:1px solid var(--border);font-size:12px;color:var(--muted);">
+    <div class="log-editor-hint">
       Jede Zeile ist ein JSON-Objekt (eine Konversation). Zeilen entfernen oder bearbeiten, dann Speichern.
       <span id="log-editor-info" style="margin-left:12px;color:var(--text);"></span>
     </div>
-    <textarea id="log-editor-area" spellcheck="false"
-      style="flex:1;min-height:400px;background:var(--bg);color:var(--text);border:none;padding:16px;font-family:var(--mono);font-size:12px;resize:none;outline:none;overflow-y:auto;"></textarea>
-    <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:10px;">
-      <button class="btn" onclick="saveLogEditor()">💾 Speichern</button>
+    <textarea id="log-editor-area" class="log-editor-area" spellcheck="false"></textarea>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="saveLogEditor()">Speichern</button>
       <button class="btn btn-secondary" onclick="closeLogEditor()">Abbrechen</button>
     </div>
   </div>
 </div>
 
+<script src="/static/js/i18n.js"></script>
+<script src="/static/js/utils.js"></script>
+<script src="/static/js/modal.js"></script>
 <script>
 // ── Zustand ────────────────────────────────────────────────────────────────
 let currentInstance = '{{ instances[0] }}';

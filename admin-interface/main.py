@@ -50,6 +50,7 @@ except Exception:
     _docker_client = None
 
 app = FastAPI(title="HAANA Admin", docs_url=None, redoc_url=None)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 # ── Rebuild-Zustand (pro Instanz) ─────────────────────────────────────────────
