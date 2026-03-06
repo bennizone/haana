@@ -103,8 +103,8 @@ services:
       HAANA_DATA_DIR:         /data
       HAANA_CONF_FILE:        /data/config/config.json
       HAANA_INST_DIR:         /app/instanzen
-      AGENT_URL_BENNI:        http://instanz-alice:8001
-      AGENT_URL_DOMI:         http://instanz-bob:8002
+      AGENT_URL_BENNI:        http://haana-instanz-alice-1:8001
+      AGENT_URL_DOMI:         http://haana-instanz-bob-1:8002
       # Docker-Management für User-Provisioning
       HAANA_HOST_BASE:        /opt/haana
       HAANA_DATA_VOLUME:      haana_haana-data
@@ -128,14 +128,13 @@ services:
     build: ./whatsapp-bridge
     env_file: .env
     environment:
-      AGENT_URL_BENNI:   http://instanz-alice:8001
-      BRIDGE_OWNER_JID:  ${BRIDGE_OWNER_JID:-}
+      ADMIN_URL:         http://admin-interface:8080
       BRIDGE_LOG_LEVEL:  ${BRIDGE_LOG_LEVEL:-info}
     volumes:
       - haana-whatsapp-session:/app/session
     restart: unless-stopped
     depends_on:
-      - instanz-alice
+      - admin-interface
 
   # ── Optionale Dienste (auskommentiert bis konfiguriert) ───────────────────
 

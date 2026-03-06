@@ -52,9 +52,21 @@
   .tab-btn.active { color: var(--accent2); border-color: var(--accent2); }
   .tab-btn:hover:not(.active) { color: var(--text); }
 
+  /* ── Config Sub-Tabs ── */
+  .cfg-tab-btn {
+    background: none; border: none; color: var(--muted); cursor: pointer;
+    padding: 8px 14px; font-size: 13px; font-weight: 500;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+    transition: color .15s, border-color .15s;
+  }
+  .cfg-tab-btn.active { color: var(--accent2); border-color: var(--accent2); }
+  .cfg-tab-btn:hover:not(.active) { color: var(--text); }
+  .cfg-tab-panel { max-width: 1100px; margin: 0 auto; }
+
   /* ── Panels ── */
   .panel { display: none; padding: 24px; max-width: 1200px; margin: 0 auto; }
   .panel.active { display: block; }
+  #panel-config.active { padding: 0; max-width: none; }
 
   /* ── Instance Selector ── */
   .instance-bar { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
@@ -328,246 +340,352 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════ CONFIG -->
-<div id="panel-config" class="panel">
+<div id="panel-config" class="panel" style="padding:0;">
 
-  <!-- LLM Provider Slots -->
-  <div class="config-section">
-    <div class="config-section-header">🤖 LLM Provider Slots</div>
-    <div class="config-section-body" id="provider-slots">
-      <!-- Wird per JS befüllt -->
-    </div>
-  </div>
-
-  <!-- Use-Case Zuordnung -->
-  <div class="config-section">
-    <div class="config-section-header">🎯 Use-Case Zuordnung</div>
-    <div class="config-section-body" id="use-cases">
-      <!-- Wird per JS befüllt -->
-    </div>
-  </div>
-
-  <!-- Memory Rebuild -->
-  <div class="config-section" id="rebuild-section">
-    <div class="config-section-header">🔄 Memory Rebuild aus Konversations-Logs</div>
-    <div class="config-section-body">
-      <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">
-        Baut Qdrant komplett neu auf – nützlich nach Datenverlust oder Embedding-Modell-Wechsel.
-        Konversations-Logs sind die Source of Truth.<br>
-        <strong style="color:var(--yellow);">⚠ Kann je nach Anzahl der Konversationen und LLM-Geschwindigkeit Minuten bis Stunden dauern.</strong>
-      </p>
-
-      <!-- Instanz-Auswahl mit Statistiken -->
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <span style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Instanzen</span>
-        <div style="display:flex;gap:8px;">
-          <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" onclick="rebuildSelectEmpty()">Alle leeren wählen</button>
-          <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" onclick="rebuildSelectAll()">Alle wählen</button>
-          <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" onclick="rebuildSelectNone()">Keine</button>
-          <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" onclick="loadMemoryStats()">↺ Aktualisieren</button>
-        </div>
-      </div>
-      <div id="rebuild-instance-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;">
-        <div style="color:var(--muted);font-size:12px;">Wird geladen…</div>
-      </div>
-
-      <div style="display:flex;gap:8px;align-items:center;">
-        <button class="btn btn-primary" id="rebuild-btn" onclick="startRebuild()">🔄 Rebuild starten</button>
-        <button class="btn btn-danger" id="rebuild-cancel-btn" style="display:none;" onclick="cancelRebuild()">■ Abbrechen</button>
-        <span id="rebuild-overall-status" style="font-size:12px;color:var(--muted);"></span>
-      </div>
-
-      <!-- Progress (zeigt aktuell laufende Instanz) -->
-      <div id="rebuild-progress-wrap" style="display:none;margin-top:12px;">
-        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:4px;">
-          <span id="rebuild-progress-label">0 / 0 Einträge</span>
-          <span id="rebuild-eta"></span>
-        </div>
-        <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;height:12px;overflow:hidden;">
-          <div id="rebuild-bar" style="height:100%;background:var(--accent);width:0%;transition:width .4s;"></div>
-        </div>
-        <div id="rebuild-status-text" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Memory Settings -->
-  <div class="config-section">
-    <div class="config-section-header">🧠 Memory / Sliding Window</div>
-    <div class="config-section-body">
-      <div class="form-row three">
-        <div class="form-group">
-          <label>Window-Größe (Nachrichten)</label>
-          <input type="number" id="mem-window-size" min="5" max="100" value="20">
-        </div>
-        <div class="form-group">
-          <label>Window-Alter (Minuten)</label>
-          <input type="number" id="mem-window-minutes" min="10" max="1440" value="60">
-        </div>
-        <div class="form-group">
-          <label>Minimum (immer aktiv)</label>
-          <input type="number" id="mem-min-messages" min="1" max="20" value="5">
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Services -->
-  <div class="config-section">
-    <div class="config-section-header">🔌 Dienste</div>
-    <div class="config-section-body">
-      <div class="form-row">
-        <div class="form-group">
-          <label>Home Assistant URL</label>
-          <input type="url" id="svc-ha-url" placeholder="http://homeassistant.local:8123">
-        </div>
-        <div class="form-group">
-          <label>HA Long-Lived Token</label>
-          <input type="password" id="svc-ha-token" placeholder="••••••••">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Ollama URL</label>
-          <div style="display:flex;gap:6px;">
-            <input type="url" id="svc-ollama-url" placeholder="http://10.83.1.110:11434" style="flex:1;">
-            <button class="btn btn-secondary" style="font-size:11px;padding:4px 10px;flex-shrink:0;"
-              onclick="testSvcConn('ollama', document.getElementById('svc-ollama-url').value, 'test-ollama')">Test</button>
-          </div>
-          <span id="test-ollama" style="font-size:11px;color:var(--muted);"></span>
-        </div>
-        <div class="form-group">
-          <label>Qdrant URL</label>
-          <div style="display:flex;gap:6px;">
-            <input type="url" id="svc-qdrant-url" placeholder="http://qdrant:6333" style="flex:1;">
-            <button class="btn btn-secondary" style="font-size:11px;padding:4px 10px;flex-shrink:0;"
-              onclick="testSvcConn('qdrant', document.getElementById('svc-qdrant-url').value, 'test-qdrant')">Test</button>
-          </div>
-          <span id="test-qdrant" style="font-size:11px;color:var(--muted);"></span>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div style="display:flex;gap:10px;margin-bottom:40px;">
+  <!-- Sticky save bar -->
+  <div style="position:sticky;top:52px;z-index:50;background:var(--surface);border-bottom:1px solid var(--border);padding:10px 24px;display:flex;gap:10px;align-items:center;">
     <button class="btn btn-primary" onclick="saveConfig()">💾 Konfiguration speichern</button>
     <button class="btn btn-secondary" onclick="loadConfig()">↺ Zurücksetzen</button>
+    <span id="config-save-status" style="font-size:12px;color:var(--muted);margin-left:4px;"></span>
   </div>
 
-  <!-- Embedding-Modell -->
-  <div class="config-section">
-    <div class="config-section-header">🔢 Embedding-Modell</div>
-    <div class="config-section-body">
-      <div class="form-row three">
-        <div class="form-group">
-          <label>Provider</label>
-          <select id="embed-provider">
-            <option value="ollama">Ollama (lokal)</option>
-            <option value="huggingface">HuggingFace</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Modell</label>
-          <select id="embed-model" onchange="updateEmbedDims()">
-            <option value="bge-m3">bge-m3 (1024 dims) – empfohlen</option>
-            <option value="nomic-embed-text">nomic-embed-text (768 dims)</option>
-            <option value="bge-small-en-v1.5">bge-small-en-v1.5 (384 dims)</option>
-            <option value="__custom__">Manuell eingeben…</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Dimensions</label>
-          <input type="number" id="embed-dims" value="1024" min="64" max="4096">
-        </div>
+  <!-- Config Sub-Tabs -->
+  <div style="background:var(--bg);border-bottom:1px solid var(--border);padding:0 24px;display:flex;gap:2px;">
+    <button class="cfg-tab-btn active" onclick="showCfgTab('llms')"     id="cfgtab-llms">🤖 LLMs</button>
+    <button class="cfg-tab-btn"        onclick="showCfgTab('memory')"   id="cfgtab-memory">🧠 Memory</button>
+    <button class="cfg-tab-btn"        onclick="showCfgTab('dienste')"  id="cfgtab-dienste">🔌 Dienste</button>
+    <button class="cfg-tab-btn"        onclick="showCfgTab('logs')"     id="cfgtab-logs">🗂 Logs</button>
+    <button class="cfg-tab-btn"        onclick="showCfgTab('claudemd')" id="cfgtab-claudemd">📝 CLAUDE.md</button>
+  </div>
+
+  <!-- ── Sub-Tab: LLMs ── -->
+  <div id="cfgpanel-llms" class="cfg-tab-panel" style="padding:24px;">
+
+    <!-- LLM Provider Slots -->
+    <div class="config-section">
+      <div class="config-section-header">🤖 LLM Provider Slots</div>
+      <div class="config-section-body" id="provider-slots">
+        <!-- Wird per JS befüllt -->
       </div>
-      <div id="embed-custom-row" class="form-group" style="display:none;margin-top:4px;">
-        <label>Modell-Name (manuell)</label>
-        <input type="text" id="embed-model-custom" placeholder="z.B. mxbai-embed-large">
-      </div>
-      <p style="font-size:12px;color:var(--yellow);margin-top:10px;">
-        ⚠ Beim Wechsel des Embedding-Modells müssen alle Qdrant-Collections neu aufgebaut werden
-        (andere Dimensionen sind nicht kompatibel).
-      </p>
     </div>
+
+    <!-- Use-Case-Zuordnung: wird aus config erhalten, UI entfernt (per-User) -->
+    <div id="use-cases" style="display:none;"></div>
+
   </div>
 
-  <!-- Log-Retention -->
-  <div class="config-section">
-    <div class="config-section-header">🗂 Log-Retention</div>
-    <div class="config-section-body">
-      <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
-        Konversations-Logs werden <strong style="color:var(--green)">niemals gelöscht</strong> (Source of Truth für Memory-Rebuild).
-        Operative Logs (LLM-Calls, Tools, Memory) werden nach konfigurierbaren Tagen bereinigt.
-      </p>
-      <div class="form-row three">
-        <div class="form-group">
-          <label>LLM-Calls (Tage)</label>
-          <input type="number" id="ret-llm-calls" min="1" max="365" value="30">
-        </div>
-        <div class="form-group">
-          <label>Tool-Calls (Tage)</label>
-          <input type="number" id="ret-tool-calls" min="1" max="365" value="30">
-        </div>
-        <div class="form-group">
-          <label>Memory-Ops (Tage)</label>
-          <input type="number" id="ret-memory-ops" min="1" max="365" value="30">
+  <!-- ── Sub-Tab: Memory ── -->
+  <div id="cfgpanel-memory" class="cfg-tab-panel" style="display:none;padding:24px;">
+
+    <!-- Memory Settings -->
+    <div class="config-section">
+      <div class="config-section-header">🧠 Sliding Window</div>
+      <div class="config-section-body">
+        <div class="form-row three">
+          <div class="form-group">
+            <label>Window-Größe (Nachrichten)</label>
+            <input type="number" id="mem-window-size" min="5" max="100" value="20">
+          </div>
+          <div class="form-group">
+            <label>Window-Alter (Minuten)</label>
+            <input type="number" id="mem-window-minutes" min="10" max="1440" value="60">
+          </div>
+          <div class="form-group">
+            <label>Minimum (immer aktiv)</label>
+            <input type="number" id="mem-min-messages" min="1" max="20" value="5">
+          </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- Traumprozess (Placeholder) -->
-  <div class="config-section" style="opacity:0.6;">
-    <div class="config-section-header">🌙 Traumprozess <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:8px;">Phase 3+</span></div>
-    <div class="config-section-body" style="color:var(--muted);font-size:13px;">
-      Nächtliche Konsolidierung: Konversationen aus dem Sliding Window werden zu dauerhaften Erinnerungen verdichtet, verknüpft und priorisiert. Konfiguration folgt in Phase 3.
-    </div>
-  </div>
-
-  <!-- Backup (Placeholder) -->
-  <div class="config-section" style="opacity:0.6;">
-    <div class="config-section-header">💾 Backup <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:8px;">Phase 2+</span></div>
-    <div class="config-section-body" style="color:var(--muted);font-size:13px;">
-      Automatisches Backup der Qdrant-Collections auf TrueNAS (SMB). Konfiguration folgt in Phase 2.
-    </div>
-  </div>
-
-  <!-- Anonymisierer (Placeholder) -->
-  <div class="config-section" style="opacity:0.6;">
-    <div class="config-section-header">🔒 Anonymisierer <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:8px;">Phase 2+</span></div>
-    <div class="config-section-body" style="color:var(--muted);font-size:13px;">
-      Entfernt personenbezogene Daten (Namen, Adressen, Telefonnummern) aus Logs bevor sie gespeichert werden. Konfiguration folgt in Phase 2.
-    </div>
-  </div>
-
-  <!-- HA Subscriptions (Placeholder) -->
-  <div class="config-section" style="opacity:0.6;">
-    <div class="config-section-header">🏠 HA Subscriptions <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:8px;">Phase 4+</span></div>
-    <div class="config-section-body" style="color:var(--muted);font-size:13px;">
-      Echtzeit-Subscriptions auf Home Assistant Ereignisse (Türklingel, Bewegungsmelder, etc.). Der Agent wird proaktiv benachrichtigt. Konfiguration folgt in Phase 4.
-    </div>
-  </div>
-
-  <!-- CLAUDE.md Editor -->
-  <div class="config-section">
-    <div class="config-section-header">📝 CLAUDE.md Editor</div>
-    <div class="config-section-body">
-      <div class="instance-bar" style="margin-bottom:14px;">
-        {% for inst in instances %}
-        <button class="inst-btn {% if loop.first %}active{% endif %}"
-                onclick="selectClaudeMd('{{ inst }}')" id="mdbtn-{{ inst }}">
-          {{ inst }}
-        </button>
-        {% endfor %}
-      </div>
-      <div class="form-group">
-        <textarea id="claude-md-editor" spellcheck="false"></textarea>
-      </div>
-      <div style="display:flex;gap:10px;margin-top:12px;">
-        <button class="btn btn-primary" onclick="saveClaudeMd()">💾 Speichern</button>
-        <span id="claude-md-status" style="color:var(--muted);font-size:12px;align-self:center;"></span>
+    <!-- Embedding-Modell -->
+    <div class="config-section">
+      <div class="config-section-header">🔢 Embedding-Modell</div>
+      <div class="config-section-body">
+        <div class="form-row three">
+          <div class="form-group">
+            <label>Provider</label>
+            <select id="embed-provider">
+              <option value="ollama">Ollama (lokal)</option>
+              <option value="huggingface">HuggingFace</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Modell</label>
+            <select id="embed-model" onchange="updateEmbedDims()">
+              <option value="bge-m3">bge-m3 (1024 dims) – empfohlen</option>
+              <option value="nomic-embed-text">nomic-embed-text (768 dims)</option>
+              <option value="bge-small-en-v1.5">bge-small-en-v1.5 (384 dims)</option>
+              <option value="__custom__">Manuell eingeben…</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Dimensions</label>
+            <input type="number" id="embed-dims" value="1024" min="64" max="4096">
+          </div>
+        </div>
+        <div id="embed-custom-row" class="form-group" style="display:none;margin-top:4px;">
+          <label>Modell-Name (manuell)</label>
+          <input type="text" id="embed-model-custom" placeholder="z.B. mxbai-embed-large">
+        </div>
+        <p style="font-size:12px;color:var(--yellow);margin-top:10px;">
+          ⚠ Beim Wechsel des Embedding-Modells müssen alle Qdrant-Collections neu aufgebaut werden
+          (andere Dimensionen sind nicht kompatibel).
+        </p>
       </div>
     </div>
+
+    <!-- Memory Rebuild -->
+    <div class="config-section" id="rebuild-section">
+      <div class="config-section-header">🔄 Memory Rebuild aus Konversations-Logs</div>
+      <div class="config-section-body">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">
+          Baut Qdrant komplett neu auf – nützlich nach Datenverlust oder Embedding-Modell-Wechsel.
+          Konversations-Logs sind die Source of Truth.<br>
+          <strong style="color:var(--yellow);">⚠ Kann je nach Anzahl der Konversationen und LLM-Geschwindigkeit Minuten bis Stunden dauern.</strong>
+        </p>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Instanzen</span>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" onclick="rebuildSelectEmpty()">Alle leeren wählen</button>
+            <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" onclick="rebuildSelectAll()">Alle wählen</button>
+            <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" onclick="rebuildSelectNone()">Keine</button>
+            <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" onclick="loadMemoryStats()">↺ Aktualisieren</button>
+          </div>
+        </div>
+        <div id="rebuild-instance-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;">
+          <div style="color:var(--muted);font-size:12px;">Wird geladen…</div>
+        </div>
+
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="btn btn-primary" id="rebuild-btn" onclick="startRebuild()">🔄 Rebuild starten</button>
+          <button class="btn btn-danger" id="rebuild-cancel-btn" style="display:none;" onclick="cancelRebuild()">■ Abbrechen</button>
+          <span id="rebuild-overall-status" style="font-size:12px;color:var(--muted);"></span>
+        </div>
+
+        <div id="rebuild-progress-wrap" style="display:none;margin-top:12px;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:4px;">
+            <span id="rebuild-progress-label">0 / 0 Einträge</span>
+            <span id="rebuild-eta"></span>
+          </div>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;height:12px;overflow:hidden;">
+            <div id="rebuild-bar" style="height:100%;background:var(--accent);width:0%;transition:width .4s;"></div>
+          </div>
+          <div id="rebuild-status-text" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>
+        </div>
+      </div>
+    </div>
+
   </div>
+
+  <!-- ── Sub-Tab: Dienste ── -->
+  <div id="cfgpanel-dienste" class="cfg-tab-panel" style="display:none;padding:24px;">
+
+    <div class="config-section">
+      <div class="config-section-header">🏠 Home Assistant</div>
+      <div class="config-section-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Home Assistant URL</label>
+            <input type="url" id="svc-ha-url" placeholder="http://homeassistant.local:8123">
+          </div>
+          <div class="form-group">
+            <label>HA Long-Lived Token</label>
+            <input type="password" id="svc-ha-token" placeholder="••••••••">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
+          <button class="btn btn-secondary" style="font-size:11px;padding:4px 12px;"
+            onclick="testHaConnection()">🔌 Verbindung testen</button>
+          <span id="test-ha-result" style="font-size:12px;color:var(--muted);"></span>
+        </div>
+
+        <!-- MCP Server -->
+        <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border);">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+            <span style="font-size:12px;font-weight:600;color:var(--text);">MCP Server</span>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;">
+              <input type="checkbox" id="svc-mcp-enabled" onchange="toggleMcpSection(this.checked)">
+              aktiviert
+            </label>
+            <a href="https://www.home-assistant.io/integrations/mcp_server/" target="_blank"
+               style="font-size:11px;color:var(--accent2);text-decoration:none;margin-left:auto;">
+              📖 HA MCP Docs &nearr;
+            </a>
+            <a href="https://github.com/home-assistant/core/tree/dev/homeassistant/components/mcp_server" target="_blank"
+               style="font-size:11px;color:var(--muted);text-decoration:none;">
+              GitHub &nearr;
+            </a>
+          </div>
+          <div id="mcp-section" style="display:none;">
+            <p style="font-size:12px;color:var(--muted);margin-bottom:10px;">
+              Home Assistant MCP Server ist ab HA 2025.1 eingebaut.
+              In HA unter <strong>Einstellungen → Integrationen → Model Context Protocol Server</strong> aktivieren.
+              Der Endpunkt ist typischerweise <code style="background:rgba(255,255,255,.06);padding:1px 5px;border-radius:3px;">{HA-URL}/mcp_server/sse</code>.
+            </p>
+            <div class="form-row">
+              <div class="form-group">
+                <label>MCP Server URL</label>
+                <div style="display:flex;gap:6px;">
+                  <input type="url" id="svc-mcp-url" placeholder="http://homeassistant.local:8123/mcp_server/sse" style="flex:1;"
+                    oninput="document.getElementById('svc-mcp-url-hint').style.display='none'">
+                  <button class="btn btn-secondary" style="font-size:11px;padding:4px 8px;flex-shrink:0;"
+                    onclick="autoFillMcpUrl()">Auto</button>
+                </div>
+                <span id="svc-mcp-url-hint" style="font-size:11px;color:var(--muted);"></span>
+              </div>
+              <div class="form-group">
+                <label>Auth-Token <span style="font-size:11px;color:var(--muted);">(gleicher Token wie HA REST API)</span></label>
+                <input type="password" id="svc-mcp-token" placeholder="leer = HA-Token verwenden">
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
+              <button class="btn btn-secondary" style="font-size:11px;padding:4px 12px;"
+                onclick="testMcpConnection()">🔌 MCP testen</button>
+              <span id="test-mcp-result" style="font-size:12px;color:var(--muted);"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="config-section">
+      <div class="config-section-header">📱 WhatsApp Bridge</div>
+      <div class="config-section-body">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
+          Globaler Modus für die WhatsApp-Bridge. Pro User wird nur die Rufnummer hinterlegt (Routing eingehender Nachrichten).
+        </p>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Modus</label>
+            <select id="svc-wa-mode" onchange="document.getElementById('svc-wa-prefix-group').style.display=this.value==='self'?'':'none'">
+              <option value="separate">Separate Nummer (eigene SIM für HAANA)</option>
+              <option value="self">An mich selbst schreiben (eigene Nummer, Prefix nötig)</option>
+            </select>
+          </div>
+          <div class="form-group" id="svc-wa-prefix-group">
+            <label>Selbst-Prefix <span style="color:var(--muted);font-size:11px;">(nur bei Modus "Selbst")</span></label>
+            <input type="text" id="svc-wa-prefix" placeholder="!h " value="!h ">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="config-section">
+      <div class="config-section-header">🔌 Infrastruktur</div>
+      <div class="config-section-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Ollama URL</label>
+            <div style="display:flex;gap:6px;">
+              <input type="url" id="svc-ollama-url" placeholder="http://10.83.1.110:11434" style="flex:1;">
+              <button class="btn btn-secondary" style="font-size:11px;padding:4px 10px;flex-shrink:0;"
+                onclick="testSvcConn('ollama', document.getElementById('svc-ollama-url').value, 'test-ollama')">Test</button>
+            </div>
+            <span id="test-ollama" style="font-size:11px;color:var(--muted);"></span>
+          </div>
+          <div class="form-group">
+            <label>Qdrant URL</label>
+            <div style="display:flex;gap:6px;">
+              <input type="url" id="svc-qdrant-url" placeholder="http://qdrant:6333" style="flex:1;">
+              <button class="btn btn-secondary" style="font-size:11px;padding:4px 10px;flex-shrink:0;"
+                onclick="testSvcConn('qdrant', document.getElementById('svc-qdrant-url').value, 'test-qdrant')">Test</button>
+            </div>
+            <span id="test-qdrant" style="font-size:11px;color:var(--muted);"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Geplante Dienste -->
+    <div class="config-section" style="opacity:0.55;">
+      <div class="config-section-header">🔮 Geplante Integrationen</div>
+      <div class="config-section-body" style="display:flex;flex-direction:column;gap:12px;">
+        <div style="padding:10px 14px;background:rgba(108,99,255,.06);border-radius:8px;border:1px solid rgba(108,99,255,.15);">
+          <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:3px;">🏠 HA Subscriptions <span style="font-weight:400;">· Phase 4+</span></div>
+          <div style="font-size:12px;color:var(--muted);">Echtzeit-Subscriptions auf HA-Ereignisse (Türklingel, Bewegungsmelder, …). Der Agent wird proaktiv benachrichtigt.</div>
+        </div>
+        <div style="padding:10px 14px;background:rgba(108,99,255,.06);border-radius:8px;border:1px solid rgba(108,99,255,.15);">
+          <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:3px;">💾 Backup <span style="font-weight:400;">· Phase 2+</span></div>
+          <div style="font-size:12px;color:var(--muted);">Automatisches Backup der Qdrant-Collections auf TrueNAS (SMB).</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Sub-Tab: Logs ── -->
+  <div id="cfgpanel-logs" class="cfg-tab-panel" style="display:none;padding:24px;">
+
+    <!-- Log-Retention -->
+    <div class="config-section">
+      <div class="config-section-header">🗂 Log-Retention</div>
+      <div class="config-section-body">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
+          Konversations-Logs werden <strong style="color:var(--green)">niemals gelöscht</strong> (Source of Truth für Memory-Rebuild).
+          Operative Logs (LLM-Calls, Tools, Memory) werden nach konfigurierbaren Tagen bereinigt.
+        </p>
+        <div class="form-row three">
+          <div class="form-group">
+            <label>LLM-Calls (Tage)</label>
+            <input type="number" id="ret-llm-calls" min="1" max="365" value="30">
+          </div>
+          <div class="form-group">
+            <label>Tool-Calls (Tage)</label>
+            <input type="number" id="ret-tool-calls" min="1" max="365" value="30">
+          </div>
+          <div class="form-group">
+            <label>Memory-Ops (Tage)</label>
+            <input type="number" id="ret-memory-ops" min="1" max="365" value="30">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Geplante Log-Features -->
+    <div class="config-section" style="opacity:0.55;">
+      <div class="config-section-header">🔮 Geplante Log-Features</div>
+      <div class="config-section-body" style="display:flex;flex-direction:column;gap:12px;">
+        <div style="padding:10px 14px;background:rgba(108,99,255,.06);border-radius:8px;border:1px solid rgba(108,99,255,.15);">
+          <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:3px;">🔒 Anonymisierer <span style="font-weight:400;">· Phase 2+</span></div>
+          <div style="font-size:12px;color:var(--muted);">Entfernt personenbezogene Daten aus Logs bevor sie gespeichert werden.</div>
+        </div>
+        <div style="padding:10px 14px;background:rgba(108,99,255,.06);border-radius:8px;border:1px solid rgba(108,99,255,.15);">
+          <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:3px;">🌙 Traumprozess <span style="font-weight:400;">· Phase 3+</span></div>
+          <div style="font-size:12px;color:var(--muted);">Nächtliche Konsolidierung: Konversationen werden zu dauerhaften Erinnerungen verdichtet und verknüpft.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Sub-Tab: CLAUDE.md ── -->
+  <div id="cfgpanel-claudemd" class="cfg-tab-panel" style="display:none;padding:24px;">
+
+    <div class="config-section">
+      <div class="config-section-header">📝 CLAUDE.md Editor</div>
+      <div class="config-section-body">
+        <div class="instance-bar" style="margin-bottom:14px;">
+          {% for inst in instances %}
+          <button class="inst-btn {% if loop.first %}active{% endif %}"
+                  onclick="selectClaudeMd('{{ inst }}')" id="mdbtn-{{ inst }}">
+            {{ inst }}
+          </button>
+          {% endfor %}
+        </div>
+        <div class="form-group">
+          <textarea id="claude-md-editor" spellcheck="false"></textarea>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:12px;">
+          <button class="btn btn-primary" onclick="saveClaudeMd()">💾 Speichern</button>
+          <span id="claude-md-status" style="color:var(--muted);font-size:12px;align-self:center;"></span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════ USERS -->
@@ -575,86 +693,52 @@
 
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
     <h2 style="font-size:16px;font-weight:600;">👥 User-Verwaltung</h2>
-    <button class="btn" onclick="showUserForm(null)">+ Neuer User</button>
+    <button class="btn" onclick="showNewUserCard()">+ Neuer User</button>
   </div>
 
-  <!-- User-Liste -->
-  <div id="user-list" style="display:flex;flex-direction:column;gap:12px;margin-bottom:24px;">
-    <div class="empty-state"><div class="icon">⏳</div><div>Wird geladen...</div></div>
-  </div>
-
-  <!-- Neuer/Edit-User-Formular -->
-  <div id="user-form-section" style="display:none;">
+  <!-- Neuer-User-Karte (einblendbar oben) -->
+  <div id="new-user-card" style="display:none;margin-bottom:16px;">
     <div class="config-section">
-      <div class="config-section-header" id="user-form-title">Neuer User</div>
+      <div class="config-section-header">Neuer User</div>
       <div class="config-section-body">
-      <div class="form-row">
-        <div class="form-group">
-          <label>ID <span style="color:var(--muted);font-size:11px;">(einmalig, nur a-z 0-9 -)</span></label>
-          <input type="text" id="uf-id" placeholder="z.B. alice" pattern="[a-z0-9-]+" maxlength="30">
+        <div class="form-row">
+          <div class="form-group">
+            <label>ID <span style="color:var(--muted);font-size:11px;">(einmalig, nur a-z 0-9 -)</span></label>
+            <input type="text" id="nuf-id" placeholder="z.B. anna" pattern="[a-z0-9-]+" maxlength="30">
+          </div>
+          <div class="form-group">
+            <label>Anzeigename</label>
+            <input type="text" id="nuf-display-name" placeholder="z.B. Anna">
+          </div>
         </div>
-        <div class="form-group">
-          <label>Anzeigename</label>
-          <input type="text" id="uf-display-name" placeholder="z.B. Alice">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Rolle</label>
+            <select id="nuf-role">
+              <option value="user">User (eingeschränkt)</option>
+              <option value="admin">Admin (voller Zugriff)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>CLAUDE.md Template</label>
+            <select id="nuf-template">
+              <option value="user">User (Standard)</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
         </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Rolle</label>
-          <select id="uf-role" onchange="updateUserFormTemplate()">
-            <option value="user">User (eingeschränkt)</option>
-            <option value="admin">Admin (voller Zugriff)</option>
-            <option value="voice">Voice – HAANA (schnell, HA-Steuerung)</option>
-            <option value="voice-advanced">Voice-Advanced – HAANA Advanced (Kalender, Skills)</option>
-          </select>
-        </div>
-        <div class="form-group" id="uf-ha-row">
-          <label>HA-User <span style="color:var(--muted);font-size:11px;">(optional)</span></label>
-          <input type="text" id="uf-ha-user" placeholder="Home-Assistant Benutzername">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Primäres LLM</label>
-          <select id="uf-primary-llm"></select>
-        </div>
-        <div class="form-group">
-          <label>Extraktions-LLM</label>
-          <select id="uf-extract-llm"></select>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
+          <button class="btn" onclick="submitNewUser()">User anlegen</button>
+          <button class="btn btn-secondary" onclick="document.getElementById('new-user-card').style.display='none'">Abbrechen</button>
+          <span id="nuf-status" style="font-size:12px;color:var(--muted);"></span>
         </div>
       </div>
-      <div id="uf-wa-row" class="form-row">
-        <div class="form-group">
-          <label>WhatsApp JID <span style="color:var(--muted);font-size:11px;">(optional, z.B. 49xxx@s.whatsapp.net)</span></label>
-          <input type="text" id="uf-wa-jid" placeholder="">
-        </div>
-        <div class="form-group">
-          <label>WhatsApp Modus</label>
-          <select id="uf-wa-mode">
-            <option value="separate">Separate Nummer</option>
-            <option value="self">An mich selbst schreiben</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-group">
-        <label>CLAUDE.md Template</label>
-        <select id="uf-template">
-          <option value="user">User (Standard)</option>
-          <option value="admin">Admin</option>
-          <option value="ha-assist">HAANA Voice (ha-assist)</option>
-          <option value="ha-advanced">HAANA Advanced (ha-advanced)</option>
-        </select>
-      </div>
-      <div id="uf-phase3-note" style="padding:10px;background:rgba(100,116,139,.08);border-radius:6px;font-size:12px;color:var(--muted);margin-bottom:12px;">
-        CalDAV, CardDAV, IMAP/SMTP – noch nicht verfügbar (Phase 3+). Für HAANA Advanced: eigener Kalender &amp; E-Mail-Account geplant.
-      </div>
-      <div style="display:flex;gap:10px;align-items:center;">
-        <button class="btn" id="uf-submit-btn" onclick="submitUserForm()">User anlegen</button>
-        <button class="btn btn-secondary" onclick="hideUserForm()">Abbrechen</button>
-        <span id="uf-status" style="font-size:12px;color:var(--muted);"></span>
-      </div>
-      </div><!-- config-section-body -->
-    </div><!-- config-section -->
+    </div>
+  </div>
+
+  <!-- User-Liste (expandierbare Karten) -->
+  <div id="user-list" style="display:flex;flex-direction:column;gap:10px;">
+    <div class="empty-state"><div class="icon">⏳</div><div>Wird geladen...</div></div>
   </div>
 
 </div>
@@ -716,6 +800,14 @@ function showTab(name) {
   if (name === 'config') { loadConfig(); loadMemoryStats(); }
   if (name === 'users')  loadUsers();
   if (name === 'status') loadStatus();
+}
+
+function showCfgTab(name) {
+  document.querySelectorAll('.cfg-tab-panel').forEach(p => { p.style.display = 'none'; });
+  document.querySelectorAll('.cfg-tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('cfgpanel-' + name).style.display = 'block';
+  document.getElementById('cfgtab-' + name).classList.add('active');
+  if (name === 'memory') loadMemoryStats();
 }
 
 // ── Instanz-Auswahl (Chat) ─────────────────────────────────────────────────
@@ -964,75 +1056,64 @@ function renderConfig(c) {
   const slots = c.llm_providers || [];
   const slotNums = slots.map(s => s.slot);
   document.getElementById('provider-slots').innerHTML = slots.map((s, i) => `
-    <div class="provider-slot" id="provslot-${i}">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-        <span class="slot-header" style="margin-bottom:0;">Slot ${s.slot} – <span id="prov-${i}-label">${escHtml(s.name||'Slot '+s.slot)}</span></span>
-        <button class="btn btn-danger" style="font-size:11px;padding:3px 10px;" onclick="removeLlmSlot(${i})">✕ Entfernen</button>
+    <div class="provider-slot" id="provslot-${i}" style="padding:0;overflow:hidden;">
+      <!-- Collapsible header -->
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;background:rgba(255,255,255,.02);"
+           onclick="toggleLlmSlot(${i})">
+        <span id="prov-${i}-chevron" style="font-size:11px;color:var(--muted);transition:transform .2s;">▶</span>
+        <span style="font-weight:600;color:var(--accent2);flex:1;">
+          Slot ${s.slot} – <span id="prov-${i}-label">${escHtml(s.name||'Slot '+s.slot)}</span>
+        </span>
+        <span style="font-size:11px;color:var(--muted);" id="prov-${i}-summary">${escHtml(s.type)} · ${escHtml(s.model||'–')}</span>
+        <button class="btn btn-danger" style="font-size:11px;padding:2px 8px;" onclick="event.stopPropagation();removeLlmSlot(${i})">✕</button>
       </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Name</label>
-          <input type="text" id="prov-${i}-name" value="${escAttr(s.name||'')}"
-            oninput="document.getElementById('prov-${i}-label').textContent=this.value||'Slot ${s.slot}'">
+      <!-- Collapsible body -->
+      <div id="prov-${i}-body" style="display:none;padding:12px 14px;border-top:1px solid var(--border);">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Name</label>
+            <input type="text" id="prov-${i}-name" value="${escAttr(s.name||'')}"
+              oninput="document.getElementById('prov-${i}-label').textContent=this.value||'Slot ${s.slot}';document.getElementById('prov-${i}-summary').textContent=(document.getElementById('prov-${i}-type').value||'?')+' · '+(document.getElementById('prov-${i}-model').value||'–')">
+          </div>
+          <div class="form-group">
+            <label>Typ</label>
+            <select id="prov-${i}-type" onchange="document.getElementById('prov-${i}-summary').textContent=this.value+' · '+(document.getElementById('prov-${i}-model').value||'–')">
+              ${['anthropic','minimax','ollama','custom'].map(t => `<option value="${t}" ${s.type===t?'selected':''}>${t}</option>`).join('')}
+            </select>
+          </div>
         </div>
-        <div class="form-group">
-          <label>Typ</label>
-          <select id="prov-${i}-type">
-            ${['anthropic','minimax','ollama','custom'].map(t => `<option value="${t}" ${s.type===t?'selected':''}>${t}</option>`).join('')}
-          </select>
+        <div class="form-row">
+          <div class="form-group">
+            <label>URL <span style="font-size:11px;color:var(--muted);">(leer = Standard des Providers)</span></label>
+            <input type="url" id="prov-${i}-url" value="${escAttr(s.url||'')}">
+          </div>
+          <div class="form-group">
+            <label>API Key</label>
+            <input type="password" id="prov-${i}-key" value="${escAttr(s.key||'')}">
+          </div>
         </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>URL (leer = Standard)</label>
-          <input type="url" id="prov-${i}-url" value="${escAttr(s.url||'')}">
+        <div class="form-group" style="margin-bottom:10px;">
+          <label>Modell</label>
+          <div style="display:flex;gap:6px;">
+            <input type="text" id="prov-${i}-model" value="${escAttr(s.model||'')}" list="models-${i}" style="flex:1;"
+              oninput="document.getElementById('prov-${i}-summary').textContent=(document.getElementById('prov-${i}-type').value||'?')+' · '+(this.value||'–')">
+            <datalist id="models-${i}"></datalist>
+            <button class="btn btn-secondary" style="font-size:11px;padding:4px 10px;flex-shrink:0;"
+              onclick="fetchModels(${i})">📋 Modelle</button>
+            <span id="prov-${i}-models-status" style="font-size:11px;color:var(--muted);align-self:center;"></span>
+          </div>
         </div>
-        <div class="form-group">
-          <label>API Key</label>
-          <input type="password" id="prov-${i}-key" value="${escAttr(s.key||'')}">
+        <div style="display:flex;gap:10px;align-items:center;">
+          <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;"
+            onclick="testProviderConn(${i})">🔌 Verbindung testen</button>
+          <span id="prov-${i}-test" style="font-size:12px;color:var(--muted);"></span>
         </div>
-      </div>
-      <div class="form-group" style="margin-bottom:10px;">
-        <label>Modell</label>
-        <div style="display:flex;gap:6px;">
-          <input type="text" id="prov-${i}-model" value="${escAttr(s.model||'')}" list="models-${i}" style="flex:1;">
-          <datalist id="models-${i}"></datalist>
-          <button class="btn btn-secondary" style="font-size:11px;padding:4px 10px;flex-shrink:0;"
-            onclick="fetchModels(${i})">📋 Modelle</button>
-          <span id="prov-${i}-models-status" style="font-size:11px;color:var(--muted);align-self:center;"></span>
-        </div>
-      </div>
-      <div style="display:flex;gap:10px;align-items:center;">
-        <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;"
-          onclick="testProviderConn(${i})">🔌 Verbindung testen</button>
-        <span id="prov-${i}-test" style="font-size:12px;color:var(--muted);"></span>
       </div>
     </div>
   `).join('') + `
     <div style="margin-top:12px;">
       <button class="btn btn-secondary" onclick="addLlmSlot()">+ Slot hinzufügen</button>
     </div>`;
-
-  // Use Cases – Slot-Optionen dynamisch aus aktuellen Slots
-  const uc = c.use_cases || {};
-  const slotOptions = slots.map(s =>
-    `<option value="${s.slot}">Slot ${s.slot} – ${escHtml(s.name||'')}</option>`
-  ).join('');
-  document.getElementById('use-cases').innerHTML = `
-    <div class="use-case-row" style="font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;">
-      <span>Use Case</span><span>Primär</span><span>Fallback</span>
-    </div>
-    ${Object.entries(uc).map(([key, val]) => `
-    <div class="use-case-row">
-      <span class="use-case-label">${escHtml(val.label||key)}</span>
-      <select id="uc-${key}-primary">
-        ${slots.map(s => `<option value="${s.slot}" ${val.primary===s.slot?'selected':''}>Slot ${s.slot} – ${escHtml(s.name||'')}</option>`).join('')}
-      </select>
-      <select id="uc-${key}-fallback">
-        ${slots.map(s => `<option value="${s.slot}" ${val.fallback===s.slot?'selected':''}>Slot ${s.slot} – ${escHtml(s.name||'')}</option>`).join('')}
-      </select>
-    </div>`).join('')}
-  `;
 
   // Memory
   const m = c.memory || {};
@@ -1058,6 +1139,24 @@ function renderConfig(c) {
   document.getElementById('svc-ha-token').value  = sv.ha_token  || '';
   document.getElementById('svc-ollama-url').value = sv.ollama_url || '';
   document.getElementById('svc-qdrant-url').value = sv.qdrant_url || '';
+
+  // MCP
+  const mcpEnabled = !!sv.ha_mcp_enabled;
+  const mcpEl = document.getElementById('svc-mcp-enabled');
+  if (mcpEl) { mcpEl.checked = mcpEnabled; toggleMcpSection(mcpEnabled); }
+  const mcpUrl = document.getElementById('svc-mcp-url');
+  if (mcpUrl) mcpUrl.value = sv.ha_mcp_url || '';
+  const mcpTok = document.getElementById('svc-mcp-token');
+  if (mcpTok) mcpTok.value = sv.ha_mcp_token || '';
+
+  // WhatsApp global
+  const wa = c.whatsapp || {};
+  const waMode = document.getElementById('svc-wa-mode');
+  if (waMode) waMode.value = wa.mode || 'separate';
+  const waPfx = document.getElementById('svc-wa-prefix');
+  if (waPfx) waPfx.value = wa.self_prefix || '!h ';
+  const waPfxGrp = document.getElementById('svc-wa-prefix-group');
+  if (waPfxGrp) waPfxGrp.style.display = (wa.mode === 'self') ? '' : 'none';
 }
 
 async function saveConfig() {
@@ -1106,18 +1205,35 @@ async function saveConfig() {
       'memory-ops':  retMem  || 30,
     },
     services: {
-      ha_url:     document.getElementById('svc-ha-url').value,
-      ha_token:   document.getElementById('svc-ha-token').value,
-      ollama_url: document.getElementById('svc-ollama-url').value,
-      qdrant_url: document.getElementById('svc-qdrant-url').value,
+      ha_url:          document.getElementById('svc-ha-url').value,
+      ha_token:        document.getElementById('svc-ha-token').value,
+      ha_mcp_enabled:  document.getElementById('svc-mcp-enabled')?.checked ?? false,
+      ha_mcp_url:      document.getElementById('svc-mcp-url')?.value || '',
+      ha_mcp_token:    document.getElementById('svc-mcp-token')?.value || '',
+      ollama_url:      document.getElementById('svc-ollama-url').value,
+      qdrant_url:      document.getElementById('svc-qdrant-url').value,
+    },
+    whatsapp: {
+      mode:        document.getElementById('svc-wa-mode')?.value || 'separate',
+      self_prefix: document.getElementById('svc-wa-prefix')?.value || '!h ',
     },
   };
 
+  const statusEl = document.getElementById('config-save-status');
   try {
     const r = await fetch('/api/config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(newCfg) });
-    if (r.ok) { cfg = newCfg; toast('Konfiguration gespeichert ✓', 'ok'); }
-    else       { toast('Fehler beim Speichern', 'err'); }
-  } catch(e) { toast(e.message, 'err'); }
+    if (r.ok) {
+      cfg = newCfg;
+      toast('Konfiguration gespeichert ✓', 'ok');
+      if (statusEl) { statusEl.style.color = 'var(--green)'; statusEl.textContent = '✓ Gespeichert'; setTimeout(() => { statusEl.textContent = ''; }, 3000); }
+    } else {
+      toast('Fehler beim Speichern', 'err');
+      if (statusEl) { statusEl.style.color = 'var(--red)'; statusEl.textContent = '✗ Fehler'; }
+    }
+  } catch(e) {
+    toast(e.message, 'err');
+    if (statusEl) { statusEl.style.color = 'var(--red)'; statusEl.textContent = '✗ ' + e.message; }
+  }
 }
 
 // ── CLAUDE.md Editor ───────────────────────────────────────────────────────
@@ -1225,7 +1341,9 @@ async function loadStatus() {
           <span>Status</span>
           <span class="${qdrant.ok ? 'status-ok' : 'status-err'}">${qdrant.ok ? '✓ Online' : '✗ ' + (qdrant.error||'Fehler')}</span>
         </div>
-        ${qdrant.ok ? `<div class="status-row"><span>Collections</span><span>${colls||'keine'}</span></div>` : ''}
+        ${qdrant.ok ? `<div class="status-row"><span>Collections</span><div style="display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end;">
+          ${(qdrant.collections||[]).map(c => `<span class="tag" style="display:inline-flex;align-items:center;gap:4px;">${escHtml(c)}<button onclick="deleteQdrantCollection('${escAttr(c)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:11px;padding:0;" title="Löschen">✕</button></span>`).join('')||'keine'}
+        </div></div>` : ''}
       </div>
       <div class="status-card">
         <h3>Ollama</h3>
@@ -1275,10 +1393,19 @@ async function instanceForceStop(inst) {
 
 async function qdrantRestart() {
   if (!confirm('Qdrant neu starten? Laufende Vorgänge werden unterbrochen.')) return;
-  const r = await fetch('/api/instances/qdrant/restart', { method: 'POST' });
+  const r = await fetch('/api/qdrant/restart', { method: 'POST' });
   const d = await r.json();
   if (d.ok) { toast('Qdrant wird neu gestartet ✓', 'ok'); setTimeout(loadStatus, 3000); }
   else       { toast(`Qdrant Restart fehlgeschlagen: ${(d.error||'?').substring(0,60)}`, 'err'); }
+}
+
+async function deleteQdrantCollection(name) {
+  if (!confirm(`Collection "${name}" endgültig löschen?\n\nDanach Memory-Rebuild für betroffene Instanzen erforderlich.`)) return;
+  const r = await fetch(`/api/qdrant/collections/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  const d = await r.json();
+  toast(d.result === true ? `"${name}" gelöscht ✓` : `Fehler: ${JSON.stringify(d).substring(0,60)}`, d.result === true ? 'ok' : 'err');
+  loadStatus();
+  loadMemoryStats();
 }
 
 // ── Chat-Eingabe ───────────────────────────────────────────────────────────
@@ -1521,10 +1648,16 @@ function startRebuildSSE(inst, onDone) {
   _rebuildSSE = new EventSource(`/api/rebuild-progress/${inst}`);
   _rebuildSSE.onmessage = (e) => {
     const d = JSON.parse(e.data);
-    setRebuildProgress(d.done, d.total, d.eta_s, statusLabel(d.status, d.error));
+    const errSuffix = d.errors > 0 ? ` (${d.errors} Fehler)` : '';
+    setRebuildProgress(d.done, d.total, d.eta_s, statusLabel(d.status, d.error) + errSuffix);
     if (['done','error','cancelled'].includes(d.status)) {
       _rebuildSSE.close(); _rebuildSSE = null;
-      if (d.status === 'done') toast(`${inst}: Rebuild abgeschlossen ✓`, 'ok');
+      if (d.status === 'done') {
+        const msg = d.errors > 0
+          ? `${inst}: Rebuild abgeschlossen – ${d.errors} Einträge fehlgeschlagen (Agent erreichbar?)`
+          : `${inst}: Rebuild abgeschlossen ✓`;
+        toast(msg, d.errors > 0 ? 'warn' : 'ok');
+      }
       if (d.status === 'error') toast(`${inst}: ${d.error}`, 'err');
       if (onDone) onDone();
     }
@@ -1671,12 +1804,109 @@ async function testSvcConn(type, url, resultId) {
   } catch(e) { el.textContent = '✗ ' + e.message; el.style.color = 'var(--red)'; }
 }
 
-async function testProviderConn(i) {
-  const el  = document.getElementById(`prov-${i}-test`);
-  const url = document.getElementById(`prov-${i}-url`)?.value?.trim();
-  const type = document.getElementById(`prov-${i}-type`)?.value || 'http';
-  if (!url) { el.textContent = '⚠ Keine URL – Standard-Endpunkt wird verwendet'; el.style.color = 'var(--yellow)'; return; }
+async function testHaConnection() {
+  const el = document.getElementById('test-ha-result');
+  const ha_url   = document.getElementById('svc-ha-url')?.value?.trim();
+  const ha_token = document.getElementById('svc-ha-token')?.value?.trim();
+  if (!ha_url)   { el.textContent = '⚠ URL fehlt';   el.style.color = 'var(--yellow)'; return; }
+  if (!ha_token) { el.textContent = '⚠ Token fehlt'; el.style.color = 'var(--yellow)'; return; }
   el.textContent = '…'; el.style.color = 'var(--muted)';
+  try {
+    const r = await fetch('/api/test-ha', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ ha_url, ha_token }),
+    });
+    const d = await r.json();
+    el.textContent = d.ok ? `✓ ${d.detail}` : `✗ ${d.detail}`;
+    el.style.color = d.ok ? 'var(--green)' : 'var(--red)';
+  } catch(e) { el.textContent = '✗ ' + e.message; el.style.color = 'var(--red)'; }
+}
+
+function toggleMcpSection(enabled) {
+  const sec = document.getElementById('mcp-section');
+  if (sec) sec.style.display = enabled ? 'block' : 'none';
+}
+
+function autoFillMcpUrl() {
+  const haUrl = document.getElementById('svc-ha-url')?.value?.trim().replace(/\/$/, '');
+  const mcpUrl = document.getElementById('svc-mcp-url');
+  const hint   = document.getElementById('svc-mcp-url-hint');
+  if (!haUrl) {
+    if (hint) { hint.textContent = '⚠ Erst HA URL eingeben'; hint.style.display = ''; hint.style.color = 'var(--yellow)'; }
+    return;
+  }
+  const url = `${haUrl}/mcp_server/sse`;
+  if (mcpUrl) mcpUrl.value = url;
+  if (hint)   { hint.textContent = `→ ${url}`; hint.style.display = ''; hint.style.color = 'var(--muted)'; }
+}
+
+async function testMcpConnection() {
+  const el    = document.getElementById('test-mcp-result');
+  let mcp_url = document.getElementById('svc-mcp-url')?.value?.trim();
+  let token   = document.getElementById('svc-mcp-token')?.value?.trim();
+  // Fallback: leerer MCP-Token → HA-Token nehmen
+  if (!token) token = document.getElementById('svc-ha-token')?.value?.trim();
+  // Leere MCP-URL auto-ausfüllen
+  if (!mcp_url) {
+    const haUrl = document.getElementById('svc-ha-url')?.value?.trim().replace(/\/$/, '');
+    if (haUrl) mcp_url = `${haUrl}/mcp_server/sse`;
+  }
+  if (!mcp_url) { el.textContent = '⚠ MCP URL fehlt'; el.style.color = 'var(--yellow)'; return; }
+  if (!token)   { el.textContent = '⚠ Token fehlt';   el.style.color = 'var(--yellow)'; return; }
+  el.textContent = '…'; el.style.color = 'var(--muted)';
+  try {
+    const r = await fetch('/api/test-ha-mcp', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ mcp_url, token }),
+    });
+    const d = await r.json();
+    el.textContent = d.ok ? `✓ ${d.detail}` : `✗ ${d.detail}`;
+    el.style.color = d.ok ? 'var(--green)' : 'var(--red)';
+  } catch(e) { el.textContent = '✗ ' + e.message; el.style.color = 'var(--red)'; }
+}
+
+function toggleLlmSlot(i) {
+  const body    = document.getElementById(`prov-${i}-body`);
+  const chevron = document.getElementById(`prov-${i}-chevron`);
+  if (!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if (chevron) chevron.style.transform = open ? '' : 'rotate(90deg)';
+}
+
+async function testProviderConn(i) {
+  const el   = document.getElementById(`prov-${i}-test`);
+  const type = document.getElementById(`prov-${i}-type`)?.value || 'http';
+  const key  = document.getElementById(`prov-${i}-key`)?.value?.trim() || '';
+  let   url  = document.getElementById(`prov-${i}-url`)?.value?.trim() || '';
+
+  // Default-URLs pro Provider-Typ
+  const defaults = {
+    anthropic: 'https://api.anthropic.com',
+    minimax:   'https://api.minimax.io',
+    ollama:    '',
+  };
+  if (!url && defaults[type]) url = defaults[type];
+
+  if (!url) { el.textContent = '⚠ Keine URL konfiguriert'; el.style.color = 'var(--yellow)'; return; }
+
+  el.textContent = '…'; el.style.color = 'var(--muted)';
+
+  // Für Anthropic/MiniMax: Models-Endpunkt testen wenn Key vorhanden
+  if ((type === 'anthropic' || type === 'minimax') && key) {
+    try {
+      const r = await fetch('/api/fetch-models', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ type, url, key }),
+      });
+      const d = await r.json();
+      const count = d.models?.length ?? 0;
+      el.textContent = count > 0 ? `✓ Verbunden · ${count} Modelle` : '⚠ Verbunden, aber keine Modelle gefunden';
+      el.style.color = count > 0 ? 'var(--green)' : 'var(--yellow)';
+    } catch(e) { el.textContent = '✗ ' + e.message; el.style.color = 'var(--red)'; }
+    return;
+  }
+
   const connType = type === 'ollama' ? 'ollama' : 'http';
   try {
     const r = await fetch('/api/test-connection', {
@@ -1692,8 +1922,116 @@ async function testProviderConn(i) {
 // ── User-Management ────────────────────────────────────────────────────────
 let editingUserId = null;
 
+function _llmOpts(selectedSlot) {
+  if (!cfg || !cfg.llm_providers) return `<option value="1">Slot 1</option>`;
+  return cfg.llm_providers.map(s =>
+    `<option value="${s.slot}" ${s.slot == selectedSlot ? 'selected' : ''}>Slot ${s.slot} – ${escHtml(s.name||'')}</option>`
+  ).join('');
+}
+
+function renderUserCard(u) {
+  const sc = u.container_status === 'running' ? 'var(--green)' : u.container_status === 'absent' ? 'var(--muted)' : 'var(--red)';
+  const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${sc};flex-shrink:0;"></span>`;
+  const roleColor = {'admin':'var(--accent2)','voice':'var(--yellow)','voice-advanced':'var(--blue)','user':'var(--green)'}[u.role]||'var(--muted)';
+  const sysTag = u.system ? `<span style="font-size:10px;background:rgba(96,165,250,.15);color:var(--blue);border-radius:4px;padding:1px 6px;margin-left:6px;">System</span>` : '';
+  const isVoice = ['voice','voice-advanced'].includes(u.role);
+  const waInfo = !isVoice && u.whatsapp_phone ? ` · 📱 ${escHtml(u.whatsapp_phone)}` : '';
+  const haInfo = !isVoice && u.ha_user ? ` · HA: ${escHtml(u.ha_user)}` : '';
+
+  return `
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;" id="user-card-${escAttr(u.id)}">
+    <!-- Header -->
+    <div style="padding:12px 16px;display:flex;align-items:center;gap:10px;">
+      ${dot}
+      <div style="flex:1;min-width:0;">
+        <span style="font-weight:600;">${escHtml(u.display_name)}</span>
+        <span style="color:var(--muted);font-size:12px;margin-left:6px;">(${escHtml(u.id)})</span>
+        <span style="color:${roleColor};font-size:12px;margin-left:6px;">${escHtml(u.role)}</span>${sysTag}
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">
+          Port :${u.api_port}${haInfo}${waInfo} · ${escHtml(u.container_status)}
+        </div>
+      </div>
+      <div style="display:flex;gap:5px;flex-shrink:0;" onclick="event.stopPropagation()">
+        <button class="btn btn-secondary" style="font-size:11px;padding:3px 8px;" title="Neu starten" onclick="restartUserContainer('${escAttr(u.id)}')">↺</button>
+        <button class="btn btn-secondary" style="font-size:11px;padding:3px 8px;" title="Stoppen" onclick="stopUserContainer('${escAttr(u.id)}')">⏹</button>
+        <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" id="uedit-btn-${escAttr(u.id)}" onclick="toggleUserExpand('${escAttr(u.id)}')">✎ Bearbeiten</button>
+        ${!u.system ? `<button class="btn btn-danger" style="font-size:11px;padding:3px 8px;" onclick="deleteUser('${escAttr(u.id)}')">✕</button>` : ''}
+      </div>
+    </div>
+    <!-- Expandable edit form -->
+    <div id="user-expand-${escAttr(u.id)}" style="display:none;border-top:1px solid var(--border);padding:16px 16px 12px;">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Anzeigename</label>
+          <input type="text" id="uf-${escAttr(u.id)}-name" value="${escAttr(u.display_name||'')}">
+        </div>
+        <div class="form-group">
+          <label>Rolle</label>
+          <select id="uf-${escAttr(u.id)}-role">
+            <option value="user"  ${u.role==='user' ?'selected':''}>User (eingeschränkt)</option>
+            <option value="admin" ${u.role==='admin'?'selected':''}>Admin (voller Zugriff)</option>
+          </select>
+        </div>
+      </div>
+      ${!isVoice ? `
+      <div class="form-row">
+        <div class="form-group">
+          <label>HA-User <span style="font-size:11px;color:var(--muted);">(Person-Entität aus HA)</span></label>
+          <div style="display:flex;gap:6px;">
+            <select id="uf-${escAttr(u.id)}-ha" style="flex:1;">
+              <option value="${escAttr(u.ha_user||'')}">${escHtml(u.ha_user||'– nicht zugeordnet –')}</option>
+            </select>
+            <button class="btn btn-secondary" style="font-size:11px;padding:4px 8px;flex-shrink:0;" onclick="loadHaUsersForCard('${escAttr(u.id)}')">↺</button>
+          </div>
+          <span id="uf-${escAttr(u.id)}-ha-status" style="font-size:11px;color:var(--muted);"></span>
+        </div>
+        <div class="form-group">
+          <label>WhatsApp Rufnummer <span style="font-size:11px;color:var(--muted);">(z.B. 491234567890)</span></label>
+          <input type="text" id="uf-${escAttr(u.id)}-wa-phone" value="${escAttr(u.whatsapp_phone||'')}" placeholder="Ohne +, ohne Leerzeichen">
+        </div>
+      </div>
+      ` : ''}
+      <div class="form-row">
+        <div class="form-group">
+          <label>Primäres LLM</label>
+          <select id="uf-${escAttr(u.id)}-primary-llm">${_llmOpts(u.primary_llm_slot)}</select>
+        </div>
+        <div class="form-group">
+          <label>Extraktions-LLM</label>
+          <select id="uf-${escAttr(u.id)}-extract-llm">${_llmOpts(u.extraction_llm_slot)}</select>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+        <button class="btn" onclick="saveUserEdit('${escAttr(u.id)}')">💾 Speichern</button>
+        <button class="btn btn-secondary" onclick="toggleUserExpand('${escAttr(u.id)}')">Abbrechen</button>
+        <span id="uf-${escAttr(u.id)}-status" style="font-size:12px;color:var(--muted);"></span>
+      </div>
+      <!-- CLAUDE.md Inline-Editor -->
+      <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">CLAUDE.md</span>
+          <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;"
+            onclick="toggleUserClaudeMd('${escAttr(u.id)}')">✎ Bearbeiten</button>
+          <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;"
+            onclick="loadDefaultClaudeMd('${escAttr(u.id)}')">↺ Role Default laden</button>
+          <span id="uf-${escAttr(u.id)}-md-status" style="font-size:11px;color:var(--muted);"></span>
+        </div>
+        <div id="uf-${escAttr(u.id)}-md-editor" style="display:none;">
+          <textarea id="uf-${escAttr(u.id)}-md-content" spellcheck="false"
+            style="width:100%;min-height:260px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:10px;font-family:var(--mono);font-size:12px;resize:vertical;"></textarea>
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <button class="btn" onclick="saveUserClaudeMd('${escAttr(u.id)}')">💾 CLAUDE.md speichern</button>
+            <button class="btn btn-secondary" onclick="document.getElementById('uf-${escAttr(u.id)}-md-editor').style.display='none'">Schließen</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
 async function loadUsers() {
   const list = document.getElementById('user-list');
+  if (!cfg) await loadConfig();
   try {
     const r = await fetch('/api/users');
     const users = await r.json();
@@ -1701,166 +2039,167 @@ async function loadUsers() {
       list.innerHTML = '<div class="empty-state"><div class="icon">👤</div><div>Noch keine User.</div></div>';
       return;
     }
-    list.innerHTML = users.map(u => {
-      const statusColor = u.container_status === 'running' ? 'var(--green)' : u.container_status === 'absent' ? 'var(--muted)' : 'var(--red)';
-      const statusDot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${statusColor};margin-right:6px;"></span>`;
-      const sysTag = u.system ? `<span class="tag" style="background:#1a2744;color:#60a5fa;margin-left:4px;font-size:10px;">System</span>` : '';
-      const roleColor = {'admin':'var(--accent2)','voice':'var(--yellow)','voice-advanced':'var(--blue)','user':'var(--green)'}[u.role] || 'var(--muted)';
-      return `
-      <div class="conv-card" style="padding:14px 16px;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-          <div>
-            <div style="font-weight:600;margin-bottom:4px;">${statusDot}${escHtml(u.display_name)} <span style="color:var(--muted);font-weight:400;font-size:12px;">(${escHtml(u.id)})</span>
-              <span class="tag" style="margin-left:6px;color:${roleColor};">${escHtml(u.role)}</span>${sysTag}
-            </div>
-            <div style="font-size:12px;color:var(--muted);">
-              Port :${u.api_port} · Slot ${u.primary_llm_slot} (primär), ${u.extraction_llm_slot} (Extraktion)
-              ${u.ha_user ? ` · HA: ${escHtml(u.ha_user)}` : ''}
-              ${u.whatsapp_jid ? ` · WA: ${escHtml(u.whatsapp_jid)}` : ''}
-            </div>
-            <div style="font-size:11px;color:var(--muted);margin-top:2px;">Container: ${escHtml(u.container_name)} · ${escHtml(u.container_status)}</div>
-          </div>
-          <div style="display:flex;gap:6px;flex-shrink:0;">
-            <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" onclick="restartUserContainer('${escAttr(u.id)}')">↺</button>
-            <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" onclick="stopUserContainer('${escAttr(u.id)}')">⏹</button>
-            <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" onclick="showUserForm('${escAttr(u.id)}')">✎</button>
-            ${u.system ? '' : `<button class="btn btn-danger" style="font-size:11px;padding:3px 10px;" onclick="deleteUser('${escAttr(u.id)}')">✕</button>`}
-          </div>
-        </div>
-      </div>`;
-    }).join('');
+    list.innerHTML = users.map(u => renderUserCard(u)).join('');
+    // Auto-load HA users for expanded cards (none expanded on fresh load)
   } catch(e) {
     list.innerHTML = `<div class="empty-state"><div class="icon">❌</div><div>${e.message}</div></div>`;
   }
 }
 
-function _populateLlmSelects() {
-  if (!cfg) return;
-  const slots = cfg.llm_providers || [];
-  const opts = slots.map(s => `<option value="${s.slot}">Slot ${s.slot} – ${escHtml(s.name||'')}</option>`).join('');
-  document.getElementById('uf-primary-llm').innerHTML = opts;
-  document.getElementById('uf-extract-llm').innerHTML = opts;
+function toggleUserExpand(uid) {
+  const el  = document.getElementById(`user-expand-${uid}`);
+  const btn = document.getElementById(`uedit-btn-${uid}`);
+  if (!el) return;
+  const open = el.style.display !== 'none';
+  el.style.display = open ? 'none' : 'block';
+  if (btn) btn.textContent = open ? '✎ Bearbeiten' : '▲ Schließen';
+  if (!open) loadHaUsersForCard(uid);
 }
 
-async function showUserForm(userId) {
-  editingUserId = userId;
-  const section = document.getElementById('user-form-section');
-  const title   = document.getElementById('user-form-title');
-  const submitBtn = document.getElementById('uf-submit-btn');
-
-  if (!cfg) await loadConfig();
-  _populateLlmSelects();
-
-  if (userId) {
-    // Edit-Modus: Felder befüllen
-    const r = await fetch('/api/users');
-    const users = await r.json();
-    const u = users.find(x => x.id === userId);
-    if (!u) return;
-    title.textContent = `User bearbeiten: ${u.display_name}`;
-    submitBtn.textContent = 'Speichern';
-    document.getElementById('uf-id').value          = u.id;
-    document.getElementById('uf-id').disabled       = true;
-    document.getElementById('uf-display-name').value = u.display_name || '';
-    document.getElementById('uf-role').value         = u.role || 'user';
-    document.getElementById('uf-ha-user').value      = u.ha_user || '';
-    document.getElementById('uf-primary-llm').value  = u.primary_llm_slot || 1;
-    document.getElementById('uf-extract-llm').value  = u.extraction_llm_slot || 3;
-    document.getElementById('uf-wa-jid').value       = u.whatsapp_jid || '';
-    document.getElementById('uf-wa-mode').value      = u.whatsapp_mode || 'separate';
-    document.getElementById('uf-template').value     = u.claude_md_template || 'user';
-  } else {
-    // Neu-Modus
-    title.textContent = 'Neuer User';
-    submitBtn.textContent = 'User anlegen';
-    document.getElementById('uf-id').value          = '';
-    document.getElementById('uf-id').disabled       = false;
-    document.getElementById('uf-display-name').value = '';
-    document.getElementById('uf-role').value         = 'user';
-    document.getElementById('uf-ha-user').value      = '';
-    document.getElementById('uf-primary-llm').value  = 1;
-    document.getElementById('uf-extract-llm').value  = 3;
-    document.getElementById('uf-wa-jid').value       = '';
-    document.getElementById('uf-wa-mode').value      = 'separate';
-    document.getElementById('uf-template').value     = 'user';
-  }
-
-  section.style.display = '';
-  section.scrollIntoView({ behavior: 'smooth' });
-  document.getElementById('uf-status').textContent = '';
-
-  // WhatsApp + HA-User für Voice/System ausblenden
-  const isVoice = ['voice', 'voice-advanced'].includes(document.getElementById('uf-role').value);
-  document.getElementById('uf-wa-row').style.display  = isVoice ? 'none' : '';
-  document.getElementById('uf-ha-row').style.display  = isVoice ? 'none' : '';
-}
-
-function hideUserForm() {
-  document.getElementById('user-form-section').style.display = 'none';
-  editingUserId = null;
-}
-
-function updateUserFormTemplate() {
-  const role = document.getElementById('uf-role').value;
-  const tplMap = { 'admin': 'admin', 'voice': 'ha-assist', 'voice-advanced': 'ha-advanced' };
-  document.getElementById('uf-template').value = tplMap[role] || 'user';
-  const isVoice = ['voice', 'voice-advanced'].includes(role);
-  document.getElementById('uf-wa-row').style.display  = isVoice ? 'none' : '';
-  document.getElementById('uf-ha-row').style.display  = isVoice ? 'none' : '';
-}
-
-async function submitUserForm() {
-  const btn = document.getElementById('uf-submit-btn');
-  const st  = document.getElementById('uf-status');
-  const payload = {
-    id:                  document.getElementById('uf-id').value.trim(),
-    display_name:        document.getElementById('uf-display-name').value.trim(),
-    role:                document.getElementById('uf-role').value,
-    ha_user:             document.getElementById('uf-ha-user').value.trim(),
-    primary_llm_slot:    parseInt(document.getElementById('uf-primary-llm').value),
-    extraction_llm_slot: parseInt(document.getElementById('uf-extract-llm').value),
-    whatsapp_jid:        document.getElementById('uf-wa-jid').value.trim(),
-    whatsapp_mode:       document.getElementById('uf-wa-mode').value,
-    claude_md_template:  document.getElementById('uf-template').value,
-  };
-
-  btn.disabled = true;
-  st.textContent = '…';
-  st.style.color = 'var(--muted)';
-
+async function loadHaUsersForCard(uid) {
+  const sel    = document.getElementById(`uf-${uid}-ha`);
+  const status = document.getElementById(`uf-${uid}-ha-status`);
+  if (!sel) return;
+  const currentVal = sel.value;
   try {
-    let r;
-    if (editingUserId) {
-      r = await fetch(`/api/users/${editingUserId}`, {
-        method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload),
-      });
+    const r = await fetch('/api/ha-users');
+    const data = await r.json();
+    if (data.ok && data.users.length > 0) {
+      sel.innerHTML = '<option value="">– nicht zugeordnet –</option>' +
+        data.users.map(u =>
+          `<option value="${escAttr(u.id)}" ${u.id === currentVal ? 'selected' : ''}>${escHtml(u.display_name)} (${escHtml(u.id)})</option>`
+        ).join('');
+      if (status) { status.textContent = `${data.users.length} HA-User gefunden`; status.style.color = 'var(--green)'; }
     } else {
-      r = await fetch('/api/users', {
-        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload),
-      });
-    }
-    const d = await r.json();
-    if (r.ok && d.ok) {
-      const containerOk = d.container?.ok !== false;
-      st.textContent = containerOk
-        ? (editingUserId ? '✓ Gespeichert' : `✓ User angelegt · Port :${d.user?.api_port}`)
-        : `⚠ Gespeichert aber Container-Start fehlgeschlagen: ${d.container?.error?.substring(0,80)}`;
-      st.style.color = containerOk ? 'var(--green)' : 'var(--yellow)';
-      hideUserForm();
-      loadUsers();
-      toast(editingUserId ? 'User aktualisiert ✓' : 'User angelegt ✓', 'ok');
-    } else {
-      const errMsg = d.detail || d.error || 'Unbekannter Fehler';
-      st.textContent = '✗ ' + errMsg.substring(0, 100);
-      st.style.color = 'var(--red)';
-      toast(errMsg.substring(0,60), 'err');
+      if (status) { status.textContent = data.error || 'HA nicht konfiguriert'; status.style.color = 'var(--yellow)'; }
     }
   } catch(e) {
-    st.textContent = '✗ ' + e.message;
-    st.style.color = 'var(--red)';
-  } finally {
-    btn.disabled = false;
+    if (status) { status.textContent = 'Fehler beim Laden'; status.style.color = 'var(--red)'; }
   }
+}
+
+async function saveUserEdit(uid) {
+  const status = document.getElementById(`uf-${uid}-status`);
+  const isVoice = ['voice','voice-advanced'].includes(document.getElementById(`uf-${uid}-role`)?.value || '');
+  const body = {
+    display_name:        document.getElementById(`uf-${uid}-name`)?.value?.trim(),
+    role:                document.getElementById(`uf-${uid}-role`)?.value,
+    primary_llm_slot:    parseInt(document.getElementById(`uf-${uid}-primary-llm`)?.value || '1'),
+    extraction_llm_slot: parseInt(document.getElementById(`uf-${uid}-extract-llm`)?.value || '3'),
+  };
+  if (!isVoice) {
+    body.ha_user        = document.getElementById(`uf-${uid}-ha`)?.value || '';
+    body.whatsapp_phone = document.getElementById(`uf-${uid}-wa-phone`)?.value?.trim() || '';
+  }
+  if (status) { status.textContent = '…'; status.style.color = 'var(--muted)'; }
+  try {
+    const r = await fetch(`/api/users/${uid}`, {
+      method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (r.ok && d.ok) {
+      toast(`User ${uid} gespeichert ✓`, 'ok');
+      loadUsers();
+    } else {
+      const err = d.detail || d.error || 'Unbekannter Fehler';
+      if (status) { status.textContent = '✗ ' + err.substring(0,80); status.style.color = 'var(--red)'; }
+      toast(err.substring(0,60), 'err');
+    }
+  } catch(e) {
+    if (status) { status.textContent = '✗ ' + e.message; status.style.color = 'var(--red)'; }
+  }
+}
+
+async function toggleUserClaudeMd(uid) {
+  const editor = document.getElementById(`uf-${uid}-md-editor`);
+  const status = document.getElementById(`uf-${uid}-md-status`);
+  if (!editor) return;
+  if (editor.style.display !== 'none') { editor.style.display = 'none'; return; }
+  // Load current content
+  try {
+    const r = await fetch(`/api/claude-md/${uid}`);
+    if (r.ok) {
+      const d = await r.json();
+      document.getElementById(`uf-${uid}-md-content`).value = d.content || '';
+      editor.style.display = 'block';
+    } else {
+      if (status) { status.textContent = 'Nicht gefunden'; status.style.color = 'var(--yellow)'; }
+    }
+  } catch(e) {
+    if (status) { status.textContent = e.message; status.style.color = 'var(--red)'; }
+  }
+}
+
+async function loadDefaultClaudeMd(uid) {
+  const status = document.getElementById(`uf-${uid}-md-status`);
+  const role   = document.getElementById(`uf-${uid}-role`)?.value || 'user';
+  const tpl    = role === 'admin' ? 'admin' : 'user';
+  try {
+    const r = await fetch(`/api/claude-md-template/${tpl}`);
+    const d = await r.json();
+    const editor  = document.getElementById(`uf-${uid}-md-editor`);
+    const content = document.getElementById(`uf-${uid}-md-content`);
+    if (content) content.value = d.content || '';
+    if (editor)  editor.style.display = 'block';
+    if (status)  { status.textContent = `Template "${d.template}" geladen`; status.style.color = 'var(--green)'; setTimeout(() => { status.textContent = ''; }, 3000); }
+  } catch(e) {
+    if (status) { status.textContent = e.message; status.style.color = 'var(--red)'; }
+  }
+}
+
+async function saveUserClaudeMd(uid) {
+  const status  = document.getElementById(`uf-${uid}-md-status`);
+  const content = document.getElementById(`uf-${uid}-md-content`)?.value || '';
+  try {
+    const r = await fetch(`/api/claude-md/${uid}`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ content }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      toast(`CLAUDE.md für ${uid} gespeichert ✓`, 'ok');
+      if (status) { status.textContent = '✓ Gespeichert'; status.style.color = 'var(--green)'; setTimeout(() => { status.textContent = ''; }, 3000); }
+    } else {
+      if (status) { status.textContent = '✗ Fehler'; status.style.color = 'var(--red)'; }
+    }
+  } catch(e) {
+    if (status) { status.textContent = '✗ ' + e.message; status.style.color = 'var(--red)'; }
+  }
+}
+
+function showNewUserCard() {
+  document.getElementById('new-user-card').style.display = '';
+  document.getElementById('nuf-id').focus();
+}
+
+async function submitNewUser() {
+  const st  = document.getElementById('nuf-status');
+  const uid = document.getElementById('nuf-id').value.trim();
+  if (!uid) { st.textContent = '⚠ ID fehlt'; st.style.color = 'var(--yellow)'; return; }
+  const payload = {
+    id:           uid,
+    display_name: document.getElementById('nuf-display-name').value.trim() || uid,
+    role:         document.getElementById('nuf-role').value,
+    claude_md_template: document.getElementById('nuf-template').value,
+  };
+  st.textContent = '…'; st.style.color = 'var(--muted)';
+  try {
+    const r = await fetch('/api/users', {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload),
+    });
+    const d = await r.json();
+    if (r.ok && d.ok) {
+      const cOk = d.container?.ok !== false;
+      st.textContent = cOk ? `✓ Angelegt · Port :${d.user?.api_port}` : `⚠ Gespeichert, Container-Start fehlgeschlagen: ${(d.container?.error||'?').substring(0,60)}`;
+      st.style.color = cOk ? 'var(--green)' : 'var(--yellow)';
+      document.getElementById('new-user-card').style.display = 'none';
+      toast('User angelegt ✓', 'ok');
+      loadUsers();
+    } else {
+      const err = d.detail || d.error || 'Fehler';
+      st.textContent = '✗ ' + err.substring(0,80); st.style.color = 'var(--red)';
+    }
+  } catch(e) { st.textContent = '✗ ' + e.message; st.style.color = 'var(--red)'; }
 }
 
 async function deleteUser(userId) {

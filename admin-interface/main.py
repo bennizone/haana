@@ -178,16 +178,19 @@ DEFAULT_CONFIG = {
         "memory-ops":    30,
     },
     "services": {
-        "ha_url":    os.environ.get("HA_URL",    ""),
-        "ha_token":  "",
-        "ollama_url": os.environ.get("OLLAMA_URL", "http://10.83.1.110:11434"),
-        "qdrant_url": os.environ.get("QDRANT_URL", "http://qdrant:6333"),
+        "ha_url":        os.environ.get("HA_URL", ""),
+        "ha_token":      "",
+        "ha_mcp_enabled": False,
+        "ha_mcp_url":    "",   # leer = {ha_url}/mcp_server/sse
+        "ha_mcp_token":  "",   # leer = ha_token verwenden
+        "ollama_url":    os.environ.get("OLLAMA_URL", "http://10.83.1.110:11434"),
+        "qdrant_url":    os.environ.get("QDRANT_URL", "http://qdrant:6333"),
     },
     "users": [
         {
             "id": "alice", "display_name": "Alice", "role": "admin",
             "primary_llm_slot": 1, "extraction_llm_slot": 3,
-            "ha_user": "alice", "whatsapp_jid": "", "whatsapp_mode": "separate",
+            "ha_user": "alice", "whatsapp_phone": "",
             "api_port": 8001, "container_name": "haana-instanz-alice-1",
             "claude_md_template": "admin",
             "caldav_url": "", "caldav_user": "", "caldav_pass": "",
@@ -197,7 +200,7 @@ DEFAULT_CONFIG = {
         {
             "id": "bob", "display_name": "Bob", "role": "user",
             "primary_llm_slot": 1, "extraction_llm_slot": 3,
-            "ha_user": "bob", "whatsapp_jid": "", "whatsapp_mode": "separate",
+            "ha_user": "bob", "whatsapp_phone": "",
             "api_port": 8002, "container_name": "haana-instanz-bob-1",
             "claude_md_template": "user",
             "caldav_url": "", "caldav_user": "", "caldav_pass": "",
@@ -208,7 +211,7 @@ DEFAULT_CONFIG = {
             "id": "ha-assist", "display_name": "HAANA Voice", "role": "voice",
             "system": True,
             "primary_llm_slot": 3, "extraction_llm_slot": 3,
-            "ha_user": "", "whatsapp_jid": "", "whatsapp_mode": "separate",
+            "ha_user": "", "whatsapp_phone": "",
             "api_port": 8003, "container_name": "haana-instanz-ha-assist-1",
             "claude_md_template": "ha-assist",
             "caldav_url": "", "caldav_user": "", "caldav_pass": "",
@@ -219,7 +222,7 @@ DEFAULT_CONFIG = {
             "id": "ha-advanced", "display_name": "HAANA Advanced", "role": "voice-advanced",
             "system": True,
             "primary_llm_slot": 1, "extraction_llm_slot": 3,
-            "ha_user": "", "whatsapp_jid": "", "whatsapp_mode": "separate",
+            "ha_user": "", "whatsapp_phone": "",
             "api_port": 8004, "container_name": "haana-instanz-ha-advanced-1",
             "claude_md_template": "ha-advanced",
             "caldav_url": "", "caldav_user": "", "caldav_pass": "",
@@ -227,6 +230,10 @@ DEFAULT_CONFIG = {
             "smtp_host": "", "smtp_port": 587, "smtp_user": "", "smtp_pass": "",
         },
     ],
+    "whatsapp": {
+        "mode": "separate",
+        "self_prefix": "!h ",
+    },
 }
 
 
@@ -387,6 +394,18 @@ async def post_claude_md(instance: str, request: Request):
     return {"ok": True}
 
 
+@app.get("/api/claude-md-template/{template_name}")
+async def get_claude_md_template(template_name: str):
+    """Liefert den Rohinhalt eines CLAUDE.md-Templates (ohne Platzhalter-Ersatz)."""
+    safe = re.sub(r"[^a-z0-9\-]", "", template_name.lower())
+    tpl_path = TEMPLATES_DIR / f"{safe}.md"
+    if not tpl_path.exists():
+        tpl_path = TEMPLATES_DIR / "user.md"
+    if not tpl_path.exists():
+        raise HTTPException(404, "Template nicht gefunden")
+    return {"content": tpl_path.read_text(encoding="utf-8"), "template": safe}
+
+
 # ── API: Status ───────────────────────────────────────────────────────────────
 
 @app.get("/api/status")
@@ -408,7 +427,8 @@ async def get_status():
             for cname in coll_names:
                 try:
                     cr = await client.get(f"{qdrant_url}/collections/{cname}")
-                    total_vectors += cr.json().get("result", {}).get("vectors_count", 0) or 0
+                    res = cr.json().get("result", {})
+                    total_vectors += res.get("points_count", 0) or res.get("vectors_count", 0) or 0
                 except Exception:
                     pass
             # Konversations-Logs vorhanden?
@@ -503,7 +523,8 @@ async def memory_stats():
             for c in colls:
                 try:
                     cr = await client.get(f"{qdrant_url}/collections/{c['name']}")
-                    coll_vectors[c["name"]] = cr.json().get("result", {}).get("vectors_count", 0) or 0
+                    _cr = cr.json().get("result", {})
+                    coll_vectors[c["name"]] = _cr.get("points_count", 0) or _cr.get("vectors_count", 0) or 0
                 except Exception:
                     coll_vectors[c["name"]] = 0
     except Exception:
@@ -613,7 +634,7 @@ async def force_stop_instance(instance: str):
         return {"ok": False, "error": str(e)[:200]}
 
 
-@app.post("/api/instances/qdrant/restart")
+@app.post("/api/qdrant/restart")
 async def restart_qdrant():
     """Qdrant-Container neu starten."""
     if not _docker_client:
@@ -622,6 +643,20 @@ async def restart_qdrant():
         c = _docker_client.containers.get("haana-qdrant-1")
         c.restart(timeout=10)
         return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
+
+
+@app.delete("/api/qdrant/collections/{name}")
+async def delete_qdrant_collection(name: str):
+    """Löscht eine Qdrant-Collection (z.B. alte bnd_memory nach Rename)."""
+    import httpx
+    cfg = load_config()
+    qdrant_url = cfg.get("services", {}).get("qdrant_url", "http://qdrant:6333")
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.delete(f"{qdrant_url}/collections/{name}")
+            return r.json()
     except Exception as e:
         return {"ok": False, "error": str(e)[:200]}
 
@@ -718,6 +753,139 @@ async def test_connection(request: Request):
         return {"ok": False, "detail": str(e)[:200]}
 
 
+@app.post("/api/test-ha")
+async def test_ha(request: Request):
+    """Testet Home Assistant URL + Long-Lived Token."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Ungültiges JSON")
+
+    ha_url   = (body.get("ha_url")   or "").rstrip("/")
+    ha_token = (body.get("ha_token") or "").strip()
+    if not ha_url:
+        return {"ok": False, "detail": "ha_url fehlt"}
+    if not ha_token:
+        return {"ok": False, "detail": "ha_token fehlt"}
+
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            r = await client.get(
+                f"{ha_url}/api/",
+                headers={"Authorization": f"Bearer {ha_token}"},
+            )
+            if r.status_code == 401:
+                return {"ok": False, "detail": "Token ungültig (401 Unauthorized)"}
+            if r.status_code == 200:
+                msg = r.json().get("message", "API erreichbar")
+                return {"ok": True, "detail": msg}
+            return {"ok": r.status_code < 400, "detail": f"HTTP {r.status_code}"}
+    except httpx.ConnectError:
+        return {"ok": False, "detail": "Verbindung abgelehnt – URL erreichbar?"}
+    except httpx.TimeoutException:
+        return {"ok": False, "detail": "Timeout (>8s)"}
+    except Exception as e:
+        return {"ok": False, "detail": str(e)[:200]}
+
+
+@app.post("/api/test-ha-mcp")
+async def test_ha_mcp(request: Request):
+    """Testet den HA MCP Server SSE-Endpunkt."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Ungültiges JSON")
+
+    mcp_url = (body.get("mcp_url") or "").strip()
+    token   = (body.get("token")   or "").strip()
+
+    if not mcp_url:
+        return {"ok": False, "detail": "MCP URL fehlt"}
+    if not token:
+        return {"ok": False, "detail": "Token fehlt"}
+
+    import httpx
+    headers = {"Authorization": f"Bearer {token}", "Accept": "text/event-stream"}
+    try:
+        # SSE ist ein Endlos-Stream → nur Response-Headers auswerten, Body nicht lesen
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=8.0, read=5.0, write=5.0, pool=5.0)
+        ) as client:
+            async with client.stream("GET", mcp_url, headers=headers) as r:
+                ct = r.headers.get("content-type", "")
+                sc = r.status_code
+                # Stream sofort schließen – wir brauchen nur den Status
+                if sc == 401:
+                    return {"ok": False, "detail": "Token ungültig (401 Unauthorized)"}
+                if sc == 404:
+                    return {"ok": False, "detail": "Endpunkt nicht gefunden (404) – MCP Server in HA aktiviert?"}
+                if sc in (200, 206):
+                    if "event-stream" in ct:
+                        return {"ok": True, "detail": f"MCP Server erreichbar ✓ (SSE)"}
+                    return {"ok": True, "detail": f"Erreichbar · HTTP {sc} · {ct or 'kein Content-Type'}"}
+                return {"ok": sc < 400, "detail": f"HTTP {sc}"}
+    except httpx.ConnectError:
+        return {"ok": False, "detail": "Verbindung abgelehnt – HA erreichbar?"}
+    except httpx.ReadTimeout:
+        # Read-Timeout bei SSE ist normal wenn kein initiales Event kommt,
+        # aber connect hat funktioniert → Server ist erreichbar
+        return {"ok": True, "detail": "MCP Server erreichbar ✓ (kein initiales Event innerhalb 5s – normal)"}
+    except httpx.TimeoutException:
+        return {"ok": False, "detail": "Connect-Timeout – HA erreichbar?"}
+    except Exception as e:
+        return {"ok": False, "detail": str(e)[:200]}
+
+
+@app.get("/api/ha-users")
+async def ha_users():
+    """Listet Home Assistant Person-Entitäten für User-Mapping auf."""
+    cfg = load_config()
+    ha_url   = cfg.get("services", {}).get("ha_url",   "").rstrip("/")
+    ha_token = cfg.get("services", {}).get("ha_token", "").strip()
+    if not ha_url or not ha_token:
+        return {"ok": False, "error": "HA URL oder Token nicht konfiguriert", "users": []}
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            r = await client.get(
+                f"{ha_url}/api/states",
+                headers={"Authorization": f"Bearer {ha_token}"},
+            )
+            if r.status_code == 401:
+                return {"ok": False, "error": "HA Token ungültig", "users": []}
+            r.raise_for_status()
+            persons = []
+            for state in r.json():
+                eid = state.get("entity_id", "")
+                if eid.startswith("person."):
+                    uid  = eid[len("person."):]
+                    name = state.get("attributes", {}).get("friendly_name", uid)
+                    persons.append({"id": uid, "display_name": name})
+            return {"ok": True, "users": persons}
+    except httpx.ConnectError:
+        return {"ok": False, "error": "HA nicht erreichbar", "users": []}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200], "users": []}
+
+
+@app.get("/api/whatsapp-config")
+async def whatsapp_config_endpoint():
+    """Liefert WhatsApp-Routing-Konfiguration für die Bridge."""
+    cfg = load_config()
+    wa  = cfg.get("whatsapp", {"mode": "separate", "self_prefix": "!h "})
+    routes = []
+    for user in cfg.get("users", []):
+        phone = user.get("whatsapp_phone", "").strip()
+        if not phone or user.get("system"):
+            continue
+        jid = phone if "@" in phone else f"{phone}@s.whatsapp.net"
+        container = user.get("container_name", f"haana-instanz-{user['id']}-1")
+        port      = user.get("api_port", 8001)
+        routes.append({"jid": jid, "agent_url": f"http://{container}:{port}", "user_id": user["id"]})
+    return {"mode": wa.get("mode", "separate"), "self_prefix": wa.get("self_prefix", "!h "), "routes": routes}
+
+
 @app.post("/api/rebuild-memory/{instance}")
 async def start_rebuild(instance: str):
     """Startet den Memory-Rebuild aus Konversations-Logs für eine Instanz."""
@@ -741,14 +909,24 @@ async def start_rebuild(instance: str):
     if total == 0:
         return {"ok": False, "error": "Keine Konversations-Logs gefunden"}
 
+    # Agent-Erreichbarkeit prüfen vor Start
+    agent_url = _get_agent_url(instance)
+    import httpx as _httpx_pre
+    try:
+        async with _httpx_pre.AsyncClient(timeout=5.0) as _c:
+            _r = await _c.get(f"{agent_url}/health")
+            if not _r.is_success:
+                return {"ok": False, "error": f"Agent '{instance}' antwortet nicht (Health-Check fehlgeschlagen). Container läuft?"}
+    except Exception as _e:
+        return {"ok": False, "error": f"Agent '{instance}' nicht erreichbar: {str(_e)[:120]}. Container läuft?"}
+
     _rebuild[instance] = {
-        "status": "running", "done": 0, "total": total,
+        "status": "running", "done": 0, "total": total, "errors": 0,
         "started": time.time(), "error": "",
     }
 
     async def _run():
         state = _rebuild[instance]
-        agent_url = _get_agent_url(instance)
         import httpx
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
@@ -762,15 +940,17 @@ async def start_rebuild(instance: str):
                             return
                         try:
                             rec = json.loads(line)
-                            await client.post(
+                            r = await client.post(
                                 f"{agent_url}/rebuild-entry",
                                 json={
                                     "user":      rec.get("user", ""),
                                     "assistant": rec.get("assistant", ""),
                                 },
                             )
+                            if not r.is_success:
+                                state["errors"] += 1
                         except Exception:
-                            pass
+                            state["errors"] += 1
                         state["done"] += 1
             state["status"] = "done"
         except Exception as e:
@@ -807,7 +987,7 @@ async def rebuild_progress(instance: str, request: Request):
             status  = state.get("status", "idle")
             elapsed = time.time() - state.get("started", time.time())
             eta_s   = int((total - done) * (elapsed / done)) if done > 0 else None
-            yield f"data: {json.dumps({'done': done, 'total': total, 'status': status, 'eta_s': eta_s, 'error': state.get('error','')})}\n\n"
+            yield f"data: {json.dumps({'done': done, 'total': total, 'status': status, 'eta_s': eta_s, 'error': state.get('error',''), 'errors': state.get('errors', 0)})}\n\n"
             if status in ("done", "error", "idle", "cancelled"):
                 break
             await asyncio.sleep(1)
@@ -1075,8 +1255,7 @@ async def create_user(request: Request):
         "primary_llm_slot":    int(body.get("primary_llm_slot", 1)),
         "extraction_llm_slot": int(body.get("extraction_llm_slot", 3)),
         "ha_user":             body.get("ha_user", uid),
-        "whatsapp_jid":        body.get("whatsapp_jid", ""),
-        "whatsapp_mode":       body.get("whatsapp_mode", "separate"),
+        "whatsapp_phone":      body.get("whatsapp_phone", ""),
         "api_port":            port,
         "container_name":      f"haana-instanz-{uid}-1",
         "claude_md_template":  body.get("claude_md_template", "admin" if body.get("role") == "admin" else "user"),
