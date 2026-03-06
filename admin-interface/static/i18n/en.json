@@ -25,7 +25,8 @@
     "memory": "Memory",
     "tools": "Tools",
     "llm_calls": "LLM Calls",
-    "loading": "Loading logs..."
+    "loading": "Loading logs...",
+    "log_files": "Log Files"
   },
   "config": {
     "save": "Save configuration",
@@ -46,6 +47,7 @@
       "memory": "Memory",
       "services": "Services",
       "logs": "Logs",
+      "retention": "Retention",
       "claude_md": "CLAUDE.md"
     }
   },

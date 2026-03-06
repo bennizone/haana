@@ -19,11 +19,11 @@
 </header>
 
 <div class="tabs">
-  <button class="tab-btn active" onclick="showTab('chat')">💬 Chat</button>
-  <button class="tab-btn" onclick="showTab('logs')">📋 Logs</button>
-  <button class="tab-btn" onclick="showTab('config')">⚙️ Config</button>
-  <button class="tab-btn" onclick="showTab('users')">👥 Users</button>
-  <button class="tab-btn" onclick="showTab('status')">📊 Status</button>
+  <button class="tab-btn active" onclick="showTab('chat')" data-i18n="tabs.chat">Chat</button>
+  <button class="tab-btn" onclick="showTab('logs')" data-i18n="tabs.logs">Logs</button>
+  <button class="tab-btn" onclick="showTab('config')" data-i18n="tabs.config">Config</button>
+  <button class="tab-btn" onclick="showTab('users')" data-i18n="tabs.users">Users</button>
+  <button class="tab-btn" onclick="showTab('status')" data-i18n="tabs.status">Status</button>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════ CHAT -->
@@ -78,32 +78,41 @@
 
   <div id="conv-list">
     <div class="empty-state">
-      <div class="icon">⏳</div>
+      <div class="icon">...</div>
       <div>Konversationen werden geladen...</div>
     </div>
   </div>
 
-  <!-- Log-Dateien (editierbar) -->
-  <div style="margin-top:20px;">
-    <div class="section-header">
-      <span class="section-label">Log-Dateien</span>
-      <button class="btn btn-sm btn-secondary" onclick="loadLogFiles(currentInstance)">↺</button>
-    </div>
-    <div id="log-files-list" class="log-files-list">
-      <span class="log-files-loading">Wird geladen…</span>
-    </div>
-  </div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════ LOGS -->
 <div id="panel-logs" class="panel">
   <div class="instance-bar" style="margin-bottom:20px;">
-    <button class="inst-btn active" onclick="selectLogCat('memory-ops')"   id="logbtn-memory-ops">Memory</button>
-    <button class="inst-btn"        onclick="selectLogCat('tool-calls')"    id="logbtn-tool-calls">Tools</button>
-    <button class="inst-btn"        onclick="selectLogCat('llm-calls')"     id="logbtn-llm-calls">LLM Calls</button>
+    <button class="inst-btn active" onclick="selectLogCat('memory-ops')"   id="logbtn-memory-ops" data-i18n="logs.memory">Memory</button>
+    <button class="inst-btn"        onclick="selectLogCat('tool-calls')"    id="logbtn-tool-calls" data-i18n="logs.tools">Tools</button>
+    <button class="inst-btn"        onclick="selectLogCat('llm-calls')"     id="logbtn-llm-calls" data-i18n="logs.llm_calls">LLM Calls</button>
   </div>
   <div id="log-list">
-    <div class="empty-state"><div class="icon">📋</div><div>Logs werden geladen...</div></div>
+    <div class="empty-state"><div class="icon">--</div><div data-i18n="logs.loading">Logs werden geladen...</div></div>
+  </div>
+
+  <!-- Log-Dateien (editierbar) -->
+  <div style="margin-top:24px;">
+    <div class="section-header">
+      <span class="section-label" data-i18n="logs.log_files">Log-Dateien</span>
+      <button class="btn btn-sm btn-secondary" onclick="loadLogFiles(currentInstance)">↺</button>
+    </div>
+    <div class="instance-bar" style="margin-bottom:12px;">
+      {% for inst in instances %}
+      <button class="inst-btn {% if loop.first %}active{% endif %}"
+              onclick="selectLogFileInstance('{{ inst }}')" id="logfilebtn-{{ inst }}">
+        {{ inst }}
+      </button>
+      {% endfor %}
+    </div>
+    <div id="log-files-list" class="log-files-list">
+      <span class="log-files-loading" data-i18n="common.loading">Wird geladen...</span>
+    </div>
   </div>
 </div>
 
@@ -119,11 +128,11 @@
 
   <!-- Config Sub-Tabs -->
   <div class="cfg-tabs">
-    <button class="cfg-tab-btn active" onclick="showCfgTab('llms')"     id="cfgtab-llms">LLMs</button>
-    <button class="cfg-tab-btn"        onclick="showCfgTab('memory')"   id="cfgtab-memory">Memory</button>
-    <button class="cfg-tab-btn"        onclick="showCfgTab('dienste')"  id="cfgtab-dienste">Dienste</button>
-    <button class="cfg-tab-btn"        onclick="showCfgTab('logs')"     id="cfgtab-logs">Logs</button>
-    <button class="cfg-tab-btn"        onclick="showCfgTab('claudemd')" id="cfgtab-claudemd">CLAUDE.md</button>
+    <button class="cfg-tab-btn active" onclick="showCfgTab('llms')"     id="cfgtab-llms" data-i18n="config.sub_tabs.llms">LLMs</button>
+    <button class="cfg-tab-btn"        onclick="showCfgTab('memory')"   id="cfgtab-memory" data-i18n="config.sub_tabs.memory">Memory</button>
+    <button class="cfg-tab-btn"        onclick="showCfgTab('dienste')"  id="cfgtab-dienste" data-i18n="config.sub_tabs.services">Dienste</button>
+    <button class="cfg-tab-btn"        onclick="showCfgTab('logs')"     id="cfgtab-logs" data-i18n="config.sub_tabs.retention">Retention</button>
+    <button class="cfg-tab-btn"        onclick="showCfgTab('claudemd')" id="cfgtab-claudemd" data-i18n="config.sub_tabs.claude_md">CLAUDE.md</button>
   </div>
 
   <!-- ── Sub-Tab: LLMs ── -->
@@ -131,7 +140,7 @@
 
     <!-- LLM Provider Slots -->
     <div class="config-section">
-      <div class="config-section-header">🤖 LLM Provider Slots</div>
+      <div class="config-section-header" data-i18n="config_llm.title">LLM Provider Slots</div>
       <div class="config-section-body" id="provider-slots">
         <!-- Wird per JS befüllt -->
       </div>
@@ -147,7 +156,7 @@
 
     <!-- Memory Settings -->
     <div class="config-section">
-      <div class="config-section-header">🧠 Sliding Window</div>
+      <div class="config-section-header" data-i18n="config_memory.window_title">Sliding Window</div>
       <div class="config-section-body">
         <div class="form-row three">
           <div class="form-group">
@@ -168,7 +177,7 @@
 
     <!-- Embedding-Modell -->
     <div class="config-section">
-      <div class="config-section-header">🔢 Embedding-Modell</div>
+      <div class="config-section-header" data-i18n="config_memory.embedding_title">Embedding-Modell</div>
       <div class="config-section-body">
         <div class="form-row three">
           <div class="form-group">
@@ -205,7 +214,7 @@
 
     <!-- Memory Rebuild -->
     <div class="config-section" id="rebuild-section">
-      <div class="config-section-header">🔄 Memory Rebuild aus Konversations-Logs</div>
+      <div class="config-section-header" data-i18n="config_memory.rebuild_title">Memory Rebuild aus Konversations-Logs</div>
       <div class="config-section-body">
         <p class="form-hint" style="margin-bottom:14px;">
           Baut Qdrant komplett neu auf – nützlich nach Datenverlust oder Embedding-Modell-Wechsel.
@@ -251,7 +260,7 @@
   <div id="cfgpanel-dienste" class="cfg-tab-panel" style="display:none;">
 
     <div class="config-section">
-      <div class="config-section-header">🏠 Home Assistant</div>
+      <div class="config-section-header" data-i18n="config_services.ha_title">Home Assistant</div>
       <div class="config-section-body">
         <div class="form-row">
           <div class="form-group">
@@ -313,7 +322,7 @@
 
     <!-- STT / TTS -->
     <div class="config-section">
-      <div class="config-section-header">🎙 Sprache (STT / TTS)</div>
+      <div class="config-section-header" data-i18n="config_services.stt_tts_title">Sprache (STT / TTS)</div>
       <div class="config-section-body">
         <p class="form-hint" style="margin-bottom:14px;">
           Speech-to-Text und Text-to-Speech über Home Assistant. Entities werden automatisch aus HA geladen.
@@ -370,7 +379,7 @@
     </div>
 
     <div class="config-section">
-      <div class="config-section-header">📱 WhatsApp Bridge</div>
+      <div class="config-section-header" data-i18n="config_services.wa_title">WhatsApp Bridge</div>
       <div class="config-section-body">
 
         <!-- Verbindungsstatus -->
@@ -419,7 +428,7 @@
     </div>
 
     <div class="config-section">
-      <div class="config-section-header">🔌 Infrastruktur</div>
+      <div class="config-section-header" data-i18n="config_services.infra_title">Infrastruktur</div>
       <div class="config-section-body">
         <div class="form-row">
           <div class="form-group">
@@ -466,7 +475,7 @@
 
     <!-- Log-Retention -->
     <div class="config-section">
-      <div class="config-section-header">🗂 Log-Retention</div>
+      <div class="config-section-header" data-i18n="config_logs.retention_title">Log-Retention</div>
       <div class="config-section-body">
         <p class="form-hint" style="margin-bottom:14px;">
           Konversations-Logs werden <strong class="status-ok">niemals gelöscht</strong> (Source of Truth für Memory-Rebuild).
@@ -510,7 +519,7 @@
   <div id="cfgpanel-claudemd" class="cfg-tab-panel" style="display:none;">
 
     <div class="config-section">
-      <div class="config-section-header">📝 CLAUDE.md Editor</div>
+      <div class="config-section-header" data-i18n="config_claude_md.title">CLAUDE.md Editor</div>
       <div class="config-section-body">
         <div class="instance-bar" style="margin-bottom:14px;">
           {% for inst in instances %}
@@ -524,7 +533,7 @@
           <textarea id="claude-md-editor" spellcheck="false"></textarea>
         </div>
         <div style="display:flex;gap:10px;margin-top:12px;">
-          <button class="btn btn-primary" onclick="saveClaudeMd()">💾 Speichern</button>
+          <button class="btn btn-primary" onclick="saveClaudeMd()" data-i18n="config_claude_md.save">Speichern</button>
           <span id="claude-md-status" style="color:var(--muted);font-size:12px;align-self:center;"></span>
         </div>
       </div>
@@ -584,7 +593,7 @@
 
   <!-- User-Liste (expandierbare Karten) -->
   <div id="user-list" class="user-list">
-    <div class="empty-state"><div class="icon">⏳</div><div>Wird geladen...</div></div>
+    <div class="empty-state"><div class="icon">...</div><div data-i18n="users.loading">Wird geladen...</div></div>
   </div>
 
 </div>
@@ -593,7 +602,7 @@
 <div id="panel-status" class="panel">
   <div class="status-grid" id="status-grid">
     <div class="status-card">
-      <div class="empty-state"><div class="icon">⏳</div><div>Status wird geladen...</div></div>
+      <div class="empty-state"><div class="icon">...</div><div data-i18n="status.loading">Status wird geladen...</div></div>
     </div>
   </div>
   <div style="margin-top:16px;">
@@ -643,8 +652,8 @@ function showTab(name) {
   document.getElementById('panel-' + name).classList.add('active');
   event.target.classList.add('active');
 
-  if (name === 'chat')   { loadConversations(currentInstance); loadLogFiles(currentInstance); }
-  if (name === 'logs')   loadLogs(currentLogCat);
+  if (name === 'chat')   { loadConversations(currentInstance); }
+  if (name === 'logs')   { loadLogs(currentLogCat); loadLogFiles(currentInstance); }
   if (name === 'config') { loadConfig(); loadMemoryStats(); }
   if (name === 'users')  loadUsers();
   if (name === 'status') loadStatus();
@@ -665,8 +674,14 @@ function selectInstance(inst) {
   document.getElementById('btn-' + inst)?.classList.add('active');
   startSSE(inst);
   loadConversations(inst);
-  loadLogFiles(inst);
   checkAgentHealth(inst);
+}
+
+function selectLogFileInstance(inst) {
+  currentInstance = inst;
+  document.querySelectorAll('.inst-btn[id^="logfilebtn-"]').forEach(b => b.classList.remove('active'));
+  document.getElementById('logfilebtn-' + inst)?.classList.add('active');
+  loadLogFiles(inst);
 }
 
 async function loadLogFiles(inst) {
@@ -682,7 +697,7 @@ async function loadLogFiles(inst) {
     el.innerHTML = files.map(f => `
       <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;"
         onclick="openLogEditor('${escAttr(inst)}', '${escAttr(f.date)}')" title="${f.entries} Einträge, ${f.size_kb} KB">
-        📄 ${escHtml(f.date)} <span style="color:var(--muted);">(${f.entries})</span>
+        ${escHtml(f.date)} <span style="color:var(--muted);">(${f.entries})</span>
       </button>`).join('');
   } catch(e) {
     el.innerHTML = `<span style="font-size:12px;color:var(--red);">${e.message}</span>`;
@@ -698,7 +713,7 @@ async function loadConversations(inst) {
     renderConversations(data);
   } catch(e) {
     document.getElementById('conv-list').innerHTML =
-      `<div class="empty-state"><div class="icon">❌</div><div>${e.message}</div></div>`;
+      `<div class="empty-state"><div class="icon">!</div><div>${e.message}</div></div>`;
   }
 }
 
@@ -710,7 +725,7 @@ function channelBadge(ch) {
 function renderConversations(records) {
   const list = document.getElementById('conv-list');
   if (!records.length) {
-    list.innerHTML = '<div class="empty-state"><div class="icon">💬</div><div>Noch keine Konversationen für diese Instanz.</div></div>';
+    list.innerHTML = '<div class="empty-state"><div class="icon">--</div><div>Noch keine Konversationen für diese Instanz.</div></div>';
     return;
   }
   list.innerHTML = records.map((r, i) => {
@@ -753,7 +768,7 @@ function renderConversations(records) {
             <div class="detail-label">Meta</div>
             <div class="detail-value">
               ${memBadge}<br>
-              <span class="latency">⏱ ${r.latency_s ?? '–'}s</span>
+              <span class="latency">${r.latency_s ?? '–'}s</span>
             </div>
           </div>
           <div class="detail-box">
@@ -844,12 +859,12 @@ function selectLogCat(cat) {
 
 async function loadLogs(cat) {
   const list = document.getElementById('log-list');
-  list.innerHTML = '<div class="empty-state"><div class="icon">⏳</div><div>Wird geladen...</div></div>';
+  list.innerHTML = '<div class="empty-state"><div class="icon">...</div><div>Wird geladen...</div></div>';
   try {
     const r = await fetch(`/api/logs/${cat}?limit=100`);
     const data = await r.json();
     if (!data.length) {
-      list.innerHTML = '<div class="empty-state"><div class="icon">📋</div><div>Keine Einträge.</div></div>';
+      list.innerHTML = '<div class="empty-state"><div class="icon">--</div><div>Keine Einträge.</div></div>';
       return;
     }
     list.innerHTML = data.map(rec => {
@@ -886,7 +901,7 @@ async function loadLogs(cat) {
       </div>`;
     }).join('');
   } catch(e) {
-    list.innerHTML = `<div class="empty-state"><div class="icon">❌</div><div>${e.message}</div></div>`;
+    list.innerHTML = `<div class="empty-state"><div class="icon">!</div><div>${e.message}</div></div>`;
   }
 }
 
@@ -947,13 +962,13 @@ function renderConfig(c) {
               oninput="document.getElementById('prov-${i}-summary').textContent=(document.getElementById('prov-${i}-type').value||'?')+' · '+(this.value||'–')">
             <datalist id="models-${i}"></datalist>
             <button class="btn btn-secondary" style="font-size:11px;padding:4px 10px;flex-shrink:0;"
-              onclick="fetchModels(${i})">📋 Modelle</button>
+              onclick="fetchModels(${i})">Modelle</button>
             <span id="prov-${i}-models-status" style="font-size:11px;color:var(--muted);align-self:center;"></span>
           </div>
         </div>
         <div style="display:flex;gap:10px;align-items:center;">
           <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;"
-            onclick="testProviderConn(${i})">🔌 Verbindung testen</button>
+            onclick="testProviderConn(${i})">Verbindung testen</button>
           <span id="prov-${i}-test" style="font-size:12px;color:var(--muted);"></span>
         </div>
       </div>
@@ -1235,7 +1250,7 @@ async function saveClaudeMd() {
 // ── Status ─────────────────────────────────────────────────────────────────
 async function loadStatus() {
   const grid = document.getElementById('status-grid');
-  grid.innerHTML = '<div class="status-card"><div class="empty-state"><div class="icon">⏳</div><div>Wird geprüft...</div></div></div>';
+  grid.innerHTML = '<div class="status-card"><div class="empty-state"><div class="icon">...</div><div>Wird geprüft...</div></div></div>';
   try {
     const [s, memStats] = await Promise.all([
       fetch('/api/status').then(r => r.json()),
@@ -1265,19 +1280,19 @@ async function loadStatus() {
     (memStats || []).forEach(m => memMap[m.instance] = m);
 
     const agentRows = agentHealth.map(a => {
-      const dot = a.ok ? '🟢' : '🔴';
+      const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${a.ok?'var(--green)':'var(--red)'};"></span>`;
       const mem = memMap[a.inst];
       const queueInfo = a.ok
         ? `<span style="font-size:11px;color:var(--muted);">Win: ${a.window_size??'?'} | Queue: ${a.pending_extractions??'?'}</span>`
         : `<span style="font-size:11px;color:var(--muted);">offline</span>`;
       const memInfo = mem
-        ? `<span style="font-size:11px;color:${mem.total_vectors===0&&mem.log_entries>0?'var(--yellow)':'var(--muted)'};">📦 ${mem.total_vectors} Vektoren</span>`
+        ? `<span style="font-size:11px;color:${mem.total_vectors===0&&mem.log_entries>0?'var(--yellow)':'var(--muted)'};">${mem.total_vectors} Vektoren</span>`
         : '';
       const controls = `
         <div style="display:flex;gap:4px;margin-top:6px;">
           <button class="btn btn-secondary" style="font-size:10px;padding:2px 8px;" onclick="instanceControl('${a.inst}','restart')">↺ Restart</button>
-          <button class="btn btn-secondary" style="font-size:10px;padding:2px 8px;" onclick="instanceControl('${a.inst}','stop')">⏹ Stop</button>
-          <button class="btn btn-danger"    style="font-size:10px;padding:2px 8px;" onclick="instanceForceStop('${a.inst}')">☠ Kill</button>
+          <button class="btn btn-secondary" style="font-size:10px;padding:2px 8px;" onclick="instanceControl('${a.inst}','stop')">Stop</button>
+          <button class="btn btn-danger"    style="font-size:10px;padding:2px 8px;" onclick="instanceForceStop('${a.inst}')">Kill</button>
         </div>`;
       return `<div class="status-row" style="flex-direction:column;align-items:flex-start;gap:2px;">
         <div style="display:flex;justify-content:space-between;width:100%;align-items:center;">
@@ -1332,7 +1347,7 @@ async function loadStatus() {
     document.getElementById('header-dot').style.background = allOk ? 'var(--green)' : 'var(--red)';
     document.getElementById('header-status').textContent = allOk ? 'System OK' : 'Fehler – Details im Status-Tab';
   } catch(e) {
-    grid.innerHTML = `<div class="status-card"><div class="empty-state"><div class="icon">❌</div><div>${e.message}</div></div></div>`;
+    grid.innerHTML = `<div class="status-card"><div class="empty-state"><div class="icon">!</div><div>${e.message}</div></div></div>`;
   }
 }
 
@@ -1518,7 +1533,7 @@ async function loadMemoryStats() {
         <div style="flex:1;min-width:0;">
           <div style="font-weight:500;font-size:13px;">${escHtml(m.instance)}${emptyWarn}</div>
           <div style="font-size:11px;color:${logColor};margin-top:2px;">
-            📄 ${m.log_entries} Log-Einträge (${m.log_days} Tage) · ${scopeStr}
+            ${m.log_entries} Log-Einträge (${m.log_days} Tage) · ${scopeStr}
           </div>
         </div>
       </label>`;
@@ -1923,7 +1938,7 @@ function renderUserCard(u) {
   const roleColor = {'admin':'var(--accent2)','voice':'var(--yellow)','voice-advanced':'var(--blue)','user':'var(--green)'}[u.role]||'var(--muted)';
   const sysTag = u.system ? `<span style="font-size:10px;background:rgba(96,165,250,.15);color:var(--blue);border-radius:4px;padding:1px 6px;margin-left:6px;">System</span>` : '';
   const isVoice = ['voice','voice-advanced'].includes(u.role);
-  const waInfo = !isVoice && u.whatsapp_phone ? ` · 📱 ${escHtml(u.whatsapp_phone)}` : '';
+  const waInfo = !isVoice && u.whatsapp_phone ? ` · WA: ${escHtml(u.whatsapp_phone)}` : '';
   const haInfo = !isVoice && u.ha_user ? ` · HA: ${escHtml(u.ha_user)}` : '';
 
   return `
@@ -1941,7 +1956,7 @@ function renderUserCard(u) {
       </div>
       <div style="display:flex;gap:5px;flex-shrink:0;" onclick="event.stopPropagation()">
         <button class="btn btn-secondary" style="font-size:11px;padding:3px 8px;" title="Neu starten" onclick="restartUserContainer('${escAttr(u.id)}')">↺</button>
-        <button class="btn btn-secondary" style="font-size:11px;padding:3px 8px;" title="Stoppen" onclick="stopUserContainer('${escAttr(u.id)}')">⏹</button>
+        <button class="btn btn-secondary" style="font-size:11px;padding:3px 8px;" title="Stoppen" onclick="stopUserContainer('${escAttr(u.id)}')">Stop</button>
         <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" id="uedit-btn-${escAttr(u.id)}" onclick="toggleUserExpand('${escAttr(u.id)}')">✎ Bearbeiten</button>
         ${!u.system ? `<button class="btn btn-danger" style="font-size:11px;padding:3px 8px;" onclick="deleteUser('${escAttr(u.id)}')">✕</button>` : ''}
       </div>
@@ -1990,7 +2005,7 @@ function renderUserCard(u) {
         </div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
-        <button class="btn" onclick="saveUserEdit('${escAttr(u.id)}')">💾 Speichern</button>
+        <button class="btn btn-primary" onclick="saveUserEdit('${escAttr(u.id)}')">Speichern</button>
         <button class="btn btn-secondary" onclick="toggleUserExpand('${escAttr(u.id)}')">Abbrechen</button>
         <span id="uf-${escAttr(u.id)}-status" style="font-size:12px;color:var(--muted);"></span>
       </div>
@@ -2008,7 +2023,7 @@ function renderUserCard(u) {
           <textarea id="uf-${escAttr(u.id)}-md-content" spellcheck="false"
             style="width:100%;min-height:260px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:10px;font-family:var(--mono);font-size:12px;resize:vertical;"></textarea>
           <div style="display:flex;gap:8px;margin-top:8px;">
-            <button class="btn" onclick="saveUserClaudeMd('${escAttr(u.id)}')">💾 CLAUDE.md speichern</button>
+            <button class="btn btn-primary" onclick="saveUserClaudeMd('${escAttr(u.id)}')">CLAUDE.md speichern</button>
             <button class="btn btn-secondary" onclick="document.getElementById('uf-${escAttr(u.id)}-md-editor').style.display='none'">Schließen</button>
           </div>
         </div>
@@ -2024,13 +2039,13 @@ async function loadUsers() {
     const r = await fetch('/api/users');
     const users = await r.json();
     if (!users.length) {
-      list.innerHTML = '<div class="empty-state"><div class="icon">👤</div><div>Noch keine User.</div></div>';
+      list.innerHTML = '<div class="empty-state"><div class="icon">--</div><div>Noch keine User.</div></div>';
       return;
     }
     list.innerHTML = users.map(u => renderUserCard(u)).join('');
     // Auto-load HA users for expanded cards (none expanded on fresh load)
   } catch(e) {
-    list.innerHTML = `<div class="empty-state"><div class="icon">❌</div><div>${e.message}</div></div>`;
+    list.innerHTML = `<div class="empty-state"><div class="icon">!</div><div>${e.message}</div></div>`;
   }
 }
 
@@ -2300,7 +2315,6 @@ async function waLogout() {
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   loadConversations(currentInstance);
-  loadLogFiles(currentInstance);
   startSSE(currentInstance);
   checkAgentHealth(currentInstance);
   loadStatus();
