@@ -29,7 +29,6 @@ function showCfgTab(name) {
   document.getElementById('cfgpanel-' + name).style.display = 'block';
   document.getElementById('cfgtab-' + name).classList.add('active');
   if (name === 'memory') loadMemoryStats();
-  if (name === 'infra') checkClaudeAuth();
   if (name === 'whatsapp') refreshWaStatus();
 }
 

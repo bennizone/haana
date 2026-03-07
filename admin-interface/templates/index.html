@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HAANA Admin</title>
-<link rel="stylesheet" href="/static/css/admin.css">
+<link rel="stylesheet" href="/static/css/admin.css?v=3">
 </head>
 <body>
 
@@ -509,15 +509,6 @@
       <div class="config-section-body">
         <div class="form-row">
           <div class="form-group">
-            <label>Ollama URL</label>
-            <div class="form-inline">
-              <input type="url" id="svc-ollama-url" placeholder="http://10.83.1.110:11434" style="flex:1;">
-              <button class="btn btn-sm btn-secondary"
-                onclick="testSvcConn('ollama', document.getElementById('svc-ollama-url').value, 'test-ollama')">Test</button>
-            </div>
-            <span id="test-ollama" class="form-hint"></span>
-          </div>
-          <div class="form-group">
             <label>Qdrant URL</label>
             <div class="form-inline">
               <input type="url" id="svc-qdrant-url" placeholder="http://qdrant:6333" style="flex:1;">
@@ -526,68 +517,6 @@
             </div>
             <span id="test-qdrant" class="form-hint"></span>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Claude Auth -->
-    <div class="config-section">
-      <div class="config-section-header" data-i18n="config_services.claude_auth_title">Claude Authentifizierung</div>
-      <div class="config-section-body">
-        <p class="form-hint" style="margin-bottom:14px;" data-i18n="config_services.claude_auth_desc">
-          Zwei Authentifizierungswege: API-Key (empfohlen, kein Ablauf) oder OAuth-Session (für Claude-Subscription-Nutzer).
-        </p>
-
-        <div class="form-row">
-          <div class="form-group" style="flex:2;">
-            <label data-i18n="config_services.auth_status">Status</label>
-            <div class="form-inline">
-              <span id="claude-auth-status" class="form-hint">Prüfe...</span>
-              <button class="btn btn-sm btn-secondary" onclick="checkClaudeAuth()" data-i18n="config_services.auth_check">Prüfen</button>
-            </div>
-          </div>
-        </div>
-
-        <div style="margin-top:16px;padding:12px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border);">
-          <strong data-i18n="config_services.auth_apikey_title">Option 1: API-Key (empfohlen)</strong>
-          <p class="form-hint" style="margin:6px 0;" data-i18n="config_services.auth_apikey_desc">
-            Anthropic API-Key im LLM-Provider-Slot eintragen (Tab "LLMs"). Funktioniert ohne OAuth, läuft nicht ab. Erforderlich für HA Add-on.
-          </p>
-        </div>
-
-        <div id="claude-auth-oauth-area" style="margin-top:12px;padding:12px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border);">
-          <strong data-i18n="config_services.auth_oauth_title">Option 2: OAuth Login (Claude Subscription)</strong>
-          <p class="form-hint" style="margin:6px 0 8px;" data-i18n="config_services.oauth_login_desc">
-            OAuth-Login direkt aus dem Admin-Interface. Klicke auf "Login starten", öffne den Link, autorisiere und gib den Code hier ein.
-          </p>
-
-          <button class="btn btn-sm btn-primary" onclick="startOAuthLogin()" data-i18n="config_services.oauth_start_btn">Login starten</button>
-          <span id="oauth-login-status" class="form-hint" style="margin-left:12px;"></span>
-          <div id="oauth-login-url" style="margin-top:8px;"></div>
-
-          <div id="oauth-code-section" style="display:none;margin-top:12px;">
-            <label data-i18n="config_services.oauth_code_label">Authorization Code</label>
-            <div class="form-inline" style="gap:8px;">
-              <input type="text" id="oauth-code-input" style="flex:1;font-family:monospace;"
-                placeholder="Code hier einfügen" data-i18n-placeholder="config_services.oauth_code_placeholder">
-              <button class="btn btn-sm btn-primary" onclick="completeOAuthLogin()" data-i18n="config_services.oauth_submit_btn">Absenden</button>
-            </div>
-            <span id="oauth-code-result" class="form-hint" style="margin-top:6px;display:block;"></span>
-          </div>
-
-          <details style="margin-top:12px;">
-            <summary class="form-hint" style="cursor:pointer;" data-i18n="config_services.oauth_manual_title">Alternativ: Credentials manuell einfügen</summary>
-            <div style="margin-top:8px;">
-              <p class="form-hint" style="margin:0 0 6px;" data-i18n="config_services.auth_upload_hint">
-                Inhalt der Datei ~/.claude/.credentials.json von einer eingeloggten Claude Code Session einfügen.
-              </p>
-              <textarea id="claude-auth-creds" rows="3" style="width:100%;font-family:monospace;font-size:12px;"
-                placeholder='{"claudeAiOauth":{"accessToken":"...","refreshToken":"...","expiresAt":...}}'></textarea>
-              <button class="btn btn-sm btn-secondary" style="margin-top:6px;"
-                onclick="uploadClaudeAuth()" data-i18n="config_services.auth_upload_btn">Credentials speichern</button>
-              <span id="claude-auth-upload-result" class="form-hint" style="margin-left:12px;"></span>
-            </div>
-          </details>
         </div>
       </div>
     </div>
@@ -773,19 +702,19 @@
 <script>const INSTANCES = {{ instances | tojson }};</script>
 
 <!-- Basis-Bibliotheken -->
-<script src="/static/js/i18n.js"></script>
-<script src="/static/js/utils.js"></script>
-<script src="/static/js/modal.js"></script>
+<script src="/static/js/i18n.js?v=2"></script>
+<script src="/static/js/utils.js?v=2"></script>
+<script src="/static/js/modal.js?v=2"></script>
 
 <!-- App-Kern (globaler State, Tabs, Init) -->
-<script src="/static/js/app.js"></script>
+<script src="/static/js/app.js?v=3"></script>
 
 <!-- Feature-Module -->
-<script src="/static/js/chat.js"></script>
-<script src="/static/js/config.js"></script>
-<script src="/static/js/users.js"></script>
-<script src="/static/js/status.js"></script>
-<script src="/static/js/logs.js"></script>
-<script src="/static/js/whatsapp.js"></script>
+<script src="/static/js/chat.js?v=2"></script>
+<script src="/static/js/config.js?v=3"></script>
+<script src="/static/js/users.js?v=2"></script>
+<script src="/static/js/status.js?v=2"></script>
+<script src="/static/js/logs.js?v=2"></script>
+<script src="/static/js/whatsapp.js?v=2"></script>
 </body>
 </html>

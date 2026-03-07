@@ -24,7 +24,8 @@ function toast(msg, type) {
   el.textContent = msg;
   el.className = 'show ' + type;
   if (_toastTimer) clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => { el.className = ''; }, 3500);
+  const delay = type === 'err' ? 15000 : 3500;
+  _toastTimer = setTimeout(() => { el.className = ''; }, delay);
 }
 
 // Set status text on an element with consistent styling

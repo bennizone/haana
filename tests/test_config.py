@@ -566,3 +566,179 @@ def test_slugify():
     assert main._slugify("Ollama Lokal") == "ollama-lokal"
     assert main._slugify("   ") == "item"
     assert main._slugify("Löwe & Bär") == "loewe-baer"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Tests: _migrate_providers_v2
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_migrate_v2_adds_auth_method():
+    """Migration fügt auth_method zu Anthropic-Providern hinzu."""
+    main = _import_main()
+    cfg = {
+        "providers": [
+            {"id": "a1", "name": "Anthropic", "type": "anthropic", "url": "", "key": "sk-test"},
+            {"id": "a2", "name": "Anthropic OAuth", "type": "anthropic", "url": "", "key": ""},
+            {"id": "o1", "name": "Ollama", "type": "ollama", "url": "http://ollama:11434", "key": ""},
+        ],
+        "services": {"qdrant_url": "http://qdrant:6333"},
+    }
+    result = main._migrate_providers_v2(cfg)
+    assert result is True
+    assert cfg["providers"][0]["auth_method"] == "api_key"
+    assert cfg["providers"][1]["auth_method"] == "oauth"
+    assert "auth_method" not in cfg["providers"][2]  # Ollama bleibt unverändert
+
+
+def test_migrate_v2_removes_ollama_url():
+    """Migration entfernt services.ollama_url und setzt es in Ollama-Providern."""
+    main = _import_main()
+    cfg = {
+        "providers": [
+            {"id": "o1", "name": "Ollama", "type": "ollama", "url": "", "key": ""},
+        ],
+        "services": {"ollama_url": "http://gpu:11434", "qdrant_url": "http://qdrant:6333"},
+    }
+    result = main._migrate_providers_v2(cfg)
+    assert result is True
+    assert "ollama_url" not in cfg["services"]
+    assert cfg["providers"][0]["url"] == "http://gpu:11434"
+
+
+def test_migrate_v2_noop_if_already_done():
+    """Migration macht nichts wenn auth_method schon vorhanden und keine ollama_url."""
+    main = _import_main()
+    cfg = {
+        "providers": [
+            {"id": "a1", "name": "Anthropic", "type": "anthropic", "auth_method": "api_key", "key": "sk-x"},
+        ],
+        "services": {"qdrant_url": "http://qdrant:6333"},
+    }
+    result = main._migrate_providers_v2(cfg)
+    assert result is False
+
+
+def test_migrate_v2_oauth_dir():
+    """Migration setzt oauth_dir für OAuth-Provider."""
+    main = _import_main()
+    cfg = {
+        "providers": [
+            {"id": "anthropic-2", "name": "Pro", "type": "anthropic", "key": ""},
+        ],
+        "services": {},
+    }
+    main._migrate_providers_v2(cfg)
+    assert cfg["providers"][0]["auth_method"] == "oauth"
+    assert cfg["providers"][0]["oauth_dir"] == "/data/claude-auth/anthropic-2"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Tests: _find_ollama_url
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_find_ollama_url_from_embedding():
+    main = _import_main()
+    cfg = _make_cfg()
+    url = main._find_ollama_url(cfg)
+    assert url == "http://ollama:11434"
+
+
+def test_find_ollama_url_from_extraction():
+    main = _import_main()
+    cfg = _make_cfg()
+    cfg["embedding"]["provider_id"] = "anthropic-1"  # nicht Ollama
+    url = main._find_ollama_url(cfg)
+    assert url == "http://ollama:11434"
+
+
+def test_find_ollama_url_from_first_provider():
+    main = _import_main()
+    cfg = _make_cfg()
+    cfg["embedding"]["provider_id"] = "anthropic-1"
+    cfg["memory"]["extraction_llm"] = "claude-primary"
+    url = main._find_ollama_url(cfg)
+    assert url == "http://ollama:11434"
+
+
+def test_find_ollama_url_empty():
+    main = _import_main()
+    cfg = _make_cfg(providers=[
+        {"id": "a1", "name": "Anthropic", "type": "anthropic", "key": "sk-x", "url": ""},
+    ])
+    cfg["embedding"]["provider_id"] = "a1"
+    cfg["memory"]["extraction_llm"] = ""
+    url = main._find_ollama_url(cfg)
+    assert url == ""
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Tests: Container-Start mit OpenAI/Gemini/OAuth Providern
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_start_container_openai_provider():
+    """OpenAI-Provider setzt OPENAI_API_KEY und OPENAI_MODEL."""
+    main = _import_main()
+    cfg = _make_cfg(providers=[
+        {"id": "oa-1", "name": "OpenAI", "type": "openai", "key": "sk-openai", "url": ""},
+        {"id": "ollama-home", "name": "Ollama", "type": "ollama", "url": "http://ollama:11434", "key": ""},
+    ], llms=[
+        {"id": "gpt", "name": "GPT-4o", "provider_id": "oa-1", "model": "gpt-4o"},
+        {"id": "ollama-extract", "name": "Ministral", "provider_id": "ollama-home", "model": "ministral-3-32k:3b"},
+    ])
+    user = _make_user(primary_llm="gpt")
+
+    with mock.patch.object(main, "_docker_client", mock.MagicMock()) as dc:
+        dc.containers.get.side_effect = Exception("not found")
+        dc.containers.run.return_value = mock.MagicMock(short_id="abc123")
+        main._start_agent_container(user, cfg)
+
+    env = dc.containers.run.call_args[1]["environment"]
+    assert env["OPENAI_API_KEY"] == "sk-openai"
+    assert env["OPENAI_MODEL"] == "gpt-4o"
+    assert "ANTHROPIC_API_KEY" not in env
+
+
+def test_start_container_gemini_provider():
+    """Gemini-Provider setzt GEMINI_API_KEY und GEMINI_MODEL."""
+    main = _import_main()
+    cfg = _make_cfg(providers=[
+        {"id": "gem-1", "name": "Gemini", "type": "gemini", "key": "AIza-test", "url": ""},
+        {"id": "ollama-home", "name": "Ollama", "type": "ollama", "url": "http://ollama:11434", "key": ""},
+    ], llms=[
+        {"id": "gem-llm", "name": "Gemini Flash", "provider_id": "gem-1", "model": "gemini-2.0-flash"},
+        {"id": "ollama-extract", "name": "Ministral", "provider_id": "ollama-home", "model": "ministral-3-32k:3b"},
+    ])
+    user = _make_user(primary_llm="gem-llm")
+
+    with mock.patch.object(main, "_docker_client", mock.MagicMock()) as dc:
+        dc.containers.get.side_effect = Exception("not found")
+        dc.containers.run.return_value = mock.MagicMock(short_id="abc123")
+        main._start_agent_container(user, cfg)
+
+    env = dc.containers.run.call_args[1]["environment"]
+    assert env["GEMINI_API_KEY"] == "AIza-test"
+    assert env["GEMINI_MODEL"] == "gemini-2.0-flash"
+    assert "ANTHROPIC_API_KEY" not in env
+
+
+def test_start_container_oauth_provider():
+    """OAuth-Provider mounted provider-spezifisches oauth_dir."""
+    main = _import_main()
+    cfg = _make_cfg(providers=[
+        {"id": "anth-oauth", "name": "Pro", "type": "anthropic",
+         "auth_method": "oauth", "oauth_dir": "/data/claude-auth/anth-oauth", "key": "", "url": ""},
+        {"id": "ollama-home", "name": "Ollama", "type": "ollama", "url": "http://ollama:11434", "key": ""},
+    ], llms=[
+        {"id": "claude-oauth", "name": "Claude OAuth", "provider_id": "anth-oauth", "model": "claude-sonnet-4-6"},
+        {"id": "ollama-extract", "name": "Ministral", "provider_id": "ollama-home", "model": "ministral-3-32k:3b"},
+    ])
+    user = _make_user(primary_llm="claude-oauth")
+
+    with mock.patch.object(main, "_docker_client", mock.MagicMock()) as dc:
+        dc.containers.get.side_effect = Exception("not found")
+        dc.containers.run.return_value = mock.MagicMock(short_id="abc123")
+        main._start_agent_container(user, cfg)
+
+    volumes = dc.containers.run.call_args[1]["volumes"]
+    assert "/data/claude-auth/anth-oauth" in volumes
+    assert volumes["/data/claude-auth/anth-oauth"]["bind"] == "/home/haana/.claude"

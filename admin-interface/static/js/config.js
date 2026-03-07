@@ -6,45 +6,51 @@ async function loadConfig() {
     const r = await fetch('/api/config');
     cfg = await r.json();
     renderConfig(cfg);
-  } catch(e) { toast(t('config.load_failed') + ': ' + e.message, 'err'); }
+  } catch(e) { console.error('loadConfig error:', e); toast(t('config.load_failed') + ': ' + e.message, 'err'); }
+}
+
+function _setVal(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.value = val;
 }
 
 function renderConfig(c) {
-  renderProviders(c);
-  renderLlms(c);
+  try { renderProviders(c); } catch(e) { console.error('renderProviders error:', e); }
+  try { renderLlms(c); } catch(e) { console.error('renderLlms error:', e); }
 
   // Memory
   const m = c.memory || {};
-  document.getElementById('mem-window-size').value    = m.window_size    ?? 20;
-  document.getElementById('mem-window-minutes').value = m.window_minutes ?? 60;
-  document.getElementById('mem-min-messages').value   = m.min_messages   ?? 5;
+  _setVal('mem-window-size',    m.window_size    ?? 20);
+  _setVal('mem-window-minutes', m.window_minutes ?? 60);
+  _setVal('mem-min-messages',   m.min_messages   ?? 5);
 
   // Memory Extraction LLM Dropdowns
   const memExtEl = document.getElementById('mem-extraction-llm');
   const memExtFbEl = document.getElementById('mem-extraction-llm-fallback');
   if (memExtEl) {
     memExtEl.innerHTML = _llmSelectOpts(m.extraction_llm || '');
-    memExtFbEl.innerHTML = '<option value="">' + t('common.no') + '</option>' + _llmSelectOpts(m.extraction_llm_fallback || '');
+  }
+  if (memExtFbEl) {
+    memExtFbEl.innerHTML = '<option value="">--</option>' + _llmSelectOpts(m.extraction_llm_fallback || '');
   }
 
   // Embedding
   const em = c.embedding || {};
-  _renderEmbeddingProviderDropdowns(c, em);
-  document.getElementById('embed-model').value = em.model || 'bge-m3';
-  document.getElementById('embed-dims').value  = em.dims  ?? 1024;
+  try { _renderEmbeddingProviderDropdowns(c, em); } catch(e) { console.error('renderEmbedding error:', e); }
+  _setVal('embed-model', em.model || 'bge-m3');
+  _setVal('embed-dims',  em.dims  ?? 1024);
 
   // Log Retention
   const lr = c.log_retention || {};
-  document.getElementById('ret-llm-calls').value    = lr['llm-calls']   ?? 30;
-  document.getElementById('ret-tool-calls').value   = lr['tool-calls']  ?? 30;
-  document.getElementById('ret-memory-ops').value   = lr['memory-ops']  ?? 30;
+  _setVal('ret-llm-calls',  lr['llm-calls']   ?? 30);
+  _setVal('ret-tool-calls', lr['tool-calls']  ?? 30);
+  _setVal('ret-memory-ops', lr['memory-ops']  ?? 30);
 
   // Services
   const sv = c.services || {};
-  document.getElementById('svc-ha-url').value    = sv.ha_url    || '';
-  document.getElementById('svc-ha-token').value  = sv.ha_token  || '';
-  document.getElementById('svc-ollama-url').value = sv.ollama_url || '';
-  document.getElementById('svc-qdrant-url').value = sv.qdrant_url || '';
+  _setVal('svc-ha-url',    sv.ha_url    || '');
+  _setVal('svc-ha-token',  sv.ha_token  || '');
+  _setVal('svc-qdrant-url', sv.qdrant_url || '');
 
   // MCP
   const mcpEnabled = !!sv.ha_mcp_enabled;
@@ -93,7 +99,7 @@ function renderConfig(c) {
   if (waPfxGrp) waPfxGrp.style.display = (wa.mode === 'self') ? '' : 'none';
 }
 
-// ── Provider Rendering ──────────────────────────────────────────────────────
+// ── Provider Rendering ────────────────────────────────────────────────────────
 function renderProviders(c) {
   const providers = c.providers || [];
   document.getElementById('provider-list').innerHTML = providers.map((p, i) => `
@@ -105,43 +111,214 @@ function renderProviders(c) {
           <span id="prov-${i}-label">${escHtml(p.name||p.id)}</span>
           <span style="font-size:11px;color:var(--muted);margin-left:6px;">(${escHtml(p.id)})</span>
         </span>
-        <span style="font-size:11px;color:var(--muted);" id="prov-${i}-summary">${escHtml(p.type)}</span>
-        <button class="btn btn-danger" style="font-size:11px;padding:2px 8px;" onclick="event.stopPropagation();removeProvider(${i})">\u2715</button>
+        <span class="provider-type-badge provider-type-${escAttr(p.type)}">${escHtml(p.type)}${p.auth_method === 'oauth' ? ' · OAuth' : ''}</span>
+        <button class="btn btn-danger" style="font-size:11px;padding:2px 8px;" onclick="event.stopPropagation();removeProvider(${i})">✕</button>
       </div>
       <div id="prov-${i}-body" style="display:none;padding:12px 14px;border-top:1px solid var(--border);">
-        <div class="form-row">
-          <div class="form-group">
-            <label>${t('config_provider.name')}</label>
-            <input type="text" id="prov-${i}-name" value="${escAttr(p.name||'')}"
-              oninput="document.getElementById('prov-${i}-label').textContent=this.value||'${escAttr(p.id)}'">
-          </div>
-          <div class="form-group">
-            <label>${t('config_provider.type')}</label>
-            <select id="prov-${i}-type" onchange="document.getElementById('prov-${i}-summary').textContent=this.value">
-              ${['anthropic','minimax','ollama','openai','custom'].map(tp => `<option value="${tp}" ${p.type===tp?'selected':''}>${tp}</option>`).join('')}
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>${t('config_provider.url')} <span style="font-size:11px;color:var(--muted);">(${t('config_provider.url_hint')})</span></label>
-            <input type="url" id="prov-${i}-url" value="${escAttr(p.url||'')}">
-          </div>
-          <div class="form-group">
-            <label>${t('config_provider.api_key')}</label>
-            <input type="password" id="prov-${i}-key" value="${escAttr(p.key||'')}">
-          </div>
-        </div>
-        <div style="display:flex;gap:10px;align-items:center;">
-          <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;"
-            onclick="testProviderConn(${i})">${t('config_provider.test_connection')}</button>
-          <span id="prov-${i}-test" style="font-size:12px;color:var(--muted);"></span>
-        </div>
+        ${_renderProvBody(p, i)}
       </div>
     </div>
   `).join('') + `
     <div style="margin-top:12px;">
-      <button class="btn btn-secondary" onclick="addProvider()">+ ${t('config_provider.add_provider')}</button>
+      <button class="btn btn-secondary" onclick="showAddProviderModal()">+ ${t('config_provider.add_provider')}</button>
+    </div>`;
+
+  // Auto-check OAuth status for OAuth providers
+  setTimeout(() => {
+    (cfg?.providers || []).forEach((p, i) => {
+      if (p.type === 'anthropic' && p.auth_method === 'oauth') checkProviderOAuth(i);
+    });
+  }, 100);
+}
+
+function _renderProvBody(p, i) {
+  switch (p.type) {
+    case 'anthropic': return _renderProvBodyAnthropic(p, i);
+    case 'ollama':    return _renderProvBodyOllama(p, i);
+    case 'minimax':   return _renderProvBodyMinimax(p, i);
+    case 'openai':    return _renderProvBodyOpenai(p, i);
+    case 'gemini':    return _renderProvBodyGemini(p, i);
+    default:          return _renderProvBodyCustom(p, i);
+  }
+}
+
+function _renderProvBodyAnthropic(p, i) {
+  if (p.auth_method === 'oauth') {
+    return `
+      <div class="form-group" style="margin-bottom:10px;">
+        <label>${t('config_provider.name')}</label>
+        <input type="text" id="prov-${i}-name" value="${escAttr(p.name||'')}"
+          oninput="document.getElementById('prov-${i}-label').textContent=this.value||'${escAttr(p.id)}'">
+      </div>
+      <div class="form-group" style="margin-bottom:10px;">
+        <label>${t('config_provider.url')} <span style="font-size:11px;color:var(--muted);">(${t('config_provider.url_hint')})</span></label>
+        <input type="url" id="prov-${i}-url" value="${escAttr(p.url||'')}">
+      </div>
+      <div id="prov-${i}-oauth-section" style="margin-bottom:10px;padding:12px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border);">
+        <strong>${t('config_provider.oauth_status')}</strong>
+        <div class="form-inline" style="margin-top:6px;">
+          <span id="prov-${i}-oauth-status" class="form-hint">${t('config_services.auth_checking')}</span>
+          <button class="btn btn-sm btn-secondary" onclick="checkProviderOAuth(${i})">${t('config_services.auth_check')}</button>
+        </div>
+        <div style="margin-top:10px;">
+          <button class="btn btn-sm btn-primary" onclick="startProviderOAuthLogin(${i})">${t('config_services.oauth_start_btn')}</button>
+          <span id="prov-${i}-oauth-login-status" class="form-hint" style="margin-left:12px;"></span>
+        </div>
+        <div id="prov-${i}-oauth-login-url" style="margin-top:8px;"></div>
+        <div id="prov-${i}-oauth-code-section" style="display:none;margin-top:12px;">
+          <label>${t('config_services.oauth_code_label')}</label>
+          <div class="form-inline" style="gap:8px;">
+            <input type="text" id="prov-${i}-oauth-code-input" style="flex:1;font-family:monospace;"
+              placeholder="${t('config_services.oauth_code_placeholder')}">
+            <button class="btn btn-sm btn-primary" onclick="completeProviderOAuthLogin(${i})">${t('config_services.oauth_submit_btn')}</button>
+          </div>
+          <span id="prov-${i}-oauth-code-result" class="form-hint" style="margin-top:6px;display:block;"></span>
+        </div>
+        <details style="margin-top:12px;">
+          <summary class="form-hint" style="cursor:pointer;">${t('config_services.oauth_manual_title')}</summary>
+          <div style="margin-top:8px;">
+            <textarea id="prov-${i}-oauth-creds" rows="3" style="width:100%;font-family:monospace;font-size:12px;"
+              placeholder='{"claudeAiOauth":{"accessToken":"...","refreshToken":"...","expiresAt":...}}'></textarea>
+            <button class="btn btn-sm btn-secondary" style="margin-top:6px;"
+              onclick="uploadProviderCredentials(${i})">${t('config_services.auth_upload_btn')}</button>
+            <span id="prov-${i}-oauth-upload-result" class="form-hint" style="margin-left:12px;"></span>
+          </div>
+        </details>
+      </div>`;
+  }
+  // API Key auth
+  return `
+    <div class="form-row">
+      <div class="form-group">
+        <label>${t('config_provider.name')}</label>
+        <input type="text" id="prov-${i}-name" value="${escAttr(p.name||'')}"
+          oninput="document.getElementById('prov-${i}-label').textContent=this.value||'${escAttr(p.id)}'">
+      </div>
+      <div class="form-group">
+        <label>${t('config_provider.api_key')}</label>
+        <input type="password" id="prov-${i}-key" value="${escAttr(p.key||'')}">
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:10px;">
+      <label>${t('config_provider.url')} <span style="font-size:11px;color:var(--muted);">(${t('config_provider.url_hint')})</span></label>
+      <input type="url" id="prov-${i}-url" value="${escAttr(p.url||'')}">
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;"
+        onclick="testProviderConn(${i})">${t('config_provider.test_connection')}</button>
+      <span id="prov-${i}-test" style="font-size:12px;color:var(--muted);"></span>
+    </div>`;
+}
+
+function _renderProvBodyOllama(p, i) {
+  return `
+    <div class="form-row">
+      <div class="form-group">
+        <label>${t('config_provider.name')}</label>
+        <input type="text" id="prov-${i}-name" value="${escAttr(p.name||'')}"
+          oninput="document.getElementById('prov-${i}-label').textContent=this.value||'${escAttr(p.id)}'">
+      </div>
+      <div class="form-group">
+        <label>${t('config_provider.server_url')} <span style="color:var(--red);">*</span></label>
+        <input type="url" id="prov-${i}-url" value="${escAttr(p.url||'')}" required placeholder="http://10.83.1.110:11434">
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;"
+        onclick="testProviderConn(${i})">${t('config_provider.test_connection')}</button>
+      <span id="prov-${i}-test" style="font-size:12px;color:var(--muted);"></span>
+    </div>`;
+}
+
+function _renderProvBodyMinimax(p, i) {
+  return `
+    <div class="form-row">
+      <div class="form-group">
+        <label>${t('config_provider.name')}</label>
+        <input type="text" id="prov-${i}-name" value="${escAttr(p.name||'')}"
+          oninput="document.getElementById('prov-${i}-label').textContent=this.value||'${escAttr(p.id)}'">
+      </div>
+      <div class="form-group">
+        <label>${t('config_provider.api_key')}</label>
+        <input type="password" id="prov-${i}-key" value="${escAttr(p.key||'')}">
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:10px;">
+      <label>${t('config_provider.url')}</label>
+      <input type="url" id="prov-${i}-url" value="${escAttr(p.url||'https://api.minimax.io/anthropic')}">
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;"
+        onclick="testProviderConn(${i})">${t('config_provider.test_connection')}</button>
+      <span id="prov-${i}-test" style="font-size:12px;color:var(--muted);"></span>
+    </div>`;
+}
+
+function _renderProvBodyOpenai(p, i) {
+  return `
+    <div class="form-row">
+      <div class="form-group">
+        <label>${t('config_provider.name')}</label>
+        <input type="text" id="prov-${i}-name" value="${escAttr(p.name||'')}"
+          oninput="document.getElementById('prov-${i}-label').textContent=this.value||'${escAttr(p.id)}'">
+      </div>
+      <div class="form-group">
+        <label>${t('config_provider.api_key')}</label>
+        <input type="password" id="prov-${i}-key" value="${escAttr(p.key||'')}">
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:10px;">
+      <label>${t('config_provider.url')} <span style="font-size:11px;color:var(--muted);">(${t('config_provider.url_hint_openai')})</span></label>
+      <input type="url" id="prov-${i}-url" value="${escAttr(p.url||'')}">
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;"
+        onclick="testProviderConn(${i})">${t('config_provider.test_connection')}</button>
+      <span id="prov-${i}-test" style="font-size:12px;color:var(--muted);"></span>
+    </div>`;
+}
+
+function _renderProvBodyGemini(p, i) {
+  return `
+    <div class="form-row">
+      <div class="form-group">
+        <label>${t('config_provider.name')}</label>
+        <input type="text" id="prov-${i}-name" value="${escAttr(p.name||'')}"
+          oninput="document.getElementById('prov-${i}-label').textContent=this.value||'${escAttr(p.id)}'">
+      </div>
+      <div class="form-group">
+        <label>${t('config_provider.api_key')}</label>
+        <input type="password" id="prov-${i}-key" value="${escAttr(p.key||'')}">
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;"
+        onclick="testProviderConn(${i})">${t('config_provider.test_connection')}</button>
+      <span id="prov-${i}-test" style="font-size:12px;color:var(--muted);"></span>
+    </div>`;
+}
+
+function _renderProvBodyCustom(p, i) {
+  return `
+    <div class="form-row">
+      <div class="form-group">
+        <label>${t('config_provider.name')}</label>
+        <input type="text" id="prov-${i}-name" value="${escAttr(p.name||'')}"
+          oninput="document.getElementById('prov-${i}-label').textContent=this.value||'${escAttr(p.id)}'">
+      </div>
+      <div class="form-group">
+        <label>${t('config_provider.api_key')}</label>
+        <input type="password" id="prov-${i}-key" value="${escAttr(p.key||'')}">
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:10px;">
+      <label>${t('config_provider.url')}</label>
+      <input type="url" id="prov-${i}-url" value="${escAttr(p.url||'')}">
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;"
+        onclick="testProviderConn(${i})">${t('config_provider.test_connection')}</button>
+      <span id="prov-${i}-test" style="font-size:12px;color:var(--muted);"></span>
     </div>`;
 }
 
@@ -154,15 +331,84 @@ function toggleProviderCard(i) {
   if (chevron) chevron.style.transform = open ? '' : 'rotate(90deg)';
 }
 
-function addProvider() {
+function showAddProviderModal() {
+  if (!cfg) return;
+  const types = [
+    { type: 'anthropic', name: 'Anthropic', desc: t('config_provider.type_anthropic_desc') },
+    { type: 'ollama',    name: 'Ollama',    desc: t('config_provider.type_ollama_desc') },
+    { type: 'minimax',   name: 'MiniMax',   desc: t('config_provider.type_minimax_desc') },
+    { type: 'openai',    name: 'OpenAI',    desc: t('config_provider.type_openai_desc') },
+    { type: 'gemini',    name: 'Gemini',    desc: t('config_provider.type_gemini_desc') },
+    { type: 'custom',    name: 'Custom',    desc: t('config_provider.type_custom_desc') },
+  ];
+  const grid = types.map(tp => `
+    <div class="provider-type-card" onclick="onProviderTypeSelected('${tp.type}')">
+      <div class="provider-type-card-name">${tp.name}</div>
+      <div class="provider-type-card-desc">${tp.desc}</div>
+    </div>`).join('');
+
+  Modal.show({
+    title: t('config_provider.select_type'),
+    body: `<div class="provider-type-grid">${grid}</div>
+      <div id="provider-auth-step" style="display:none;margin-top:16px;">
+        <strong>${t('config_provider.auth_method')}</strong>
+        <div class="provider-type-grid" style="margin-top:10px;">
+          <div class="provider-type-card" onclick="addProviderWithType('anthropic', 'api_key')">
+            <div class="provider-type-card-name">${t('config_provider.auth_method_apikey')}</div>
+            <div class="provider-type-card-desc">${t('config_provider.auth_method_apikey_desc')}</div>
+          </div>
+          <div class="provider-type-card" onclick="addProviderWithType('anthropic', 'oauth')">
+            <div class="provider-type-card-name">${t('config_provider.auth_method_oauth')}</div>
+            <div class="provider-type-card-desc">${t('config_provider.auth_method_oauth_desc')}</div>
+          </div>
+        </div>
+      </div>`,
+    hideConfirm: true,
+    cancelText: t('common.cancel'),
+  });
+}
+
+function onProviderTypeSelected(type) {
+  if (type === 'anthropic') {
+    // Show auth method step
+    document.querySelectorAll('.provider-type-card').forEach(c => c.style.opacity = '0.3');
+    document.getElementById('provider-auth-step').style.display = '';
+    return;
+  }
+  addProviderWithType(type);
+  Modal.close();
+}
+
+function addProviderWithType(type, authMethod) {
   if (!cfg) return;
   const existing = (cfg.providers || []).map(p => p.id);
-  let id = 'provider-1';
+  let id = `${type}-1`;
   let n = 1;
-  while (existing.includes(id)) { n++; id = `provider-${n}`; }
+  while (existing.includes(id)) { n++; id = `${type}-${n}`; }
+  const names = { anthropic: 'Anthropic', ollama: 'Ollama', minimax: 'MiniMax', openai: 'OpenAI', gemini: 'Gemini', custom: 'Custom' };
+  const p = { id, name: `${names[type] || type} ${n > 1 ? n : ''}`.trim(), type };
+  if (type === 'anthropic') {
+    p.auth_method = authMethod || 'api_key';
+    if (authMethod === 'oauth') p.oauth_dir = `/data/claude-auth/${id}`;
+    else p.key = '';
+    p.url = '';
+  } else if (type === 'ollama') {
+    p.url = '';
+  } else if (type === 'minimax') {
+    p.key = ''; p.url = 'https://api.minimax.io/anthropic';
+  } else if (type === 'openai') {
+    p.key = ''; p.url = '';
+  } else if (type === 'gemini') {
+    p.key = '';
+  } else {
+    p.url = ''; p.key = '';
+  }
   cfg.providers = cfg.providers || [];
-  cfg.providers.push({ id, name: `Provider ${n}`, type: 'custom', url: '', key: '' });
+  cfg.providers.push(p);
+  Modal.close();
   renderProviders(cfg);
+  // Auto-expand the new card
+  setTimeout(() => toggleProviderCard(cfg.providers.length - 1), 50);
 }
 
 async function removeProvider(i) {
@@ -346,7 +592,6 @@ function _renderEmbeddingProviderDropdowns(c, em) {
 
 // ── Restart Detection ───────────────────────────────────────────────────────
 const RESTART_FIELDS = {
-  'services.ollama_url':     'Ollama URL',
   'services.qdrant_url':     'Qdrant URL',
   'services.ha_url':         'Home Assistant URL',
   'services.ha_token':       'Home Assistant Token',
@@ -416,7 +661,6 @@ async function saveConfig() {
   const providers = (cfg.providers || []).map((p, i) => ({
     ...p,
     name: document.getElementById(`prov-${i}-name`)?.value ?? p.name,
-    type: document.getElementById(`prov-${i}-type`)?.value ?? p.type,
     url:  document.getElementById(`prov-${i}-url`)?.value  ?? p.url,
     key:  document.getElementById(`prov-${i}-key`)?.value  ?? p.key,
   }));
@@ -469,7 +713,6 @@ async function saveConfig() {
       tts_voice:       document.getElementById('svc-tts-voice')?.value || '',
       tts_also_text:   document.getElementById('svc-tts-also-text')?.checked ?? false,
       ha_auto_backup:  document.getElementById('svc-ha-auto-backup')?.checked ?? false,
-      ollama_url:      document.getElementById('svc-ollama-url').value,
       qdrant_url:      document.getElementById('svc-qdrant-url').value,
     },
     whatsapp: {
@@ -846,13 +1089,15 @@ async function testMcpConnection() {
 
 async function testProviderConn(i) {
   const el   = document.getElementById(`prov-${i}-test`);
-  const type = document.getElementById(`prov-${i}-type`)?.value || 'http';
+  const type = cfg?.providers?.[i]?.type || 'custom';
   const key  = document.getElementById(`prov-${i}-key`)?.value?.trim() || '';
   let   url  = document.getElementById(`prov-${i}-url`)?.value?.trim() || '';
 
   const defaults = {
     anthropic: 'https://api.anthropic.com',
     minimax:   'https://api.minimax.io',
+    openai:    'https://api.openai.com',
+    gemini:    'https://generativelanguage.googleapis.com',
     ollama:    '',
   };
   if (!url && defaults[type]) url = defaults[type];
@@ -861,7 +1106,7 @@ async function testProviderConn(i) {
 
   el.textContent = '\u2026'; el.style.color = 'var(--muted)';
 
-  if ((type === 'anthropic' || type === 'minimax') && key) {
+  if (['anthropic','minimax','openai','gemini'].includes(type) && key) {
     try {
       const r = await fetch('/api/fetch-models', {
         method: 'POST', headers: {'Content-Type':'application/json'},
@@ -977,4 +1222,105 @@ async function completeOAuthLogin() {
       checkClaudeAuth();
     }
   } catch(e) { resultEl.textContent = '\u2717 ' + e.message; resultEl.style.color = 'var(--red)'; }
+}
+
+
+// ── Provider-scoped OAuth ──────────────────────────────────────────────────────────
+
+async function checkProviderOAuth(i) {
+  const p = cfg?.providers?.[i];
+  if (!p) return;
+  const el = document.getElementById(`prov-${i}-oauth-status`);
+  if (!el) return;
+  el.textContent = t('config_services.auth_checking');
+  el.style.color = '';
+  try {
+    const r = await fetch(`/api/claude-auth/status/${encodeURIComponent(p.id)}`);
+    const d = await r.json();
+    if (d.ok) {
+      el.innerHTML = `<span style="color:var(--green)">✓ ${escHtml(d.detail)}</span>`;
+    } else {
+      el.innerHTML = `<span style="color:var(--red)">✗ ${escHtml(d.detail)}</span>`;
+    }
+  } catch(e) {
+    el.innerHTML = `<span style="color:var(--red)">✗ ${escHtml(e.message)}</span>`;
+  }
+}
+
+async function startProviderOAuthLogin(i) {
+  const p = cfg?.providers?.[i];
+  if (!p) return;
+  const statusEl = document.getElementById(`prov-${i}-oauth-login-status`);
+  const urlEl = document.getElementById(`prov-${i}-oauth-login-url`);
+  const codeSection = document.getElementById(`prov-${i}-oauth-code-section`);
+  if (!statusEl) return;
+
+  statusEl.innerHTML = `<span style="color:var(--muted)">${t('config_services.auth_checking')}</span>`;
+  urlEl.innerHTML = '';
+  codeSection.style.display = 'none';
+
+  try {
+    const r = await fetch(`/api/claude-auth/login/start/${encodeURIComponent(p.id)}`, { method: 'POST' });
+    const d = await r.json();
+    if (!d.ok) {
+      statusEl.innerHTML = `<span style="color:var(--red)">✗ ${escHtml(d.detail)}</span>`;
+      return;
+    }
+    statusEl.innerHTML = `<span style="color:var(--green)">${t('config_services.oauth_url_ready')}</span>`;
+    urlEl.innerHTML = `<a href="${escHtml(d.url)}" target="_blank" rel="noopener" style="word-break:break-all;color:var(--accent);">${t('config_services.oauth_open_link')}</a>`;
+    codeSection.style.display = 'block';
+    document.getElementById(`prov-${i}-oauth-code-input`).value = '';
+    document.getElementById(`prov-${i}-oauth-code-result`).textContent = '';
+  } catch(e) {
+    statusEl.innerHTML = `<span style="color:var(--red)">✗ ${e.message}</span>`;
+  }
+}
+
+async function completeProviderOAuthLogin(i) {
+  const p = cfg?.providers?.[i];
+  if (!p) return;
+  const codeInput = document.getElementById(`prov-${i}-oauth-code-input`);
+  const resultEl = document.getElementById(`prov-${i}-oauth-code-result`);
+  if (!codeInput || !resultEl) return;
+
+  const code = codeInput.value.trim();
+  if (!code) { resultEl.textContent = t('config_services.oauth_code_missing'); resultEl.style.color = 'var(--red)'; return; }
+
+  resultEl.innerHTML = `<span style="color:var(--muted)">${t('config_services.auth_checking')}</span>`;
+  try {
+    const r = await fetch(`/api/claude-auth/login/complete/${encodeURIComponent(p.id)}`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ code }),
+    });
+    const d = await r.json();
+    resultEl.textContent = d.ok ? `✓ ${d.detail}` : `✗ ${d.detail}`;
+    resultEl.style.color = d.ok ? 'var(--green)' : 'var(--red)';
+    if (d.ok) {
+      codeInput.value = '';
+      document.getElementById(`prov-${i}-oauth-code-section`).style.display = 'none';
+      checkProviderOAuth(i);
+    }
+  } catch(e) { resultEl.textContent = '✗ ' + e.message; resultEl.style.color = 'var(--red)'; }
+}
+
+async function uploadProviderCredentials(i) {
+  const p = cfg?.providers?.[i];
+  if (!p) return;
+  const textarea = document.getElementById(`prov-${i}-oauth-creds`);
+  const result = document.getElementById(`prov-${i}-oauth-upload-result`);
+  if (!textarea || !result) return;
+  const raw = textarea.value.trim();
+  if (!raw) { result.textContent = t('config_services.auth_paste_prompt'); result.style.color = 'var(--red)'; return; }
+  let creds;
+  try { creds = JSON.parse(raw); } catch(e) { result.textContent = t('config_services.auth_invalid_json'); result.style.color = 'var(--red)'; return; }
+  try {
+    const r = await fetch(`/api/claude-auth/upload/${encodeURIComponent(p.id)}`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ credentials: creds }),
+    });
+    const d = await r.json();
+    result.textContent = d.ok ? `✓ ${d.detail}` : `✗ ${d.detail || d.error}`;
+    result.style.color = d.ok ? 'var(--green)' : 'var(--red)';
+    if (d.ok) { textarea.value = ''; checkProviderOAuth(i); }
+  } catch(e) { result.textContent = '✗ ' + e.message; result.style.color = 'var(--red)'; }
 }

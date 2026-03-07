@@ -154,7 +154,7 @@ TEMPLATES_DIR   = INST_DIR / "templates"
 
 DEFAULT_CONFIG = {
     "providers": [
-        {"id": "anthropic-1", "name": "Anthropic (Primär)", "type": "anthropic", "url": "", "key": ""},
+        {"id": "anthropic-1", "name": "Anthropic (Primär)", "type": "anthropic", "auth_method": "api_key", "url": "", "key": ""},
         {"id": "ollama-home",  "name": "Ollama (Lokal)",     "type": "ollama",
          "url": os.environ.get("OLLAMA_URL", "http://10.83.1.110:11434"), "key": ""},
     ],
@@ -190,7 +190,6 @@ DEFAULT_CONFIG = {
         "ha_mcp_url":    "",   # leer = auto-detect je nach Typ
         "ha_mcp_token":  "",   # leer = ha_token verwenden
         "ha_auto_backup": False,  # HA-Backup vor Agent-Änderungen
-        "ollama_url":    os.environ.get("OLLAMA_URL", "http://10.83.1.110:11434"),
         "qdrant_url":    os.environ.get("QDRANT_URL", "http://qdrant:6333"),
     },
     "users": [
@@ -362,6 +361,39 @@ def _migrate_config(cfg: dict) -> bool:
     return True
 
 
+def _migrate_providers_v2(cfg: dict) -> bool:
+    """Migriert Provider v2: auth_method für Anthropic, ollama_url entfernen.
+
+    Returns True wenn Migration durchgeführt wurde.
+    """
+    changed = False
+
+    # Anthropic-Provider: auth_method hinzufügen
+    for p in cfg.get("providers", []):
+        if p.get("type") == "anthropic" and "auth_method" not in p:
+            p["auth_method"] = "oauth" if not p.get("key") else "api_key"
+            changed = True
+
+    # services.ollama_url entfernen, Wert in Ollama-Providern sicherstellen
+    services = cfg.get("services", {})
+    old_ollama_url = services.pop("ollama_url", None)
+    if old_ollama_url is not None:
+        changed = True
+        # Sicherstellen dass mindestens ein Ollama-Provider die URL hat
+        for p in cfg.get("providers", []):
+            if p.get("type") == "ollama" and not p.get("url"):
+                p["url"] = old_ollama_url
+
+    # OAuth credentials migration: bestehende /claude-auth/.credentials.json
+    # in den passenden Provider-Ordner verschieben
+    for p in cfg.get("providers", []):
+        if p.get("type") == "anthropic" and p.get("auth_method") == "oauth" and "oauth_dir" not in p:
+            p["oauth_dir"] = f"/data/claude-auth/{p['id']}"
+            changed = True
+
+    return changed
+
+
 def _resolve_llm(llm_id: str, cfg: dict) -> tuple[dict, dict]:
     """Löst eine LLM-ID zu (llm_dict, provider_dict) auf. Gibt ({}, {}) zurück wenn nicht gefunden."""
     llm = next((l for l in cfg.get("llms", []) if l["id"] == llm_id), {})
@@ -369,6 +401,29 @@ def _resolve_llm(llm_id: str, cfg: dict) -> tuple[dict, dict]:
         return {}, {}
     provider = next((p for p in cfg.get("providers", []) if p["id"] == llm.get("provider_id")), {})
     return llm, provider
+
+
+def _find_ollama_url(cfg: dict) -> str:
+    """Findet die Ollama-URL aus Providern: Embedding → Extraction → erster Ollama."""
+    emb = cfg.get("embedding", {})
+    emb_prov = next((p for p in cfg.get("providers", []) if p["id"] == emb.get("provider_id")), {})
+    if emb_prov.get("type") == "ollama" and emb_prov.get("url"):
+        return emb_prov["url"]
+
+    # Extraction-Provider
+    mem = cfg.get("memory", {})
+    e_llm_id = mem.get("extraction_llm", "")
+    if e_llm_id:
+        e_llm, e_prov = _resolve_llm(e_llm_id, cfg)
+        if e_prov.get("type") == "ollama" and e_prov.get("url"):
+            return e_prov["url"]
+
+    # Erster Ollama-Provider
+    for p in cfg.get("providers", []):
+        if p.get("type") == "ollama" and p.get("url"):
+            return p["url"]
+
+    return ""
 
 
 def _find_references(entity_type: str, entity_id: str, cfg: dict) -> list[str]:
@@ -418,6 +473,8 @@ def load_config() -> dict:
             cfg.get("use_cases", {}).pop("embeddings", None)
             # Migration von alter Struktur
             if _migrate_config(cfg):
+                save_config(cfg)
+            if _migrate_providers_v2(cfg):
                 save_config(cfg)
             _ensure_system_users(cfg)
             return cfg
@@ -583,7 +640,7 @@ async def get_status():
     import httpx
     cfg = load_config()
     qdrant_url = cfg.get("services", {}).get("qdrant_url", "http://qdrant:6333")
-    ollama_url = cfg.get("services", {}).get("ollama_url", "")
+    ollama_url = _find_ollama_url(cfg)
 
     status: dict = {"qdrant": "unknown", "ollama": "unknown", "logs": {}}
 
@@ -1389,6 +1446,18 @@ async def fetch_models(request: Request):
                     pass
                 return {"models": _ANTHROPIC_KNOWN, "fallback": True}
 
+            elif type_ == "openai":
+                target = url or "https://api.openai.com"
+                headers = {"Authorization": f"Bearer {key}"}
+                r = await client.get(f"{target}/v1/models", headers=headers)
+                if r.status_code == 200:
+                    models = sorted([m["id"] for m in r.json().get("data", [])])
+                    return {"models": models}
+                return {"models": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o1", "o1-mini", "o3-mini"], "fallback": True}
+
+            elif type_ == "gemini":
+                return {"models": ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-2.5-pro", "gemini-2.5-flash"], "fallback": True}
+
             else:
                 return {"models": [], "manual": True}
     except Exception as e:
@@ -1477,16 +1546,9 @@ def _start_agent_container(user: dict, cfg: dict) -> dict:
     p_llm, p_prov = _resolve_llm(primary_llm_id, cfg)
     e_llm, e_prov = _resolve_llm(extract_llm_id, cfg)
 
-    # Ollama-URL: aus Embedding-Provider oder Services-Fallback
+    # Ollama-URL aus Providern ableiten (nicht mehr aus services.ollama_url)
+    ollama_url = _find_ollama_url(cfg)
     emb = cfg.get("embedding", {})
-    emb_prov = next((p for p in cfg.get("providers", []) if p["id"] == emb.get("provider_id")), {})
-    ollama_url = cfg.get("services", {}).get("ollama_url", "")
-    # Wenn Embedding-Provider ein Ollama ist, dessen URL bevorzugen
-    if emb_prov.get("type") == "ollama" and emb_prov.get("url"):
-        ollama_url = emb_prov["url"]
-    # Wenn Extraktions-Provider ein Ollama ist, dessen URL als Fallback
-    if not ollama_url and e_prov.get("type") == "ollama" and e_prov.get("url"):
-        ollama_url = e_prov["url"]
 
     env = {
         "HAANA_INSTANCE":         uid,
@@ -1531,6 +1593,16 @@ def _start_agent_container(user: dict, cfg: dict) -> dict:
         env["ANTHROPIC_MODEL"]     = p_llm.get("model", "MiniMax-M2.5")
         env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
         # ANTHROPIC_API_KEY darf bei MiniMax NICHT gesetzt sein
+    elif p_prov.get("type") == "openai":
+        if p_prov.get("key"):
+            env["OPENAI_API_KEY"] = p_prov["key"]
+        if p_prov.get("url"):
+            env["OPENAI_BASE_URL"] = p_prov["url"]
+        env["OPENAI_MODEL"] = p_llm.get("model", "gpt-4o")
+    elif p_prov.get("type") == "gemini":
+        if p_prov.get("key"):
+            env["GEMINI_API_KEY"] = p_prov["key"]
+        env["GEMINI_MODEL"] = p_llm.get("model", "gemini-2.0-flash")
     else:
         if p_prov.get("key"):
             env["ANTHROPIC_API_KEY"] = p_prov["key"]
@@ -1551,9 +1623,13 @@ def _start_agent_container(user: dict, cfg: dict) -> dict:
         DATA_VOLUME:        {"bind": "/data",                  "mode": "rw"},
     }
 
-    # Claude OAuth-Credentials nur für nicht-MiniMax Provider mounten
-    if not is_minimax:
-        volumes[host_claude_config]  = {"bind": "/home/haana/.claude",    "mode": "rw"}
+    # Claude OAuth-Credentials mounten
+    is_oauth = p_prov.get("type") == "anthropic" and p_prov.get("auth_method") == "oauth"
+    if is_oauth and p_prov.get("oauth_dir"):
+        # Provider-spezifisches OAuth-Dir mounten
+        volumes[p_prov["oauth_dir"]] = {"bind": "/home/haana/.claude", "mode": "rw"}
+    elif not is_minimax and p_prov.get("type") not in ("openai", "gemini"):
+        volumes[host_claude_config] = {"bind": "/home/haana/.claude", "mode": "rw"}
         claude_json_host = Path("/root/.claude.json")
         try:
             has_claude_json = claude_json_host.is_file()
@@ -2086,6 +2162,106 @@ async def claude_auth_login_complete(request: Request):
     if not code:
         return {"ok": False, "detail": "Authorization code missing"}
     return await asyncio.to_thread(_complete_oauth_login_sync, code)
+
+
+# ── Provider-scoped OAuth Endpoints ──────────────────────────────────────────
+
+@app.get("/api/claude-auth/status/{provider_id}")
+async def claude_auth_status_provider(provider_id: str):
+    """Prüft ob gültige Claude OAuth-Credentials für einen Provider vorliegen."""
+    cfg = load_config()
+    prov = next((p for p in cfg.get("providers", []) if p["id"] == provider_id), None)
+    if not prov:
+        raise HTTPException(404, "Provider nicht gefunden")
+    oauth_dir = Path(prov.get("oauth_dir", f"/data/claude-auth/{provider_id}"))
+    creds_file = oauth_dir / ".credentials.json"
+    if not creds_file.exists():
+        return {"ok": False, "status": "no_credentials", "detail": "Keine Credentials gefunden"}
+    try:
+        creds = json.loads(creds_file.read_text(encoding="utf-8"))
+        oauth = creds.get("claudeAiOauth", {})
+        if not oauth.get("accessToken"):
+            return {"ok": False, "status": "no_token", "detail": "Kein Access-Token"}
+        expires_at = oauth.get("expiresAt", 0) / 1000
+        now = time.time()
+        if now > expires_at:
+            hours_ago = (now - expires_at) / 3600
+            return {"ok": False, "status": "expired", "detail": f"Token abgelaufen (vor {hours_ago:.1f}h)"}
+        hours_left = (expires_at - now) / 3600
+        return {"ok": True, "status": "valid", "detail": f"Token gültig (noch {hours_left:.1f}h)",
+                "expires_in_hours": round(hours_left, 1)}
+    except Exception as e:
+        return {"ok": False, "status": "error", "detail": str(e)[:200]}
+
+
+@app.post("/api/claude-auth/login/start/{provider_id}")
+async def claude_auth_login_start_provider(provider_id: str):
+    """Start OAuth login for a specific provider."""
+    return await asyncio.to_thread(_start_oauth_login_sync)
+
+
+@app.post("/api/claude-auth/login/complete/{provider_id}")
+async def claude_auth_login_complete_provider(provider_id: str, request: Request):
+    """Complete OAuth login for a specific provider: send the authorization code."""
+    body = await request.json()
+    code = body.get("code", "").strip()
+    if not code:
+        return {"ok": False, "detail": "Authorization code missing"}
+
+    result = await asyncio.to_thread(_complete_oauth_login_sync, code)
+
+    # If successful, copy credentials to provider-specific directory
+    if result.get("ok"):
+        cfg = load_config()
+        prov = next((p for p in cfg.get("providers", []) if p["id"] == provider_id), None)
+        if prov:
+            oauth_dir = Path(prov.get("oauth_dir", f"/data/claude-auth/{provider_id}"))
+            oauth_dir.mkdir(parents=True, exist_ok=True)
+            # Copy from global auth dir to provider-specific dir
+            global_creds = CLAUDE_AUTH_DIR / ".credentials.json"
+            if global_creds.exists():
+                import shutil
+                dest = oauth_dir / ".credentials.json"
+                shutil.copy2(str(global_creds), str(dest))
+                os.chmod(dest, 0o600)
+                import subprocess
+                subprocess.run(["chown", "1000:1000", str(dest)], check=False)
+
+    return result
+
+
+@app.post("/api/claude-auth/upload/{provider_id}")
+async def claude_auth_upload_provider(provider_id: str, request: Request):
+    """Upload credentials for a specific provider."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Ungültiges JSON")
+
+    creds = body.get("credentials")
+    if not creds or not isinstance(creds, dict):
+        raise HTTPException(400, "Feld 'credentials' fehlt oder ungültig")
+
+    oauth = creds.get("claudeAiOauth", {})
+    if not oauth.get("accessToken") or not oauth.get("refreshToken"):
+        raise HTTPException(400, "Credentials müssen claudeAiOauth mit accessToken und refreshToken enthalten")
+
+    cfg = load_config()
+    prov = next((p for p in cfg.get("providers", []) if p["id"] == provider_id), None)
+    if not prov:
+        raise HTTPException(404, "Provider nicht gefunden")
+
+    oauth_dir = Path(prov.get("oauth_dir", f"/data/claude-auth/{provider_id}"))
+    try:
+        oauth_dir.mkdir(parents=True, exist_ok=True)
+        creds_file = oauth_dir / ".credentials.json"
+        creds_file.write_text(json.dumps(creds, indent=2), encoding="utf-8")
+        os.chmod(creds_file, 0o600)
+        import subprocess
+        subprocess.run(["chown", "1000:1000", str(creds_file)], check=False)
+        return {"ok": True, "detail": "Credentials gespeichert. Container müssen neu gestartet werden."}
+    except Exception as e:
+        return {"ok": False, "detail": str(e)[:200]}
 
 
 # ── SSE: Echtzeit-Konversationen ──────────────────────────────────────────────
