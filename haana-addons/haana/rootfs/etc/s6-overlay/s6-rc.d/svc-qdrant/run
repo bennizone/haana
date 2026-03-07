@@ -1,0 +1,11 @@
+#!/command/with-contenv bashio
+# Qdrant Vector Database
+
+bashio::log.info "Starting Qdrant..."
+
+mkdir -p /data/qdrant
+
+exec /usr/local/bin/qdrant \
+    --storage-path /data/qdrant \
+    --config-path "" \
+    2>&1

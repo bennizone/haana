@@ -1,0 +1,12 @@
+#!/command/with-contenv bashio
+# HAANA WhatsApp Bridge
+
+HAANA_URL="$(bashio::config 'haana_url')"
+
+bashio::log.info "Starting WhatsApp Bridge..."
+bashio::log.info "HAANA URL: ${HAANA_URL}"
+
+export HAANA_ADMIN_URL="${HAANA_URL}"
+
+cd /app/whatsapp-bridge
+exec node index.js
