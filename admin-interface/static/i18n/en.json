@@ -339,6 +339,8 @@
     "ha_not_configured": "HA not configured",
     "ha_load_error": "Error loading",
     "user_saved": "User {uid} saved",
+    "agent_restarted": "Agent restarted",
+    "agent_restart_failed": "Agent restart failed",
     "user_deleted": "User deleted",
     "delete_error": "Error deleting",
     "user_created": "User created",

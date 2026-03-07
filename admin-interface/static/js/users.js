@@ -190,7 +190,14 @@ async function saveUserEdit(uid) {
     });
     const d = await r.json();
     if (r.ok && d.ok) {
-      toast(t('users.user_saved', {uid: uid}) + ' \u2713', 'ok');
+      if (d.restarted) {
+        const restartOk = d.container && d.container.ok;
+        toast(t('users.user_saved', {uid: uid}) + ' \u2713 — ' +
+          (restartOk ? t('users.agent_restarted') : t('users.agent_restart_failed')),
+          restartOk ? 'ok' : 'warn');
+      } else {
+        toast(t('users.user_saved', {uid: uid}) + ' \u2713', 'ok');
+      }
       loadUsers();
     } else {
       const err = d.detail || d.error || t('chat.unknown_error');
