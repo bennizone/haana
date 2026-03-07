@@ -1995,22 +1995,31 @@ async def claude_auth_login_complete_provider(provider_id: str, request: Request
 
     result = await asyncio.to_thread(_complete_oauth_login_sync, code)
 
-    # If successful, copy credentials to provider-specific directory
-    if result.get("ok"):
-        cfg = load_config()
-        prov = next((p for p in cfg.get("providers", []) if p["id"] == provider_id), None)
-        if prov:
-            oauth_dir = Path(prov.get("oauth_dir", f"/data/claude-auth/{provider_id}"))
-            oauth_dir.mkdir(parents=True, exist_ok=True)
-            # Copy from global auth dir to provider-specific dir
-            global_creds = CLAUDE_AUTH_DIR / ".credentials.json"
-            if global_creds.exists():
+    # Copy credentials to provider-specific directory (auch bei Fehler versuchen,
+    # da der erste complete-Aufruf funktioniert haben könnte)
+    cfg = load_config()
+    prov = next((p for p in cfg.get("providers", []) if p["id"] == provider_id), None)
+    if prov:
+        oauth_dir = Path(prov.get("oauth_dir", f"/data/claude-auth/{provider_id}"))
+        global_creds = CLAUDE_AUTH_DIR / ".credentials.json"
+        if global_creds.exists():
+            try:
                 import shutil
+                oauth_dir.mkdir(parents=True, exist_ok=True)
                 dest = oauth_dir / ".credentials.json"
                 shutil.copy2(str(global_creds), str(dest))
                 os.chmod(dest, 0o600)
                 import subprocess
                 subprocess.run(["chown", "1000:1000", str(dest)], check=False)
+                logger.info(f"OAuth credentials kopiert: {global_creds} → {dest}")
+                # Wenn Kopie geklappt hat aber Login fehlschlug (Doppelklick),
+                # trotzdem als Erfolg melden wenn Credentials gültig sind
+                if not result.get("ok"):
+                    creds = json.loads(dest.read_text(encoding="utf-8"))
+                    if creds.get("claudeAiOauth", {}).get("accessToken"):
+                        result = {"ok": True, "detail": "Login successful. Credentials saved."}
+            except Exception as e:
+                logger.error(f"OAuth credential copy failed: {e}")
 
     return result
 

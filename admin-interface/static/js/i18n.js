@@ -23,6 +23,7 @@ const I18n = (() => {
       _readyCallbacks.forEach(fn => fn());
       _readyCallbacks.length = 0;
       translateDOM();
+      return true;
     } catch (e) {
       console.error(`[i18n] Failed to load ${_lang}.json:`, e);
       // Fallback to German if non-default language fails
@@ -30,6 +31,7 @@ const I18n = (() => {
         _lang = 'de';
         return load('de');
       }
+      return false;
     }
   }
 

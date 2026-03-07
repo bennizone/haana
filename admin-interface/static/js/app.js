@@ -44,10 +44,17 @@ function selectInstance(inst) {
 
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  loadConversations(currentInstance);
-  startSSE(currentInstance);
-  checkAgentHealth(currentInstance);
-  loadStatus();
-  loadClaudeMd(currentMdInst);
-  refreshWaStatus();
+  // i18n laden, dann UI initialisieren
+  I18n.load().then(() => {
+    // Sprach-Selektor auf aktuelle Sprache setzen
+    const sel = document.getElementById('lang-selector');
+    if (sel) sel.value = I18n.getLang();
+
+    loadConversations(currentInstance);
+    startSSE(currentInstance);
+    checkAgentHealth(currentInstance);
+    loadStatus();
+    loadClaudeMd(currentMdInst);
+    refreshWaStatus();
+  });
 });

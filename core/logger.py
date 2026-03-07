@@ -53,9 +53,11 @@ def log_conversation(
     memory_used: bool = False,
     memory_hits: int = 0,
     tool_calls: Optional[list[dict]] = None,
+    model: Optional[str] = None,
+    memory_results: Optional[list[str]] = None,
 ) -> None:
     """Loggt eine vollständige Konversationsrunde."""
-    _write("conversations", instance, {
+    record = {
         "instance": instance,
         "channel": channel,
         "user": user_message,
@@ -64,7 +66,12 @@ def log_conversation(
         "memory_used": memory_used,
         "memory_hits": memory_hits,
         "tool_calls": tool_calls or [],
-    })
+    }
+    if model:
+        record["model"] = model
+    if memory_results:
+        record["memory_results"] = memory_results
+    _write("conversations", instance, record)
 
 
 def log_memory_op(

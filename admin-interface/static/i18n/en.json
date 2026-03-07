@@ -36,7 +36,11 @@
     "agent_online": "Agent online",
     "agent_offline": "Agent offline",
     "agent_unreachable": "Agent unreachable",
-    "latency": "Latency"
+    "latency": "Latency",
+    "model": "Model",
+    "memories_used": "Memories used",
+    "tools_used": "Tools used",
+    "no_memories": "none"
   },
   "logs": {
     "memory": "Memory",

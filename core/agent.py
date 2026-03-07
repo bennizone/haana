@@ -41,9 +41,29 @@ logger = logging.getLogger(__name__)
 class HaanaAgent:
     def __init__(self, instance_name: str):
         self.instance = instance_name
-        # None → CLI-Default-Modell (abhängig von Subscription/Konfiguration)
+        # Modellname für Logging; CLI-Model wird nur gesetzt wenn kein
+        # Drittanbieter-Provider aktiv ist (OPENAI_MODEL/ANTHROPIC_MODEL in env)
         self.model: Optional[str] = os.environ.get("HAANA_MODEL") or None
+        # Drittanbieter: model=None → CLI nutzt OPENAI_MODEL / ANTHROPIC_MODEL aus env
+        self._cli_model: Optional[str] = self.model
+        if os.environ.get("OPENAI_MODEL") or os.environ.get("ANTHROPIC_MODEL"):
+            self._cli_model = None
         self.session_id: Optional[str] = None
+
+        # OAuth: Credentials aus Data-Volume symlinken
+        oauth_dir = os.environ.get("HAANA_OAUTH_DIR")
+        if oauth_dir:
+            src = Path(oauth_dir) / ".credentials.json"
+            dst = Path.home() / ".claude" / ".credentials.json"
+            if src.exists():
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    if dst.exists() or dst.is_symlink():
+                        dst.unlink()
+                    dst.symlink_to(src)
+                    logger.info(f"[{instance_name}] OAuth credentials verlinkt: {src}")
+                except Exception as e:
+                    logger.warning(f"[{instance_name}] OAuth symlink fehlgeschlagen: {e}")
 
         # Arbeitsverzeichnis = Verzeichnis mit CLAUDE.md der Instanz.
         # Claude Code CLI lädt CLAUDE.md automatisch als Projektkontext.
@@ -124,7 +144,7 @@ class HaanaAgent:
         subprocess_env = dict(os.environ)
         return ClaudeAgentOptions(
             cwd=self.cwd,
-            model=self.model,
+            model=self._cli_model,
             max_turns=20,
             allowed_tools=self._allowed_tools,
             permission_mode="bypassPermissions",
@@ -271,6 +291,10 @@ class HaanaAgent:
                         logger.error(
                             f"[{self.instance}] ResultMessage Fehler: {message.result}"
                         )
+                    # Fallback: manche Provider liefern Text in ResultMessage statt TextBlock
+                    if message.result and not response_parts:
+                        logger.info(f"[{self.instance}] Text aus ResultMessage übernommen")
+                        response_parts.append(str(message.result))
 
         except CLINotFoundError:
             self._client = None
@@ -293,9 +317,18 @@ class HaanaAgent:
 
         response_text = "".join(response_parts).strip()
 
+        if not response_text:
+            logger.warning(
+                f"[{self.instance}] Leere Antwort vom Modell "
+                f"(model={self.model}, {elapsed:.1f}s)"
+            )
+
         # Memory: Konversation async im Hintergrund speichern (non-blocking)
         if response_text:
             await self.memory.add_conversation_async(user_message, response_text)
+
+        # Memory-Ergebnisse als Liste (für Log-Anzeige im UI)
+        memory_lines = memory_context.splitlines() if memory_context else []
 
         # Strukturiertes Log schreiben
         haana_log.log_conversation(
@@ -307,6 +340,8 @@ class HaanaAgent:
             memory_used=bool(memory_context),
             memory_hits=self.memory._last_search_hits,
             tool_calls=tool_calls_log,
+            model=self.model,
+            memory_results=memory_lines,
         )
 
         return response_text or "[Keine Antwort]"

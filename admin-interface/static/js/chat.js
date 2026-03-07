@@ -18,6 +18,55 @@ function channelBadge(ch) {
   return `<span class="channel-badge ch-${ch}">${map[ch] || ch}</span>`;
 }
 
+function _renderModelBadge(r) {
+  return r.model ? `<span class="model-badge">${escHtml(r.model)}</span>` : '';
+}
+
+function _renderMemorySection(r) {
+  const memList = r.memory_results || [];
+  if (!memList.length) return `<span style="color:var(--muted)">${t('chat.no_memories')}</span>`;
+  return memList.map(m => `<div class="memory-line">${escHtml(m)}</div>`).join('');
+}
+
+function _renderToolsSection(r) {
+  const tools = r.tool_calls || [];
+  if (!tools.length) return `<span style="color:var(--muted)">${t('chat.no_tools')}</span>`;
+  return tools.map(tc => {
+    const inp = tc.input ? ` <span style="color:var(--muted);font-weight:400;">→ ${escHtml(String(tc.input).substring(0,80))}${String(tc.input).length>80?'…':''}</span>` : '';
+    return `<span class="tool-chip">${escHtml(tc.tool)}${inp}</span>`;
+  }).join('');
+}
+
+function _renderDetailSections(r) {
+  const memCount = (r.memory_results || []).length;
+  const toolCount = (r.tool_calls || []).length;
+  return `
+    <div class="detail-grid">
+      <div class="detail-box">
+        <div class="detail-label">${t('chat.user_full')}</div>
+        <div class="detail-value">${escHtml(r.user || '')}</div>
+      </div>
+      <div class="detail-box">
+        <div class="detail-label">${t('chat.haana_response')}</div>
+        <div class="detail-value">${escHtml(r.assistant || '')}</div>
+      </div>
+    </div>
+    <div class="detail-meta-row">
+      ${r.model ? `<span class="detail-chip"><strong>${t('chat.model')}:</strong> ${escHtml(r.model)}</span>` : ''}
+      <span class="detail-chip"><strong>${t('chat.latency')}:</strong> ${r.latency_s ?? '–'}s</span>
+    </div>
+    ${memCount > 0 ? `
+    <details class="detail-collapsible">
+      <summary>${t('chat.memories_used')} (${memCount})</summary>
+      <div class="detail-collapsible-body">${_renderMemorySection(r)}</div>
+    </details>` : ''}
+    ${toolCount > 0 ? `
+    <details class="detail-collapsible">
+      <summary>${t('chat.tools_used')} (${toolCount})</summary>
+      <div class="detail-collapsible-body">${_renderToolsSection(r)}</div>
+    </details>` : ''}`;
+}
+
 function renderConversations(records) {
   const list = document.getElementById('conv-list');
   if (!records.length) {
@@ -28,10 +77,6 @@ function renderConversations(records) {
     const ts   = r.ts ? new Date(r.ts).toLocaleString('de-DE', {hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '–';
     const user = escHtml(r.user || '').substring(0, 120);
     const asst = escHtml(r.assistant || '').substring(0, 200);
-    const tools = (r.tool_calls || []).map(t => {
-      const inp = t.input ? ` <span style="color:var(--muted);font-weight:400;">→ ${escHtml(String(t.input).substring(0,60))}${String(t.input).length>60?'…':''}</span>` : '';
-      return `<span class="tool-chip">${escHtml(t.tool)}${inp}</span>`;
-    }).join('');
     const memHits = r.memory_hits > 0 ? ` (${r.memory_hits})` : '';
     const memBadge = r.memory_used
       ? `<span class="mem-badge mem-yes">Memory${memHits}</span>`
@@ -43,6 +88,7 @@ function renderConversations(records) {
         <div class="conv-meta">
           <span class="conv-time">${ts}</span>
           ${channelBadge(r.channel || 'repl')}
+          ${_renderModelBadge(r)}
         </div>
         <div class="conv-messages">
           <div class="conv-user"><strong>${t('chat.you')}</strong> ${user}${r.user?.length > 120 ? '…' : ''}</div>
@@ -51,27 +97,7 @@ function renderConversations(records) {
         <div class="expand-icon">›</div>
       </div>
       <div class="conv-details">
-        <div class="detail-grid">
-          <div class="detail-box">
-            <div class="detail-label">${t('chat.user_full')}</div>
-            <div class="detail-value">${escHtml(r.user || '')}</div>
-          </div>
-          <div class="detail-box">
-            <div class="detail-label">${t('chat.haana_response')}</div>
-            <div class="detail-value">${escHtml(r.assistant || '')}</div>
-          </div>
-          <div class="detail-box">
-            <div class="detail-label">${t('chat.meta')}</div>
-            <div class="detail-value">
-              ${memBadge}<br>
-              <span class="latency">${r.latency_s ?? '–'}s</span>
-            </div>
-          </div>
-          <div class="detail-box">
-            <div class="detail-label">${t('chat.tool_calls')}</div>
-            <div class="detail-value">${tools || '<span style="color:var(--muted)">' + t('chat.no_tools') + '</span>'}</div>
-          </div>
-        </div>
+        ${_renderDetailSections(r)}
       </div>
     </div>`;
   }).join('');
@@ -118,7 +144,6 @@ function renderSingleConv(r, cardId) {
   const ts    = r.ts ? new Date(r.ts).toLocaleString('de-DE', {hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '–';
   const user  = escHtml(r.user || '').substring(0, 120);
   const asst  = escHtml(r.assistant || '').substring(0, 200);
-  const tools = (r.tool_calls || []).map(t => `<span class="tool-chip">${escHtml(t.tool)}</span>`).join('');
   const memBadge = r.memory_used ? '<span class="mem-badge mem-yes">Memory</span>' : '';
   return `
   <div class="conv-card" id="${cardId}" style="border-color:var(--accent);">
@@ -126,6 +151,7 @@ function renderSingleConv(r, cardId) {
       <div class="conv-meta">
         <span class="conv-time">${ts}</span>
         ${channelBadge(r.channel || 'repl')}
+        ${_renderModelBadge(r)}
         ${memBadge}
       </div>
       <div class="conv-messages">
@@ -135,12 +161,7 @@ function renderSingleConv(r, cardId) {
       <div class="expand-icon">›</div>
     </div>
     <div class="conv-details">
-      <div class="detail-grid">
-        <div class="detail-box"><div class="detail-label">${t('conv.user_message')}</div><div class="detail-value">${escHtml(r.user||'')}</div></div>
-        <div class="detail-box"><div class="detail-label">${t('conv.assistant')}</div><div class="detail-value">${escHtml(r.assistant||'')}</div></div>
-        <div class="detail-box"><div class="detail-label">${t('chat.latency')}</div><div class="detail-value latency">${r.latency_s??'–'}s</div></div>
-        <div class="detail-box"><div class="detail-label">${t('conv.tools')}</div><div class="detail-value">${tools||'–'}</div></div>
-      </div>
+      ${_renderDetailSections(r)}
     </div>
   </div>`;
 }

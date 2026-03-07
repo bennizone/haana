@@ -108,6 +108,12 @@ def _build_agent_env(user: dict, cfg: dict, resolve_llm_fn, find_ollama_url_fn) 
         env["ANTHROPIC_AUTH_TOKEN"] = p_prov.get("key", "")
         env["ANTHROPIC_MODEL"] = p_llm.get("model", "MiniMax-M2.5")
         env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
+    elif p_prov.get("type") == "ollama":
+        # Ollama: OpenAI-kompatiblen Endpoint nutzen (/v1/)
+        ollama_base = (p_prov.get("url") or ollama_url or "http://localhost:11434").rstrip("/")
+        env["OPENAI_BASE_URL"] = f"{ollama_base}/v1"
+        env["OPENAI_API_KEY"] = "ollama"  # Dummy – Ollama braucht keinen Key, CLI verlangt einen
+        env["OPENAI_MODEL"] = p_llm.get("model", "ministral-3-32k:3b")
     elif p_prov.get("type") == "openai":
         if p_prov.get("key"):
             env["OPENAI_API_KEY"] = p_prov["key"]
@@ -141,11 +147,20 @@ class DockerAgentManager:
         self._resolve_llm = resolve_llm_fn
         self._find_ollama_url = find_ollama_url_fn
 
-    def _get_image(self) -> str:
-        """Agent-Image auto-detektieren (erstes HAANA-Image das läuft)."""
+    def _get_image(self, instance: str = "") -> str:
+        """Agent-Image auto-detektieren. Bevorzugt Image mit passendem Namen."""
         if not self._client:
             return self._agent_image
         try:
+            # Erst: exaktes Image für diese Instanz suchen
+            if instance:
+                for tag in [f"haana-instanz-{instance}:latest", f"haana-instanz-{instance}"]:
+                    try:
+                        self._client.images.get(tag)
+                        return tag
+                    except Exception:
+                        pass
+            # Fallback: Image von einem laufenden Instanz-Container
             containers = self._client.containers.list(all=True)
             for c in containers:
                 if "instanz-" in c.name or "haana-instanz" in c.name:
@@ -180,7 +195,7 @@ class DockerAgentManager:
         container_name = self._container_name(user)
 
         env = _build_agent_env(user, cfg, self._resolve_llm, self._find_ollama_url)
-        image = self._get_image()
+        image = self._get_image(uid)
         network = self._get_network()
 
         # Host-Pfade
@@ -200,7 +215,11 @@ class DockerAgentManager:
         is_oauth = p_prov.get("type") == "anthropic" and p_prov.get("auth_method") == "oauth"
 
         if is_oauth and p_prov.get("oauth_dir"):
-            volumes[p_prov["oauth_dir"]] = {"bind": "/home/haana/.claude", "mode": "rw"}
+            # oauth_dir ist ein Container-interner Pfad (z.B. /data/claude-auth/anthropic-1).
+            # Da haana-data bereits unter /data gemountet wird, setzen wir eine Env-Var
+            # damit der Agent beim Start die Credentials symlinkt.
+            oauth_data_path = p_prov["oauth_dir"]  # e.g. /data/claude-auth/anthropic-1
+            env["HAANA_OAUTH_DIR"] = oauth_data_path
         elif not is_minimax and p_prov.get("type") not in ("openai", "gemini"):
             volumes[host_claude_config] = {"bind": "/home/haana/.claude", "mode": "rw"}
             claude_json_host = Path("/root/.claude.json")

@@ -766,7 +766,7 @@ Schritt 7: Privacy
 - Config-Tabs umstrukturiert: Services → Home Assistant / WhatsApp / Infra (logische Gruppierung)
 - HA Auto-Backup: Konfigurierbar im Admin-Interface, Agent erstellt HA-Backup vor Automations-/Script-Änderungen
 - MCP-Typ-Auswahl: Admin kann zwischen Built-in (SSE, 6 Tools) und Extended (HTTP, 89 Tools) MCP wählen
-- Test-Suite: 81 Unit-Tests (test_config: 42, test_agent: 16, test_memory: 15, test_i18n: 8)
+- Test-Suite: 81 Unit-Tests (test_config: 42, test_agent: 16, test_memory: 15, test_i18n: 8) → jetzt 85
 - Integration-Test: Automatisierter End-to-End-Test, 16/16 PASS (User-CRUD, Chat, MiniMax, MCP, Memory, User-Setup-Verifizierung)
 - Multi-Agent Development: 4 spezialisierte Agenten (Webinterface, Review, Test, Docs) mit Briefing-Dokumenten
 
@@ -788,11 +788,23 @@ Schritt 7: Privacy
 - Backup-Strategie: HA-eigene Backup-Routine statt SMB/CIFS (SMB nach hinten verschoben als optional)
 - Test-Suite: 83 Unit-Tests (44 test_config, 16 test_agent, 15 test_memory, 8 test_i18n)
 
+**Weitere erledigte Aufgaben (Session 2026-03-07) ✅:**
+- Ollama als Primary LLM: `core/process_manager.py` neuer `ollama` Provider-Handler, OpenAI-kompatibler `/v1/` Endpoint
+- Leere Antworten Fix: `core/agent.py` nutzt `ResultMessage.result` als Fallback, Logging bei leerer Antwort
+- CLI-Model Fix: `_cli_model = None` bei Drittanbietern (Ollama, MiniMax, etc.), Env-Vars statt `--model` Flag
+- OAuth Credentials Fix: `HAANA_OAUTH_DIR` Env-Var + Symlink `~/.claude` im Container statt Host-Mount, Doppelklick-Szenario behoben
+- Image-Auswahl Fix: `_get_image(instance)` sucht instanz-spezifisches Docker-Image
+- Modell-Identität: Alle CLAUDE.md (4 Instanzen + 4 Templates) bereinigt, Agent behauptet nicht mehr bestimmtes Modell zu sein
+- Chat-UI Erweiterung: Model-Badge in Konversationsliste, aufklappbare Memories/Tools in Konversationsdetails
+- Conversation Log erweitert: `model` und `memory_results` Felder in `logger.py` + `agent.py`
+- i18n Fix: `I18n.load()` wird beim Seitenstart automatisch aufgerufen (fehlte vorher)
+- Test-Suite: 85 Unit-Tests (45 test_config inkl. test_build_env_ollama_primary_provider, 16 test_agent, 15 test_memory, 8 test_i18n + 1 test_build_env_ollama)
+
 **Noch offen:**
 - HA Add-on in Test-HA installieren und testen
 - Backup auf TrueNAS (SMB/CIFS) → optional, nachrangig
 
-**Ergebnis:** Alice chattet per WhatsApp (Text + Sprache, bidirektional). Agent kennt ihn bereits (Phase 1 Memory). STT + TTS via Nabu Casa. Admin-Interface unter `http://10.83.1.11:8080` zugänglich, responsiv, vollständig mehrsprachig (388 Keys). Claude OAuth pro Provider ohne SSH möglich. 6 Provider-Typen mit typspezifischen Formularen. HA Add-on Packaging vorbereitet (3 Add-ons, Dual-Mode Architektur).
+**Ergebnis:** Alice chattet per WhatsApp (Text + Sprache, bidirektional). Agent kennt ihn bereits (Phase 1 Memory). STT + TTS via Nabu Casa. Admin-Interface unter `http://10.83.1.11:8080` zugänglich, responsiv, vollständig mehrsprachig (388 Keys). Claude OAuth pro Provider ohne SSH möglich. 6 Provider-Typen mit typspezifischen Formularen. HA Add-on Packaging vorbereitet (3 Add-ons, Dual-Mode Architektur). Ollama als Primary LLM nutzbar (OpenAI-kompatibler `/v1/` Endpoint). Chat-UI mit Model-Badge und aufklappbaren Memory/Tool-Details. 85 Unit-Tests.
 
 ---
 

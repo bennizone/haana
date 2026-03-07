@@ -651,6 +651,22 @@ def test_build_env_gemini_provider():
     assert "ANTHROPIC_API_KEY" not in env
 
 
+def test_build_env_ollama_primary_provider():
+    """Ollama als Primary-LLM setzt OPENAI_BASE_URL mit /v1/ Endpoint."""
+    cfg = _make_cfg(providers=[
+        {"id": "ollama-home", "name": "Ollama", "type": "ollama", "url": "http://10.83.1.110:11434", "key": ""},
+    ], llms=[
+        {"id": "ministral", "name": "Ministral", "provider_id": "ollama-home", "model": "ministral-3-32k:3b"},
+    ])
+    user = _make_user(primary_llm="ministral", extraction_llm="ministral")
+    env = _build_env(user, cfg)
+    assert env["OPENAI_BASE_URL"] == "http://10.83.1.110:11434/v1"
+    assert env["OPENAI_API_KEY"] == "ollama"
+    assert env["OPENAI_MODEL"] == "ministral-3-32k:3b"
+    assert env["HAANA_MODEL"] == "ministral-3-32k:3b"
+    assert "ANTHROPIC_API_KEY" not in env
+
+
 def test_build_env_oauth_provider():
     """OAuth-Provider: Env-Vars werden korrekt gesetzt (keine API_KEY)."""
     cfg = _make_cfg(providers=[
