@@ -749,12 +749,12 @@ async function checkClaudeAuth() {
     const r = await fetch('/api/claude-auth/status');
     const d = await r.json();
     if (d.ok) {
-      el.innerHTML = `<span style="color:var(--green)">✓ ${d.detail}</span>`;
+      el.innerHTML = `<span style="color:var(--green)">✓ ${escHtml(d.detail)}</span>`;
     } else {
-      el.innerHTML = `<span style="color:var(--red)">✗ ${d.detail}</span>`;
+      el.innerHTML = `<span style="color:var(--red)">✗ ${escHtml(d.detail)}</span>`;
     }
   } catch(e) {
-    el.innerHTML = `<span style="color:var(--red)">✗ ${e.message}</span>`;
+    el.innerHTML = `<span style="color:var(--red)">✗ ${escHtml(e.message)}</span>`;
   }
 }
 
@@ -792,11 +792,11 @@ async function startOAuthLogin() {
     const r = await fetch('/api/claude-auth/login/start', { method: 'POST' });
     const d = await r.json();
     if (!d.ok) {
-      statusEl.innerHTML = `<span style="color:var(--red)">✗ ${d.detail}</span>`;
+      statusEl.innerHTML = `<span style="color:var(--red)">✗ ${escHtml(d.detail)}</span>`;
       return;
     }
     statusEl.innerHTML = `<span style="color:var(--green)">${t('config_services.oauth_url_ready')}</span>`;
-    urlEl.innerHTML = `<a href="${d.url}" target="_blank" rel="noopener" style="word-break:break-all;color:var(--accent);">${t('config_services.oauth_open_link')}</a>`;
+    urlEl.innerHTML = `<a href="${escHtml(d.url)}" target="_blank" rel="noopener" style="word-break:break-all;color:var(--accent);">${t('config_services.oauth_open_link')}</a>`;
     codeSection.style.display = 'block';
     document.getElementById('oauth-code-input').value = '';
     document.getElementById('oauth-code-result').textContent = '';

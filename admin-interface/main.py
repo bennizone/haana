@@ -1714,7 +1714,7 @@ async def claude_auth_upload(request: Request):
         CLAUDE_AUTH_DIR.mkdir(parents=True, exist_ok=True)
         creds_file.write_text(json.dumps(creds, indent=2), encoding="utf-8")
         # Permissions für Container-User
-        os.chmod(creds_file, 0o644)
+        os.chmod(creds_file, 0o600)
         import subprocess
         subprocess.run(["chown", "1000:1000", str(creds_file)], check=False)
         return {"ok": True, "detail": "Credentials gespeichert. Container müssen neu gestartet werden."}
@@ -1860,7 +1860,8 @@ def _complete_oauth_login_sync(code: str):
     # Send code to the local callback server
     try:
         conn = http.client.HTTPConnection(callback_host, port, timeout=10)
-        conn.request("GET", f"/callback?code={code}&state={state_val}")
+        from urllib.parse import quote
+        conn.request("GET", f"/callback?code={quote(code, safe='')}&state={quote(state_val, safe='')}")
         resp = conn.getresponse()
         resp.read()
         conn.close()
