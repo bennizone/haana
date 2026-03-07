@@ -2,11 +2,13 @@
 
 let editingUserId = null;
 
-function _llmOpts(selectedSlot) {
-  if (!cfg || !cfg.llm_providers) return `<option value="1">Slot 1</option>`;
-  return cfg.llm_providers.map(s =>
-    `<option value="${s.slot}" ${s.slot == selectedSlot ? 'selected' : ''}>Slot ${s.slot} – ${escHtml(s.name||'')}</option>`
-  ).join('');
+function _llmOpts(selectedId) {
+  if (!cfg || !cfg.llms) return `<option value="">--</option>`;
+  return cfg.llms.map(l => {
+    const prov = (cfg.providers || []).find(p => p.id === l.provider_id);
+    const label = `${l.name} (${prov ? prov.name : l.provider_id} · ${l.model || '\u2013'})`;
+    return `<option value="${escAttr(l.id)}" ${l.id === selectedId ? 'selected' : ''}>${escHtml(label)}</option>`;
+  }).join('');
 }
 
 function renderUserCard(u) {
@@ -15,8 +17,8 @@ function renderUserCard(u) {
   const roleColor = {'admin':'var(--accent2)','voice':'var(--yellow)','voice-advanced':'var(--blue)','user':'var(--green)'}[u.role]||'var(--muted)';
   const sysTag = u.system ? `<span style="font-size:10px;background:rgba(96,165,250,.15);color:var(--blue);border-radius:4px;padding:1px 6px;margin-left:6px;">System</span>` : '';
   const isVoice = ['voice','voice-advanced'].includes(u.role);
-  const waInfo = !isVoice && u.whatsapp_phone ? ` · WA: ${escHtml(u.whatsapp_phone)}` : '';
-  const haInfo = !isVoice && u.ha_user ? ` · HA: ${escHtml(u.ha_user)}` : '';
+  const waInfo = !isVoice && u.whatsapp_phone ? ` \u00b7 WA: ${escHtml(u.whatsapp_phone)}` : '';
+  const haInfo = !isVoice && u.ha_user ? ` \u00b7 HA: ${escHtml(u.ha_user)}` : '';
 
   return `
   <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;" id="user-card-${escAttr(u.id)}">
@@ -28,14 +30,14 @@ function renderUserCard(u) {
         <span style="color:var(--muted);font-size:12px;margin-left:6px;">(${escHtml(u.id)})</span>
         <span style="color:${roleColor};font-size:12px;margin-left:6px;">${escHtml(u.role)}</span>${sysTag}
         <div style="font-size:11px;color:var(--muted);margin-top:2px;">
-          Port :${u.api_port}${haInfo}${waInfo} · ${escHtml(u.container_status)}
+          Port :${u.api_port}${haInfo}${waInfo} \u00b7 ${escHtml(u.container_status)}
         </div>
       </div>
       <div style="display:flex;gap:5px;flex-shrink:0;" onclick="event.stopPropagation()">
         <button class="btn btn-secondary" style="font-size:11px;padding:3px 8px;" title="Neu starten" onclick="restartUserContainer('${escAttr(u.id)}')">↺</button>
         <button class="btn btn-secondary" style="font-size:11px;padding:3px 8px;" title="Stoppen" onclick="stopUserContainer('${escAttr(u.id)}')">Stop</button>
         <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" id="uedit-btn-${escAttr(u.id)}" onclick="toggleUserExpand('${escAttr(u.id)}')">\u270e ${t('users.edit')}</button>
-        ${!u.system ? `<button class="btn btn-danger" style="font-size:11px;padding:3px 8px;" onclick="deleteUser('${escAttr(u.id)}')">✕</button>` : ''}
+        ${!u.system ? `<button class="btn btn-danger" style="font-size:11px;padding:3px 8px;" onclick="deleteUser('${escAttr(u.id)}')">\u2715</button>` : ''}
       </div>
     </div>
     <!-- Expandable edit form -->
@@ -71,14 +73,24 @@ function renderUserCard(u) {
         </div>
       </div>
       ` : ''}
-      <div class="form-row">
+      <div class="form-row three">
         <div class="form-group">
           <label>${t('users.primary_llm')}</label>
-          <select id="uf-${escAttr(u.id)}-primary-llm">${_llmOpts(u.primary_llm_slot)}</select>
+          <select id="uf-${escAttr(u.id)}-primary-llm">${_llmOpts(u.primary_llm)}</select>
+        </div>
+        <div class="form-group">
+          <label>${t('users.fallback_llm')}</label>
+          <select id="uf-${escAttr(u.id)}-fallback-llm">
+            <option value="">--</option>
+            ${_llmOpts(u.fallback_llm)}
+          </select>
         </div>
         <div class="form-group">
           <label>${t('users.extraction_llm')}</label>
-          <select id="uf-${escAttr(u.id)}-extract-llm">${_llmOpts(u.extraction_llm_slot)}</select>
+          <select id="uf-${escAttr(u.id)}-extract-llm">
+            <option value="">${t('config_memory.extraction_llm_hint')}</option>
+            ${_llmOpts(u.extraction_llm)}
+          </select>
         </div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
@@ -120,7 +132,6 @@ async function loadUsers() {
       return;
     }
     list.innerHTML = users.map(u => renderUserCard(u)).join('');
-    // Auto-load HA users for expanded cards (none expanded on fresh load)
   } catch(e) {
     list.innerHTML = `<div class="empty-state"><div class="icon">!</div><div>${e.message}</div></div>`;
   }
@@ -162,16 +173,17 @@ async function saveUserEdit(uid) {
   const status = document.getElementById(`uf-${uid}-status`);
   const isVoice = ['voice','voice-advanced'].includes(document.getElementById(`uf-${uid}-role`)?.value || '');
   const body = {
-    display_name:        document.getElementById(`uf-${uid}-name`)?.value?.trim(),
-    role:                document.getElementById(`uf-${uid}-role`)?.value,
-    primary_llm_slot:    parseInt(document.getElementById(`uf-${uid}-primary-llm`)?.value || '1'),
-    extraction_llm_slot: parseInt(document.getElementById(`uf-${uid}-extract-llm`)?.value || '3'),
+    display_name:   document.getElementById(`uf-${uid}-name`)?.value?.trim(),
+    role:           document.getElementById(`uf-${uid}-role`)?.value,
+    primary_llm:    document.getElementById(`uf-${uid}-primary-llm`)?.value || '',
+    fallback_llm:   document.getElementById(`uf-${uid}-fallback-llm`)?.value || '',
+    extraction_llm: document.getElementById(`uf-${uid}-extract-llm`)?.value || '',
   };
   if (!isVoice) {
     body.ha_user        = document.getElementById(`uf-${uid}-ha`)?.value || '';
     body.whatsapp_phone = document.getElementById(`uf-${uid}-wa-phone`)?.value?.trim() || '';
   }
-  if (status) { status.textContent = '…'; status.style.color = 'var(--muted)'; }
+  if (status) { status.textContent = '\u2026'; status.style.color = 'var(--muted)'; }
   try {
     const r = await fetch(`/api/users/${uid}`, {
       method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body),
@@ -182,11 +194,11 @@ async function saveUserEdit(uid) {
       loadUsers();
     } else {
       const err = d.detail || d.error || t('chat.unknown_error');
-      if (status) { status.textContent = '✗ ' + err.substring(0,80); status.style.color = 'var(--red)'; }
+      if (status) { status.textContent = '\u2717 ' + err.substring(0,80); status.style.color = 'var(--red)'; }
       toast(err.substring(0,60), 'err');
     }
   } catch(e) {
-    if (status) { status.textContent = '✗ ' + e.message; status.style.color = 'var(--red)'; }
+    if (status) { status.textContent = '\u2717 ' + e.message; status.style.color = 'var(--red)'; }
   }
 }
 
@@ -195,7 +207,6 @@ async function toggleUserClaudeMd(uid) {
   const status = document.getElementById(`uf-${uid}-md-status`);
   if (!editor) return;
   if (editor.style.display !== 'none') { editor.style.display = 'none'; return; }
-  // Load current content
   try {
     const r = await fetch(`/api/claude-md/${uid}`);
     if (r.ok) {
@@ -243,7 +254,7 @@ async function saveUserClaudeMd(uid) {
       if (status) { status.textContent = '\u2717 ' + t('common.error'); status.style.color = 'var(--red)'; }
     }
   } catch(e) {
-    if (status) { status.textContent = '✗ ' + e.message; status.style.color = 'var(--red)'; }
+    if (status) { status.textContent = '\u2717 ' + e.message; status.style.color = 'var(--red)'; }
   }
 }
 
@@ -262,7 +273,7 @@ async function submitNewUser() {
     role:         document.getElementById('nuf-role').value,
     claude_md_template: document.getElementById('nuf-template').value,
   };
-  st.textContent = '…'; st.style.color = 'var(--muted)';
+  st.textContent = '\u2026'; st.style.color = 'var(--muted)';
   try {
     const r = await fetch('/api/users', {
       method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload),
@@ -279,7 +290,7 @@ async function submitNewUser() {
       const err = d.detail || d.error || t('common.error');
       st.textContent = '\u2717 ' + err.substring(0,80); st.style.color = 'var(--red)';
     }
-  } catch(e) { st.textContent = '✗ ' + e.message; st.style.color = 'var(--red)'; }
+  } catch(e) { st.textContent = '\u2717 ' + e.message; st.style.color = 'var(--red)'; }
 }
 
 async function deleteUser(userId) {

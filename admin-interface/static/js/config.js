@@ -1,4 +1,4 @@
-// config.js – Config laden/speichern, LLM-Slots, Memory-Rebuild, Restart-Detection, CLAUDE.md Editor
+// config.js – Config laden/speichern, Provider/LLM-Trennung, Memory-Rebuild, Restart-Detection, CLAUDE.md Editor
 
 // ── Config ─────────────────────────────────────────────────────────────────
 async function loadConfig() {
@@ -10,68 +10,8 @@ async function loadConfig() {
 }
 
 function renderConfig(c) {
-  // Provider Slots
-  const slots = c.llm_providers || [];
-  const slotNums = slots.map(s => s.slot);
-  document.getElementById('provider-slots').innerHTML = slots.map((s, i) => `
-    <div class="provider-slot" id="provslot-${i}" style="padding:0;overflow:hidden;">
-      <!-- Collapsible header -->
-      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;background:rgba(255,255,255,.02);"
-           onclick="toggleLlmSlot(${i})">
-        <span id="prov-${i}-chevron" style="font-size:11px;color:var(--muted);transition:transform .2s;">▶</span>
-        <span style="font-weight:600;color:var(--accent2);flex:1;">
-          Slot ${s.slot} – <span id="prov-${i}-label">${escHtml(s.name||'Slot '+s.slot)}</span>
-        </span>
-        <span style="font-size:11px;color:var(--muted);" id="prov-${i}-summary">${escHtml(s.type)} · ${escHtml(s.model||'–')}</span>
-        <button class="btn btn-danger" style="font-size:11px;padding:2px 8px;" onclick="event.stopPropagation();removeLlmSlot(${i})">✕</button>
-      </div>
-      <!-- Collapsible body -->
-      <div id="prov-${i}-body" style="display:none;padding:12px 14px;border-top:1px solid var(--border);">
-        <div class="form-row">
-          <div class="form-group">
-            <label>${t('config_llm.name')}</label>
-            <input type="text" id="prov-${i}-name" value="${escAttr(s.name||'')}"
-              oninput="document.getElementById('prov-${i}-label').textContent=this.value||'Slot ${s.slot}';document.getElementById('prov-${i}-summary').textContent=(document.getElementById('prov-${i}-type').value||'?')+' · '+(document.getElementById('prov-${i}-model').value||'–')">
-          </div>
-          <div class="form-group">
-            <label>${t('config_llm.type')}</label>
-            <select id="prov-${i}-type" onchange="document.getElementById('prov-${i}-summary').textContent=this.value+' · '+(document.getElementById('prov-${i}-model').value||'–')">
-              ${['anthropic','minimax','ollama','custom'].map(t => `<option value="${t}" ${s.type===t?'selected':''}>${t}</option>`).join('')}
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>${t('config_llm.url')} <span style="font-size:11px;color:var(--muted);">(${t('config_llm.url_hint')})</span></label>
-            <input type="url" id="prov-${i}-url" value="${escAttr(s.url||'')}">
-          </div>
-          <div class="form-group">
-            <label>${t('config_llm.api_key')}</label>
-            <input type="password" id="prov-${i}-key" value="${escAttr(s.key||'')}">
-          </div>
-        </div>
-        <div class="form-group" style="margin-bottom:10px;">
-          <label>${t('config_llm.model')}</label>
-          <div style="display:flex;gap:6px;">
-            <input type="text" id="prov-${i}-model" value="${escAttr(s.model||'')}" list="models-${i}" style="flex:1;"
-              oninput="document.getElementById('prov-${i}-summary').textContent=(document.getElementById('prov-${i}-type').value||'?')+' · '+(this.value||'–')">
-            <datalist id="models-${i}"></datalist>
-            <button class="btn btn-secondary" style="font-size:11px;padding:4px 10px;flex-shrink:0;"
-              onclick="fetchModels(${i})">${t('config_llm.fetch_models')}</button>
-            <span id="prov-${i}-models-status" style="font-size:11px;color:var(--muted);align-self:center;"></span>
-          </div>
-        </div>
-        <div style="display:flex;gap:10px;align-items:center;">
-          <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;"
-            onclick="testProviderConn(${i})">${t('config_llm.test_connection')}</button>
-          <span id="prov-${i}-test" style="font-size:12px;color:var(--muted);"></span>
-        </div>
-      </div>
-    </div>
-  `).join('') + `
-    <div style="margin-top:12px;">
-      <button class="btn btn-secondary" onclick="addLlmSlot()">+ ${t('config_llm.add_slot')}</button>
-    </div>`;
+  renderProviders(c);
+  renderLlms(c);
 
   // Memory
   const m = c.memory || {};
@@ -79,11 +19,19 @@ function renderConfig(c) {
   document.getElementById('mem-window-minutes').value = m.window_minutes ?? 60;
   document.getElementById('mem-min-messages').value   = m.min_messages   ?? 5;
 
+  // Memory Extraction LLM Dropdowns
+  const memExtEl = document.getElementById('mem-extraction-llm');
+  const memExtFbEl = document.getElementById('mem-extraction-llm-fallback');
+  if (memExtEl) {
+    memExtEl.innerHTML = _llmSelectOpts(m.extraction_llm || '');
+    memExtFbEl.innerHTML = '<option value="">' + t('common.no') + '</option>' + _llmSelectOpts(m.extraction_llm_fallback || '');
+  }
+
   // Embedding
   const em = c.embedding || {};
+  _renderEmbeddingProviderDropdowns(c, em);
   document.getElementById('embed-model').value = em.model || 'bge-m3';
   document.getElementById('embed-dims').value  = em.dims  ?? 1024;
-  document.getElementById('embed-provider').value = em.provider || 'ollama';
 
   // Log Retention
   const lr = c.log_retention || {};
@@ -114,7 +62,6 @@ function renderConfig(c) {
   const ttsEl = document.getElementById('svc-tts-entity');
   const langEl = document.getElementById('svc-stt-language');
   if (sv.stt_entity && sttEl) {
-    // Sicherstellen dass der gespeicherte Wert als Option existiert
     if (![...sttEl.options].some(o => o.value === sv.stt_entity)) {
       sttEl.add(new Option(sv.stt_entity, sv.stt_entity));
     }
@@ -131,11 +78,9 @@ function renderConfig(c) {
   if (voiceEl && sv.tts_voice) voiceEl.value = sv.tts_voice;
   const alsoTextEl = document.getElementById('svc-tts-also-text');
   if (alsoTextEl) alsoTextEl.checked = !!sv.tts_also_text;
-  // Auto-Backup
   const autoBackupEl = document.getElementById('svc-ha-auto-backup');
   if (autoBackupEl) autoBackupEl.checked = !!sv.ha_auto_backup;
 
-  // Entities automatisch laden wenn HA konfiguriert ist
   if (sv.ha_url && sv.ha_token) loadSttTtsEntities();
 
   // WhatsApp global
@@ -148,8 +93,258 @@ function renderConfig(c) {
   if (waPfxGrp) waPfxGrp.style.display = (wa.mode === 'self') ? '' : 'none';
 }
 
-// Felder, deren Änderung einen Container-Neustart erfordert
-// (werden als Env-Vars beim Container-Start gesetzt)
+// ── Provider Rendering ──────────────────────────────────────────────────────
+function renderProviders(c) {
+  const providers = c.providers || [];
+  document.getElementById('provider-list').innerHTML = providers.map((p, i) => `
+    <div class="provider-slot" id="prov-${i}" style="padding:0;overflow:hidden;">
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;background:rgba(255,255,255,.02);"
+           onclick="toggleProviderCard(${i})">
+        <span id="prov-${i}-chevron" style="font-size:11px;color:var(--muted);transition:transform .2s;">▶</span>
+        <span style="font-weight:600;color:var(--accent2);flex:1;">
+          <span id="prov-${i}-label">${escHtml(p.name||p.id)}</span>
+          <span style="font-size:11px;color:var(--muted);margin-left:6px;">(${escHtml(p.id)})</span>
+        </span>
+        <span style="font-size:11px;color:var(--muted);" id="prov-${i}-summary">${escHtml(p.type)}</span>
+        <button class="btn btn-danger" style="font-size:11px;padding:2px 8px;" onclick="event.stopPropagation();removeProvider(${i})">\u2715</button>
+      </div>
+      <div id="prov-${i}-body" style="display:none;padding:12px 14px;border-top:1px solid var(--border);">
+        <div class="form-row">
+          <div class="form-group">
+            <label>${t('config_provider.name')}</label>
+            <input type="text" id="prov-${i}-name" value="${escAttr(p.name||'')}"
+              oninput="document.getElementById('prov-${i}-label').textContent=this.value||'${escAttr(p.id)}'">
+          </div>
+          <div class="form-group">
+            <label>${t('config_provider.type')}</label>
+            <select id="prov-${i}-type" onchange="document.getElementById('prov-${i}-summary').textContent=this.value">
+              ${['anthropic','minimax','ollama','openai','custom'].map(tp => `<option value="${tp}" ${p.type===tp?'selected':''}>${tp}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>${t('config_provider.url')} <span style="font-size:11px;color:var(--muted);">(${t('config_provider.url_hint')})</span></label>
+            <input type="url" id="prov-${i}-url" value="${escAttr(p.url||'')}">
+          </div>
+          <div class="form-group">
+            <label>${t('config_provider.api_key')}</label>
+            <input type="password" id="prov-${i}-key" value="${escAttr(p.key||'')}">
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;"
+            onclick="testProviderConn(${i})">${t('config_provider.test_connection')}</button>
+          <span id="prov-${i}-test" style="font-size:12px;color:var(--muted);"></span>
+        </div>
+      </div>
+    </div>
+  `).join('') + `
+    <div style="margin-top:12px;">
+      <button class="btn btn-secondary" onclick="addProvider()">+ ${t('config_provider.add_provider')}</button>
+    </div>`;
+}
+
+function toggleProviderCard(i) {
+  const body    = document.getElementById(`prov-${i}-body`);
+  const chevron = document.getElementById(`prov-${i}-chevron`);
+  if (!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if (chevron) chevron.style.transform = open ? '' : 'rotate(90deg)';
+}
+
+function addProvider() {
+  if (!cfg) return;
+  const existing = (cfg.providers || []).map(p => p.id);
+  let id = 'provider-1';
+  let n = 1;
+  while (existing.includes(id)) { n++; id = `provider-${n}`; }
+  cfg.providers = cfg.providers || [];
+  cfg.providers.push({ id, name: `Provider ${n}`, type: 'custom', url: '', key: '' });
+  renderProviders(cfg);
+}
+
+async function removeProvider(i) {
+  if (!cfg || !cfg.providers) return;
+  if (cfg.providers.length <= 1) { toast(t('config_provider.min_one_provider'), 'err'); return; }
+  const prov = cfg.providers[i];
+  // Referenz-Check
+  try {
+    const r = await fetch(`/api/references/provider/${encodeURIComponent(prov.id)}`);
+    const d = await r.json();
+    if (d.count > 0) {
+      toast(t('config_provider.delete_blocked') + ': ' + d.refs.join(', '), 'err');
+      return;
+    }
+  } catch(e) { /* ignore, allow delete */ }
+  cfg.providers.splice(i, 1);
+  renderProviders(cfg);
+}
+
+// ── LLM Rendering ───────────────────────────────────────────────────────────
+function renderLlms(c) {
+  const llms = c.llms || [];
+  const providers = c.providers || [];
+  document.getElementById('llm-list').innerHTML = llms.map((l, i) => `
+    <div class="provider-slot" id="llm-${i}" style="padding:0;overflow:hidden;">
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;background:rgba(255,255,255,.02);"
+           onclick="toggleLlmCard(${i})">
+        <span id="llm-${i}-chevron" style="font-size:11px;color:var(--muted);transition:transform .2s;">▶</span>
+        <span style="font-weight:600;color:var(--accent2);flex:1;">
+          <span id="llm-${i}-label">${escHtml(l.name||l.id)}</span>
+          <span style="font-size:11px;color:var(--muted);margin-left:6px;">(${escHtml(l.id)})</span>
+        </span>
+        <span style="font-size:11px;color:var(--muted);" id="llm-${i}-summary">${escHtml(_providerLabel(l.provider_id, providers))} · ${escHtml(l.model||'\u2013')}</span>
+        <button class="btn btn-danger" style="font-size:11px;padding:2px 8px;" onclick="event.stopPropagation();removeLlm(${i})">\u2715</button>
+      </div>
+      <div id="llm-${i}-body" style="display:none;padding:12px 14px;border-top:1px solid var(--border);">
+        <div class="form-row">
+          <div class="form-group">
+            <label>${t('config_llm.name')}</label>
+            <input type="text" id="llm-${i}-name" value="${escAttr(l.name||'')}"
+              oninput="document.getElementById('llm-${i}-label').textContent=this.value||'${escAttr(l.id)}'">
+          </div>
+          <div class="form-group">
+            <label>${t('config_llm.provider')}</label>
+            <select id="llm-${i}-provider" onchange="onLlmProviderChange(${i})">
+              ${providers.map(p => `<option value="${escAttr(p.id)}" ${l.provider_id===p.id?'selected':''}>${escHtml(p.name)} (${escHtml(p.type)})</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:10px;">
+          <label>${t('config_llm.model')}</label>
+          <div style="display:flex;gap:6px;">
+            <input type="text" id="llm-${i}-model" value="${escAttr(l.model||'')}" list="llmmodels-${i}" style="flex:1;"
+              oninput="document.getElementById('llm-${i}-summary').textContent=_providerLabel(document.getElementById('llm-${i}-provider').value, cfg.providers||[])+' · '+(this.value||'\u2013')">
+            <datalist id="llmmodels-${i}"></datalist>
+            <button class="btn btn-secondary" style="font-size:11px;padding:4px 10px;flex-shrink:0;"
+              onclick="fetchModelsForLlm(${i})">${t('config_llm.fetch_models')}</button>
+            <span id="llm-${i}-models-status" style="font-size:11px;color:var(--muted);align-self:center;"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `).join('') + `
+    <div style="margin-top:12px;">
+      <button class="btn btn-secondary" onclick="addLlm()">+ ${t('config_llm.add_llm')}</button>
+    </div>`;
+}
+
+function _providerLabel(providerId, providers) {
+  const p = (providers || []).find(x => x.id === providerId);
+  return p ? p.name : providerId || '?';
+}
+
+function toggleLlmCard(i) {
+  const body    = document.getElementById(`llm-${i}-body`);
+  const chevron = document.getElementById(`llm-${i}-chevron`);
+  if (!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if (chevron) chevron.style.transform = open ? '' : 'rotate(90deg)';
+}
+
+function addLlm() {
+  if (!cfg) return;
+  const existing = (cfg.llms || []).map(l => l.id);
+  let id = 'llm-1';
+  let n = 1;
+  while (existing.includes(id)) { n++; id = `llm-${n}`; }
+  const defaultProvider = (cfg.providers || [])[0]?.id || '';
+  cfg.llms = cfg.llms || [];
+  cfg.llms.push({ id, name: `LLM ${n}`, provider_id: defaultProvider, model: '' });
+  renderLlms(cfg);
+}
+
+async function removeLlm(i) {
+  if (!cfg || !cfg.llms) return;
+  if (cfg.llms.length <= 1) { toast(t('config_llm.min_one_llm'), 'err'); return; }
+  const llm = cfg.llms[i];
+  // Referenz-Check
+  try {
+    const r = await fetch(`/api/references/llm/${encodeURIComponent(llm.id)}`);
+    const d = await r.json();
+    if (d.count > 0) {
+      Modal.show({
+        title: t('common.references_warning'),
+        body: `<p class="modal-message">${escHtml(d.refs.join(', '))}</p><p>${t('common.delete_confirm_refs')}</p>`,
+        confirmText: t('users.delete'),
+        danger: true,
+        onConfirm: () => { cfg.llms.splice(i, 1); renderLlms(cfg); },
+      });
+      return;
+    }
+  } catch(e) { /* ignore */ }
+  cfg.llms.splice(i, 1);
+  renderLlms(cfg);
+}
+
+function onLlmProviderChange(i) {
+  const newProv = document.getElementById(`llm-${i}-provider`)?.value || '';
+  const summary = document.getElementById(`llm-${i}-summary`);
+  const model   = document.getElementById(`llm-${i}-model`)?.value || '';
+  if (summary) summary.textContent = _providerLabel(newProv, cfg.providers || []) + ' \u00b7 ' + (model || '\u2013');
+}
+
+async function fetchModelsForLlm(i) {
+  if (!cfg) return;
+  const providerId = document.getElementById(`llm-${i}-provider`)?.value;
+  const prov = (cfg.providers || []).find(p => p.id === providerId);
+  if (!prov) return;
+  const st = document.getElementById(`llm-${i}-models-status`);
+  st.textContent = '\u2026';
+  try {
+    const r = await fetch('/api/fetch-models', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ type: prov.type, url: prov.url, key: prov.key }),
+    });
+    const d = await r.json();
+    if (d.manual || !d.models?.length) {
+      st.textContent = d.error ? '\u26a0 ' + d.error.substring(0,60) : '\u26a0 ' + t('config_llm.no_models_manual');
+      st.style.color = 'var(--yellow)';
+      return;
+    }
+    const datalist = document.getElementById(`llmmodels-${i}`);
+    datalist.innerHTML = d.models.map(m => `<option value="${escAttr(m)}">`).join('');
+    st.textContent = d.fallback ? '\u2713 ' + d.models.length + ' ' + t('config_llm.known_models') : '\u2713 ' + d.models.length + ' ' + t('config_llm.models_label');
+    st.style.color = d.fallback ? 'var(--yellow)' : 'var(--green)';
+  } catch(e) {
+    st.textContent = '\u2717 ' + e.message.substring(0,40);
+    st.style.color = 'var(--red)';
+  }
+}
+
+// ── LLM Select Options (für User-Dropdowns + Memory) ───────────────────────
+function _llmSelectOpts(selectedId) {
+  if (!cfg || !cfg.llms) return '<option value="">--</option>';
+  return cfg.llms.map(l => {
+    const prov = (cfg.providers || []).find(p => p.id === l.provider_id);
+    const label = `${l.name} (${prov ? prov.name : l.provider_id} · ${l.model || '\u2013'})`;
+    return `<option value="${escAttr(l.id)}" ${l.id === selectedId ? 'selected' : ''}>${escHtml(label)}</option>`;
+  }).join('');
+}
+
+// ── Embedding Provider Dropdowns ────────────────────────────────────────────
+function _renderEmbeddingProviderDropdowns(c, em) {
+  const providers = c.providers || [];
+  const embedEl = document.getElementById('embed-provider');
+  const fbEl    = document.getElementById('embed-fallback-provider');
+  if (!embedEl) return;
+
+  const opts = providers.map(p =>
+    `<option value="${escAttr(p.id)}" ${p.id === em.provider_id ? 'selected' : ''}>${escHtml(p.name)} (${escHtml(p.type)})</option>`
+  ).join('');
+  embedEl.innerHTML = opts;
+
+  if (fbEl) {
+    fbEl.innerHTML = '<option value="">--</option>' + providers.map(p =>
+      `<option value="${escAttr(p.id)}" ${p.id === em.fallback_provider_id ? 'selected' : ''}>${escHtml(p.name)} (${escHtml(p.type)})</option>`
+    ).join('');
+  }
+}
+
+// ── Restart Detection ───────────────────────────────────────────────────────
 const RESTART_FIELDS = {
   'services.ollama_url':     'Ollama URL',
   'services.qdrant_url':     'Qdrant URL',
@@ -161,11 +356,11 @@ const RESTART_FIELDS = {
   'services.ha_mcp_token':   'HA MCP Token',
   'memory.window_size':      'Window Size',
   'memory.window_minutes':   'Window Age',
+  'memory.extraction_llm':   'Extraction LLM',
   'embedding.model':         'Embedding Model',
   'embedding.dims':          'Embedding Dims',
+  'embedding.provider_id':   'Embedding Provider',
 };
-// LLM-Slot-Felder (model/url/key) erfordern ebenfalls Neustart
-const RESTART_LLM_FIELDS = ['model', 'url', 'key', 'type'];
 
 function _getNestedValue(obj, path) {
   return path.split('.').reduce((o, k) => o && o[k], obj);
@@ -174,7 +369,6 @@ function _getNestedValue(obj, path) {
 function _detectRestartChanges(oldCfg, newCfg) {
   const changes = [];
 
-  // Dienste-Felder prüfen
   for (const [path, label] of Object.entries(RESTART_FIELDS)) {
     const oldVal = _getNestedValue(oldCfg, path) ?? '';
     const newVal = _getNestedValue(newCfg, path) ?? '';
@@ -183,16 +377,30 @@ function _detectRestartChanges(oldCfg, newCfg) {
     }
   }
 
-  // LLM-Provider-Slots prüfen (Änderungen an model/url/key betreffen Container)
-  const oldSlots = oldCfg.llm_providers || [];
-  const newSlots = newCfg.llm_providers || [];
-  for (let i = 0; i < Math.max(oldSlots.length, newSlots.length); i++) {
-    const os = oldSlots[i] || {};
-    const ns = newSlots[i] || {};
-    for (const f of RESTART_LLM_FIELDS) {
-      if ((os[f] ?? '') !== (ns[f] ?? '')) {
-        changes.push(`LLM Slot ${ns.slot || os.slot || i+1}: ${f}`);
-        break; // nur einmal pro Slot melden
+  // Provider-Änderungen prüfen (key/url/type betreffen Container)
+  const oldProvs = oldCfg.providers || [];
+  const newProvs = newCfg.providers || [];
+  for (const np of newProvs) {
+    const op = oldProvs.find(p => p.id === np.id);
+    if (!op) { changes.push(`Provider: ${np.name} (neu)`); continue; }
+    for (const f of ['key', 'url', 'type']) {
+      if ((op[f] ?? '') !== (np[f] ?? '')) {
+        changes.push(`Provider ${np.name}: ${f}`);
+        break;
+      }
+    }
+  }
+
+  // LLM-Änderungen prüfen (model/provider_id betreffen Container)
+  const oldLlms = oldCfg.llms || [];
+  const newLlms = newCfg.llms || [];
+  for (const nl of newLlms) {
+    const ol = oldLlms.find(l => l.id === nl.id);
+    if (!ol) { changes.push(`LLM: ${nl.name} (neu)`); continue; }
+    for (const f of ['model', 'provider_id']) {
+      if ((ol[f] ?? '') !== (nl[f] ?? '')) {
+        changes.push(`LLM ${nl.name}: ${f}`);
+        break;
       }
     }
   }
@@ -200,26 +408,26 @@ function _detectRestartChanges(oldCfg, newCfg) {
   return changes;
 }
 
+// ── Save Config ─────────────────────────────────────────────────────────────
 async function saveConfig() {
   if (!cfg) return;
-  // Lese Slots dynamisch aus DOM (Anzahl kann sich geändert haben)
-  const slots = cfg.llm_providers.map((s, i) => ({
-    ...s,
-    name:  document.getElementById(`prov-${i}-name`)?.value  ?? s.name,
-    type:  document.getElementById(`prov-${i}-type`)?.value  ?? s.type,
-    url:   document.getElementById(`prov-${i}-url`)?.value   ?? s.url,
-    key:   document.getElementById(`prov-${i}-key`)?.value   ?? s.key,
-    model: document.getElementById(`prov-${i}-model`)?.value ?? s.model,
+
+  // Provider aus DOM lesen
+  const providers = (cfg.providers || []).map((p, i) => ({
+    ...p,
+    name: document.getElementById(`prov-${i}-name`)?.value ?? p.name,
+    type: document.getElementById(`prov-${i}-type`)?.value ?? p.type,
+    url:  document.getElementById(`prov-${i}-url`)?.value  ?? p.url,
+    key:  document.getElementById(`prov-${i}-key`)?.value  ?? p.key,
   }));
 
-  const uc = {};
-  Object.entries(cfg.use_cases || {}).forEach(([key, val]) => {
-    uc[key] = {
-      ...val,
-      primary:  parseInt(document.getElementById(`uc-${key}-primary`)?.value  ?? val.primary),
-      fallback: parseInt(document.getElementById(`uc-${key}-fallback`)?.value ?? val.fallback),
-    };
-  });
+  // LLMs aus DOM lesen
+  const llms = (cfg.llms || []).map((l, i) => ({
+    ...l,
+    name:        document.getElementById(`llm-${i}-name`)?.value     ?? l.name,
+    provider_id: document.getElementById(`llm-${i}-provider`)?.value ?? l.provider_id,
+    model:       document.getElementById(`llm-${i}-model`)?.value    ?? l.model,
+  }));
 
   const retLlm   = parseInt(document.getElementById('ret-llm-calls').value)  || null;
   const retTool  = parseInt(document.getElementById('ret-tool-calls').value) || null;
@@ -227,17 +435,20 @@ async function saveConfig() {
 
   const newCfg = {
     ...cfg,
-    llm_providers: slots,
-    use_cases: uc,
+    providers,
+    llms,
     memory: {
+      extraction_llm:          document.getElementById('mem-extraction-llm')?.value || '',
+      extraction_llm_fallback: document.getElementById('mem-extraction-llm-fallback')?.value || '',
       window_size:    parseInt(document.getElementById('mem-window-size').value),
       window_minutes: parseInt(document.getElementById('mem-window-minutes').value),
       min_messages:   parseInt(document.getElementById('mem-min-messages').value),
     },
     embedding: {
-      provider: document.getElementById('embed-provider').value,
-      model:    document.getElementById('embed-model').value,
-      dims:     parseInt(document.getElementById('embed-dims').value) || 1024,
+      provider_id:          document.getElementById('embed-provider')?.value || '',
+      model:                document.getElementById('embed-model').value,
+      dims:                 parseInt(document.getElementById('embed-dims').value) || 1024,
+      fallback_provider_id: document.getElementById('embed-fallback-provider')?.value || '',
     },
     log_retention: {
       conversations: null,
@@ -276,7 +487,6 @@ async function saveConfig() {
       toast(t('config.config_saved'), 'ok');
       if (statusEl) { statusEl.style.color = 'var(--green)'; statusEl.textContent = '\u2713 ' + t('config.saved'); setTimeout(() => { statusEl.textContent = ''; }, 3000); }
 
-      // Neustart anbieten wenn restart-relevante Felder geändert wurden
       if (restartChanges.length > 0) {
         const changedList = restartChanges.join('\n  - ');
         Modal.show({
@@ -334,7 +544,7 @@ async function loadClaudeMd(inst) {
     const data = await r.json();
     ed.value = data.content;
     st.textContent = t('config_claude_md.loaded', {instance: inst});
-  } catch(e) { st.textContent = '❌ ' + e.message; }
+  } catch(e) { st.textContent = '\u274c ' + e.message; }
 }
 
 async function saveClaudeMd() {
@@ -379,7 +589,7 @@ async function loadMemoryStats() {
         <div style="flex:1;min-width:0;">
           <div style="font-weight:500;font-size:13px;">${escHtml(m.instance)}${emptyWarn}</div>
           <div style="font-size:11px;color:${logColor};margin-top:2px;">
-            ${m.log_entries} ${t('config_memory.log_entries')} (${m.log_days} ${t('config_memory.days')}) · ${scopeStr}
+            ${m.log_entries} ${t('config_memory.log_entries')} (${m.log_days} ${t('config_memory.days')}) \u00b7 ${scopeStr}
           </div>
         </div>
       </label>`;
@@ -416,7 +626,6 @@ async function startRebuild() {
     document.getElementById('rebuild-progress-wrap').style.display = '';
     overall.textContent = '0 / ' + selected.length + ' ' + t('config_memory.rebuild_instances_label');
 
-    // Instanzen sequenziell abarbeiten
     for (let i = 0; i < selected.length; i++) {
       const inst = selected[i];
       overall.textContent = (i+1) + ' / ' + selected.length + ': ' + inst;
@@ -443,7 +652,6 @@ async function startRebuild() {
 
 async function cancelRebuild() {
   if (_rebuildSSE) { _rebuildSSE.close(); _rebuildSSE = null; }
-  // Alle laufenden Rebuilds abbrechen
   const selected = [...document.querySelectorAll('.rebuild-cb:checked')].map(cb => cb.dataset.inst);
   for (const inst of selected) {
     await fetch(`/api/rebuild-cancel/${inst}`, { method: 'POST' }).catch(() => {});
@@ -508,64 +716,20 @@ function updateEmbedDims() {
   }
 }
 
-// ── LLM Slot Management ────────────────────────────────────────────────────
-function addLlmSlot() {
-  if (!cfg) return;
-  const maxSlot = cfg.llm_providers.reduce((m, s) => Math.max(m, s.slot), 0);
-  cfg.llm_providers.push({ slot: maxSlot + 1, name: `Slot ${maxSlot + 1}`, type: 'custom', url: '', key: '', model: '' });
-  renderConfig(cfg);
-}
-
-function removeLlmSlot(i) {
-  if (!cfg) return;
-  if (cfg.llm_providers.length <= 1) { toast(t('config_llm.min_one_slot'), 'err'); return; }
-  cfg.llm_providers.splice(i, 1);
-  // Slot-Nummern neu vergeben
-  cfg.llm_providers.forEach((s, idx) => s.slot = idx + 1);
-  renderConfig(cfg);
-}
-
-async function fetchModels(i) {
-  const type = document.getElementById(`prov-${i}-type`)?.value;
-  const url  = document.getElementById(`prov-${i}-url`)?.value?.trim();
-  const key  = document.getElementById(`prov-${i}-key`)?.value?.trim();
-  const st   = document.getElementById(`prov-${i}-models-status`);
-  st.textContent = '…';
-  try {
-    const r = await fetch('/api/fetch-models', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ type, url, key }),
-    });
-    const d = await r.json();
-    if (d.manual || !d.models?.length) {
-      st.textContent = d.error ? '\u26a0 ' + d.error.substring(0,60) : '\u26a0 ' + t('config_llm.no_models_manual');
-      st.style.color = 'var(--yellow)';
-      return;
-    }
-    const datalist = document.getElementById(`models-${i}`);
-    datalist.innerHTML = d.models.map(m => `<option value="${escAttr(m)}">`).join('');
-    st.textContent = d.fallback ? '\u2713 ' + d.models.length + ' ' + t('config_llm.known_models') : '\u2713 ' + d.models.length + ' ' + t('config_llm.models_label');
-    st.style.color = d.fallback ? 'var(--yellow)' : 'var(--green)';
-  } catch(e) {
-    st.textContent = '✗ ' + e.message.substring(0,40);
-    st.style.color = 'var(--red)';
-  }
-}
-
 // ── Verbindungstest ────────────────────────────────────────────────────────
 async function testSvcConn(type, url, resultId) {
   const el = document.getElementById(resultId);
   if (!url) { el.textContent = '\u26a0 ' + t('config_services.url_missing'); el.style.color = 'var(--yellow)'; return; }
-  el.textContent = '…'; el.style.color = 'var(--muted)';
+  el.textContent = '\u2026'; el.style.color = 'var(--muted)';
   try {
     const r = await fetch('/api/test-connection', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ type, url }),
     });
     const d = await r.json();
-    el.textContent = d.ok ? `✓ ${d.detail}` : `✗ ${d.detail}`;
+    el.textContent = d.ok ? `\u2713 ${d.detail}` : `\u2717 ${d.detail}`;
     el.style.color = d.ok ? 'var(--green)' : 'var(--red)';
-  } catch(e) { el.textContent = '✗ ' + e.message; el.style.color = 'var(--red)'; }
+  } catch(e) { el.textContent = '\u2717 ' + e.message; el.style.color = 'var(--red)'; }
 }
 
 async function loadSttTtsEntities() {
@@ -585,14 +749,12 @@ async function loadSttTtsEntities() {
     const prevStt = sttEl.value;
     const prevTts = ttsEl.value;
 
-    // STT Dropdown befüllen
     sttEl.innerHTML = '<option value="">' + t('config_services.not_configured') + '</option>';
     d.stt.forEach(e => {
       sttEl.add(new Option(`${e.name} (${e.id})`, e.id));
     });
     if (prevStt) sttEl.value = prevStt;
 
-    // TTS Dropdown befüllen
     ttsEl.innerHTML = '<option value="">' + t('config_services.not_configured') + '</option>';
     d.tts.forEach(e => {
       ttsEl.add(new Option(`${e.name} (${e.id})`, e.id));
@@ -602,7 +764,7 @@ async function loadSttTtsEntities() {
     statusEl.textContent = '\u2713 ' + d.stt.length + ' ' + t('config_services.stt_tts_entities', {tts: d.tts.length});
     statusEl.style.color = 'var(--green)';
   } catch(e) {
-    statusEl.textContent = '✗ ' + e.message;
+    statusEl.textContent = '\u2717 ' + e.message;
     statusEl.style.color = 'var(--red)';
   }
 }
@@ -613,16 +775,16 @@ async function testHaConnection() {
   const ha_token = document.getElementById('svc-ha-token')?.value?.trim();
   if (!ha_url)   { el.textContent = '\u26a0 ' + t('config_services.url_missing');   el.style.color = 'var(--yellow)'; return; }
   if (!ha_token) { el.textContent = '\u26a0 ' + t('config_services.token_missing'); el.style.color = 'var(--yellow)'; return; }
-  el.textContent = '…'; el.style.color = 'var(--muted)';
+  el.textContent = '\u2026'; el.style.color = 'var(--muted)';
   try {
     const r = await fetch('/api/test-ha', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ ha_url, ha_token }),
     });
     const d = await r.json();
-    el.textContent = d.ok ? `✓ ${d.detail}` : `✗ ${d.detail}`;
+    el.textContent = d.ok ? `\u2713 ${d.detail}` : `\u2717 ${d.detail}`;
     el.style.color = d.ok ? 'var(--green)' : 'var(--red)';
-  } catch(e) { el.textContent = '✗ ' + e.message; el.style.color = 'var(--red)'; }
+  } catch(e) { el.textContent = '\u2717 ' + e.message; el.style.color = 'var(--red)'; }
 }
 
 function toggleMcpSection(enabled) {
@@ -656,41 +818,30 @@ function autoFillMcpUrl() {
   }
   const url = `${haUrl}/mcp_server/sse`;
   if (mcpUrl) mcpUrl.value = url;
-  if (hint)   { hint.textContent = `→ ${url}`; hint.style.display = ''; hint.style.color = 'var(--muted)'; }
+  if (hint)   { hint.textContent = `\u2192 ${url}`; hint.style.display = ''; hint.style.color = 'var(--muted)'; }
 }
 
 async function testMcpConnection() {
   const el    = document.getElementById('test-mcp-result');
   let mcp_url = document.getElementById('svc-mcp-url')?.value?.trim();
   let token   = document.getElementById('svc-mcp-token')?.value?.trim();
-  // Fallback: leerer MCP-Token → HA-Token nehmen
   if (!token) token = document.getElementById('svc-ha-token')?.value?.trim();
-  // Leere MCP-URL auto-ausfüllen
   if (!mcp_url) {
     const haUrl = document.getElementById('svc-ha-url')?.value?.trim().replace(/\/$/, '');
     if (haUrl) mcp_url = `${haUrl}/mcp_server/sse`;
   }
   if (!mcp_url) { el.textContent = '\u26a0 ' + t('config_services.mcp_url_missing'); el.style.color = 'var(--yellow)'; return; }
   if (!token)   { el.textContent = '\u26a0 ' + t('config_services.token_missing');   el.style.color = 'var(--yellow)'; return; }
-  el.textContent = '…'; el.style.color = 'var(--muted)';
+  el.textContent = '\u2026'; el.style.color = 'var(--muted)';
   try {
     const r = await fetch('/api/test-ha-mcp', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ mcp_url, token }),
     });
     const d = await r.json();
-    el.textContent = d.ok ? `✓ ${d.detail}` : `✗ ${d.detail}`;
+    el.textContent = d.ok ? `\u2713 ${d.detail}` : `\u2717 ${d.detail}`;
     el.style.color = d.ok ? 'var(--green)' : 'var(--red)';
-  } catch(e) { el.textContent = '✗ ' + e.message; el.style.color = 'var(--red)'; }
-}
-
-function toggleLlmSlot(i) {
-  const body    = document.getElementById(`prov-${i}-body`);
-  const chevron = document.getElementById(`prov-${i}-chevron`);
-  if (!body) return;
-  const open = body.style.display !== 'none';
-  body.style.display = open ? 'none' : 'block';
-  if (chevron) chevron.style.transform = open ? '' : 'rotate(90deg)';
+  } catch(e) { el.textContent = '\u2717 ' + e.message; el.style.color = 'var(--red)'; }
 }
 
 async function testProviderConn(i) {
@@ -699,7 +850,6 @@ async function testProviderConn(i) {
   const key  = document.getElementById(`prov-${i}-key`)?.value?.trim() || '';
   let   url  = document.getElementById(`prov-${i}-url`)?.value?.trim() || '';
 
-  // Default-URLs pro Provider-Typ
   const defaults = {
     anthropic: 'https://api.anthropic.com',
     minimax:   'https://api.minimax.io',
@@ -707,11 +857,10 @@ async function testProviderConn(i) {
   };
   if (!url && defaults[type]) url = defaults[type];
 
-  if (!url) { el.textContent = '\u26a0 ' + t('config_llm.no_url_configured'); el.style.color = 'var(--yellow)'; return; }
+  if (!url) { el.textContent = '\u26a0 ' + t('config_provider.no_url_configured'); el.style.color = 'var(--yellow)'; return; }
 
-  el.textContent = '…'; el.style.color = 'var(--muted)';
+  el.textContent = '\u2026'; el.style.color = 'var(--muted)';
 
-  // Für Anthropic/MiniMax: Models-Endpunkt testen wenn Key vorhanden
   if ((type === 'anthropic' || type === 'minimax') && key) {
     try {
       const r = await fetch('/api/fetch-models', {
@@ -720,9 +869,9 @@ async function testProviderConn(i) {
       });
       const d = await r.json();
       const count = d.models?.length ?? 0;
-      el.textContent = count > 0 ? '\u2713 ' + t('config_llm.connected') + ' \u00b7 ' + count + ' ' + t('config_llm.models_label') : '\u26a0 ' + t('config_llm.connected_no_models');
+      el.textContent = count > 0 ? '\u2713 ' + t('config_provider.connected') + ' \u00b7 ' + count + ' ' + t('config_provider.models_label') : '\u26a0 ' + t('config_provider.connected_no_models');
       el.style.color = count > 0 ? 'var(--green)' : 'var(--yellow)';
-    } catch(e) { el.textContent = '✗ ' + e.message; el.style.color = 'var(--red)'; }
+    } catch(e) { el.textContent = '\u2717 ' + e.message; el.style.color = 'var(--red)'; }
     return;
   }
 
@@ -733,9 +882,9 @@ async function testProviderConn(i) {
       body: JSON.stringify({ type: connType, url }),
     });
     const d = await r.json();
-    el.textContent = d.ok ? `✓ ${d.detail}` : `✗ ${d.detail}`;
+    el.textContent = d.ok ? `\u2713 ${d.detail}` : `\u2717 ${d.detail}`;
     el.style.color = d.ok ? 'var(--green)' : 'var(--red)';
-  } catch(e) { el.textContent = '✗ ' + e.message; el.style.color = 'var(--red)'; }
+  } catch(e) { el.textContent = '\u2717 ' + e.message; el.style.color = 'var(--red)'; }
 }
 
 // ── Claude Auth ─────────────────────────────────────────────────────────────
@@ -749,12 +898,12 @@ async function checkClaudeAuth() {
     const r = await fetch('/api/claude-auth/status');
     const d = await r.json();
     if (d.ok) {
-      el.innerHTML = `<span style="color:var(--green)">✓ ${escHtml(d.detail)}</span>`;
+      el.innerHTML = `<span style="color:var(--green)">\u2713 ${escHtml(d.detail)}</span>`;
     } else {
-      el.innerHTML = `<span style="color:var(--red)">✗ ${escHtml(d.detail)}</span>`;
+      el.innerHTML = `<span style="color:var(--red)">\u2717 ${escHtml(d.detail)}</span>`;
     }
   } catch(e) {
-    el.innerHTML = `<span style="color:var(--red)">✗ ${escHtml(e.message)}</span>`;
+    el.innerHTML = `<span style="color:var(--red)">\u2717 ${escHtml(e.message)}</span>`;
   }
 }
 
@@ -772,10 +921,10 @@ async function uploadClaudeAuth() {
       body: JSON.stringify({ credentials: creds }),
     });
     const d = await r.json();
-    result.textContent = d.ok ? `✓ ${d.detail}` : `✗ ${d.detail || d.error}`;
+    result.textContent = d.ok ? `\u2713 ${d.detail}` : `\u2717 ${d.detail || d.error}`;
     result.style.color = d.ok ? 'var(--green)' : 'var(--red)';
     if (d.ok) { textarea.value = ''; checkClaudeAuth(); }
-  } catch(e) { result.textContent = '✗ ' + e.message; result.style.color = 'var(--red)'; }
+  } catch(e) { result.textContent = '\u2717 ' + e.message; result.style.color = 'var(--red)'; }
 }
 
 async function startOAuthLogin() {
@@ -792,7 +941,7 @@ async function startOAuthLogin() {
     const r = await fetch('/api/claude-auth/login/start', { method: 'POST' });
     const d = await r.json();
     if (!d.ok) {
-      statusEl.innerHTML = `<span style="color:var(--red)">✗ ${escHtml(d.detail)}</span>`;
+      statusEl.innerHTML = `<span style="color:var(--red)">\u2717 ${escHtml(d.detail)}</span>`;
       return;
     }
     statusEl.innerHTML = `<span style="color:var(--green)">${t('config_services.oauth_url_ready')}</span>`;
@@ -801,7 +950,7 @@ async function startOAuthLogin() {
     document.getElementById('oauth-code-input').value = '';
     document.getElementById('oauth-code-result').textContent = '';
   } catch(e) {
-    statusEl.innerHTML = `<span style="color:var(--red)">✗ ${e.message}</span>`;
+    statusEl.innerHTML = `<span style="color:var(--red)">\u2717 ${e.message}</span>`;
   }
 }
 
@@ -820,12 +969,12 @@ async function completeOAuthLogin() {
       body: JSON.stringify({ code }),
     });
     const d = await r.json();
-    resultEl.textContent = d.ok ? `✓ ${d.detail}` : `✗ ${d.detail}`;
+    resultEl.textContent = d.ok ? `\u2713 ${d.detail}` : `\u2717 ${d.detail}`;
     resultEl.style.color = d.ok ? 'var(--green)' : 'var(--red)';
     if (d.ok) {
       codeInput.value = '';
       document.getElementById('oauth-code-section').style.display = 'none';
       checkClaudeAuth();
     }
-  } catch(e) { resultEl.textContent = '✗ ' + e.message; resultEl.style.color = 'var(--red)'; }
+  } catch(e) { resultEl.textContent = '\u2717 ' + e.message; resultEl.style.color = 'var(--red)'; }
 }

@@ -30,6 +30,7 @@ function showCfgTab(name) {
   document.getElementById('cfgtab-' + name).classList.add('active');
   if (name === 'memory') loadMemoryStats();
   if (name === 'infra') checkClaudeAuth();
+  if (name === 'whatsapp') refreshWaStatus();
 }
 
 // ── Instanz-Auswahl (Chat) ─────────────────────────────────────────────────

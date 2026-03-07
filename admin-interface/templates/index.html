@@ -128,7 +128,8 @@
 
   <!-- Config Sub-Tabs -->
   <div class="cfg-tabs">
-    <button class="cfg-tab-btn active" onclick="showCfgTab('llms')"       id="cfgtab-llms" data-i18n="config.sub_tabs.llms">LLMs</button>
+    <button class="cfg-tab-btn active" onclick="showCfgTab('providers')"  id="cfgtab-providers" data-i18n="config.sub_tabs.providers">Providers</button>
+    <button class="cfg-tab-btn"        onclick="showCfgTab('llms')"       id="cfgtab-llms" data-i18n="config.sub_tabs.llms">LLMs</button>
     <button class="cfg-tab-btn"        onclick="showCfgTab('memory')"     id="cfgtab-memory" data-i18n="config.sub_tabs.memory">Memory</button>
     <button class="cfg-tab-btn"        onclick="showCfgTab('ha')"         id="cfgtab-ha" data-i18n="config.sub_tabs.home_assistant">Home Assistant</button>
     <button class="cfg-tab-btn"        onclick="showCfgTab('whatsapp')"   id="cfgtab-whatsapp" data-i18n="config.sub_tabs.whatsapp">WhatsApp</button>
@@ -137,20 +138,24 @@
     <button class="cfg-tab-btn"        onclick="showCfgTab('claudemd')"   id="cfgtab-claudemd" data-i18n="config.sub_tabs.claude_md">CLAUDE.md</button>
   </div>
 
-  <!-- ── Sub-Tab: LLMs ── -->
-  <div id="cfgpanel-llms" class="cfg-tab-panel">
-
-    <!-- LLM Provider Slots -->
+  <!-- ── Sub-Tab: Providers ── -->
+  <div id="cfgpanel-providers" class="cfg-tab-panel">
     <div class="config-section">
-      <div class="config-section-header" data-i18n="config_llm.title">LLM Provider Slots</div>
-      <div class="config-section-body" id="provider-slots">
+      <div class="config-section-header" data-i18n="config_provider.title">Provider-Konfiguration</div>
+      <div class="config-section-body" id="provider-list">
         <!-- Wird per JS befüllt -->
       </div>
     </div>
+  </div>
 
-    <!-- Use-Case-Zuordnung: wird aus config erhalten, UI entfernt (per-User) -->
-    <div id="use-cases" style="display:none;"></div>
-
+  <!-- ── Sub-Tab: LLMs ── -->
+  <div id="cfgpanel-llms" class="cfg-tab-panel" style="display:none;">
+    <div class="config-section">
+      <div class="config-section-header" data-i18n="config_llm.title">LLM-Konfiguration</div>
+      <div class="config-section-body" id="llm-list">
+        <!-- Wird per JS befüllt -->
+      </div>
+    </div>
   </div>
 
   <!-- ── Sub-Tab: Memory ── -->
@@ -177,17 +182,34 @@
       </div>
     </div>
 
+    <!-- Extraction LLM (Global) -->
+    <div class="config-section">
+      <div class="config-section-header" data-i18n="config_memory.extraction_llm">Extraktions-LLM</div>
+      <div class="config-section-body">
+        <p class="form-hint" style="margin-bottom:10px;" data-i18n="config_memory.extraction_llm_hint">
+          Global für alle User ohne eigenen Extraktions-LLM.
+        </p>
+        <div class="form-row">
+          <div class="form-group">
+            <label data-i18n="config_memory.extraction_llm">Extraktions-LLM</label>
+            <select id="mem-extraction-llm"><!-- JS --></select>
+          </div>
+          <div class="form-group">
+            <label data-i18n="config_memory.extraction_llm_fallback">Fallback Extraktions-LLM</label>
+            <select id="mem-extraction-llm-fallback"><!-- JS --></select>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Embedding-Modell -->
     <div class="config-section">
       <div class="config-section-header" data-i18n="config_memory.embedding_title">Embedding-Modell</div>
       <div class="config-section-body">
         <div class="form-row three">
           <div class="form-group">
-            <label>Provider</label>
-            <select id="embed-provider">
-              <option value="ollama">Ollama (lokal)</option>
-              <option value="huggingface">HuggingFace</option>
-            </select>
+            <label data-i18n="config_memory.embedding_provider">Embedding-Provider</label>
+            <select id="embed-provider"><!-- JS: nur Ollama-Provider --></select>
           </div>
           <div class="form-group">
             <label>Modell</label>
@@ -201,6 +223,12 @@
           <div class="form-group">
             <label>Dimensions</label>
             <input type="number" id="embed-dims" value="1024" min="64" max="4096">
+          </div>
+        </div>
+        <div class="form-row" style="margin-top:8px;">
+          <div class="form-group">
+            <label data-i18n="config_memory.embedding_fallback_provider">Fallback Embedding-Provider</label>
+            <select id="embed-fallback-provider"><!-- JS --></select>
           </div>
         </div>
         <div id="embed-custom-row" class="form-group" style="display:none;margin-top:4px;">

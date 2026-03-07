@@ -153,32 +153,28 @@ TEMPLATES_DIR   = INST_DIR / "templates"
 # ── Default-Konfiguration ────────────────────────────────────────────────────
 
 DEFAULT_CONFIG = {
-    "llm_providers": [
-        {"slot": 1, "name": "Anthropic (Primär)", "type": "anthropic",
-         "url": "", "key": "", "model": "claude-sonnet-4-6"},
-        {"slot": 2, "name": "Fallback Cloud",     "type": "anthropic",
-         "url": "", "key": "", "model": "claude-haiku-4-5-20251001"},
-        {"slot": 3, "name": "Ollama (Lokal)",      "type": "ollama",
-         "url": os.environ.get("OLLAMA_URL", "http://10.83.1.110:11434"),
-         "key": "", "model": "ministral-3-32k:3b"},
-        {"slot": 4, "name": "Custom",              "type": "custom",
-         "url": "", "key": "", "model": ""},
+    "providers": [
+        {"id": "anthropic-1", "name": "Anthropic (Primär)", "type": "anthropic", "url": "", "key": ""},
+        {"id": "ollama-home",  "name": "Ollama (Lokal)",     "type": "ollama",
+         "url": os.environ.get("OLLAMA_URL", "http://10.83.1.110:11434"), "key": ""},
     ],
-    "use_cases": {
-        "chat":              {"label": "Chat (WhatsApp/Webchat)", "primary": 1, "fallback": 2},
-        "voice_tier2":       {"label": "Voice Tier 2",           "primary": 3, "fallback": 3},
-        "memory_extraction": {"label": "Memory-Extraktion",      "primary": 3, "fallback": 3},
-        "daily_brief":       {"label": "Daily Brief",            "primary": 2, "fallback": 3},
-    },
+    "llms": [
+        {"id": "claude-primary",  "name": "Claude Sonnet",   "provider_id": "anthropic-1", "model": "claude-sonnet-4-6"},
+        {"id": "claude-fallback", "name": "Claude Haiku",    "provider_id": "anthropic-1", "model": "claude-haiku-4-5-20251001"},
+        {"id": "ollama-extract",  "name": "Ministral Lokal", "provider_id": "ollama-home", "model": "ministral-3-32k:3b"},
+    ],
     "memory": {
+        "extraction_llm":          "ollama-extract",
+        "extraction_llm_fallback": "",
         "window_size":    int(os.environ.get("HAANA_WINDOW_SIZE",    "20")),
         "window_minutes": int(os.environ.get("HAANA_WINDOW_MINUTES", "60")),
         "min_messages":   5,
     },
     "embedding": {
-        "provider": "ollama",
-        "model":    os.environ.get("HAANA_EMBEDDING_MODEL", "bge-m3"),
-        "dims":     int(os.environ.get("HAANA_EMBEDDING_DIMS", "1024")),
+        "provider_id":          "ollama-home",
+        "model":                os.environ.get("HAANA_EMBEDDING_MODEL", "bge-m3"),
+        "dims":                 int(os.environ.get("HAANA_EMBEDDING_DIMS", "1024")),
+        "fallback_provider_id": "",
     },
     "log_retention": {
         "conversations": None,   # niemals löschen
@@ -200,7 +196,8 @@ DEFAULT_CONFIG = {
     "users": [
         {
             "id": "alice", "display_name": "Alice", "role": "admin",
-            "primary_llm_slot": 1, "extraction_llm_slot": 3,
+            "primary_llm": "claude-primary", "fallback_llm": "claude-fallback",
+            "extraction_llm": "",
             "ha_user": "alice", "whatsapp_phone": "",
             "api_port": 8001, "container_name": "haana-instanz-alice-1",
             "claude_md_template": "admin",
@@ -210,7 +207,8 @@ DEFAULT_CONFIG = {
         },
         {
             "id": "bob", "display_name": "Bob", "role": "user",
-            "primary_llm_slot": 1, "extraction_llm_slot": 3,
+            "primary_llm": "claude-primary", "fallback_llm": "claude-fallback",
+            "extraction_llm": "",
             "ha_user": "bob", "whatsapp_phone": "",
             "api_port": 8002, "container_name": "haana-instanz-bob-1",
             "claude_md_template": "user",
@@ -221,7 +219,8 @@ DEFAULT_CONFIG = {
         {
             "id": "ha-assist", "display_name": "HAANA Voice", "role": "voice",
             "system": True,
-            "primary_llm_slot": 3, "extraction_llm_slot": 3,
+            "primary_llm": "ollama-extract", "fallback_llm": "",
+            "extraction_llm": "",
             "ha_user": "", "whatsapp_phone": "",
             "api_port": 8003, "container_name": "haana-instanz-ha-assist-1",
             "claude_md_template": "ha-assist",
@@ -232,7 +231,8 @@ DEFAULT_CONFIG = {
         {
             "id": "ha-advanced", "display_name": "HAANA Advanced", "role": "voice-advanced",
             "system": True,
-            "primary_llm_slot": 1, "extraction_llm_slot": 3,
+            "primary_llm": "claude-primary", "fallback_llm": "",
+            "extraction_llm": "",
             "ha_user": "", "whatsapp_phone": "",
             "api_port": 8004, "container_name": "haana-instanz-ha-advanced-1",
             "claude_md_template": "ha-advanced",
@@ -267,17 +267,166 @@ def _ensure_system_users(cfg: dict) -> None:
         cfg["users"].append(sys_user)
 
 
+def _slugify(text: str) -> str:
+    """Einfacher Slug: Kleinbuchstaben, Umlaute ersetzen, nur [a-z0-9-]."""
+    text = text.lower().strip()
+    for old, new in [("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss")]:
+        text = text.replace(old, new)
+    text = re.sub(r"[^a-z0-9]+", "-", text).strip("-")
+    return text or "item"
+
+
+def _migrate_config(cfg: dict) -> bool:
+    """Migriert alte llm_providers[]-Struktur zu providers[] + llms[].
+
+    Returns True wenn Migration durchgeführt wurde.
+    """
+    if "providers" in cfg or "llm_providers" not in cfg:
+        return False
+
+    old_slots = cfg.pop("llm_providers", [])
+    cfg.pop("use_cases", None)
+
+    # Provider deduplizieren nach (type, url, key)
+    seen_providers: dict[tuple, str] = {}
+    providers: list[dict] = []
+    llms: list[dict] = []
+    slot_to_llm_id: dict[int, str] = {}
+
+    for slot in old_slots:
+        pkey = (slot.get("type", "custom"), slot.get("url", ""), slot.get("key", ""))
+        if pkey not in seen_providers:
+            ptype = slot.get("type", "custom")
+            pid = f"{ptype}-{len(providers) + 1}"
+            providers.append({
+                "id": pid,
+                "name": slot.get("name", pid),
+                "type": ptype,
+                "url": slot.get("url", ""),
+                "key": slot.get("key", ""),
+            })
+            seen_providers[pkey] = pid
+
+        provider_id = seen_providers[pkey]
+        lid = _slugify(slot.get("name", f"llm-{slot.get('slot', len(llms) + 1)}"))
+        # Eindeutigkeit sicherstellen
+        base_lid = lid
+        counter = 2
+        existing_ids = {l["id"] for l in llms}
+        while lid in existing_ids:
+            lid = f"{base_lid}-{counter}"
+            counter += 1
+
+        llms.append({
+            "id": lid,
+            "name": slot.get("name", f"LLM {slot.get('slot', '')}"),
+            "provider_id": provider_id,
+            "model": slot.get("model", ""),
+        })
+        slot_to_llm_id[slot.get("slot", len(llms))] = lid
+
+    cfg["providers"] = providers
+    cfg["llms"] = llms
+
+    # User-Felder migrieren
+    for user in cfg.get("users", []):
+        if "primary_llm_slot" in user:
+            old_slot = user.pop("primary_llm_slot")
+            user["primary_llm"] = slot_to_llm_id.get(old_slot, llms[0]["id"] if llms else "")
+        if "extraction_llm_slot" in user:
+            old_slot = user.pop("extraction_llm_slot")
+            user["extraction_llm"] = slot_to_llm_id.get(old_slot, "")
+        user.setdefault("fallback_llm", "")
+
+    # Embedding migrieren: provider → provider_id
+    emb = cfg.get("embedding", {})
+    if "provider" in emb and "provider_id" not in emb:
+        old_prov_type = emb.pop("provider")
+        matching = next((p for p in providers if p["type"] == old_prov_type), None)
+        emb["provider_id"] = matching["id"] if matching else ""
+        emb.setdefault("fallback_provider_id", "")
+
+    # Memory: extraction_llm global setzen
+    mem = cfg.setdefault("memory", {})
+    if "extraction_llm" not in mem:
+        # Ollama-basiertes LLM als Default-Extraction
+        ollama_llm = next(
+            (l for l in llms if any(
+                p["type"] == "ollama" and p["id"] == l["provider_id"] for p in providers
+            )),
+            None,
+        )
+        mem["extraction_llm"] = ollama_llm["id"] if ollama_llm else ""
+        mem["extraction_llm_fallback"] = ""
+
+    return True
+
+
+def _resolve_llm(llm_id: str, cfg: dict) -> tuple[dict, dict]:
+    """Löst eine LLM-ID zu (llm_dict, provider_dict) auf. Gibt ({}, {}) zurück wenn nicht gefunden."""
+    llm = next((l for l in cfg.get("llms", []) if l["id"] == llm_id), {})
+    if not llm:
+        return {}, {}
+    provider = next((p for p in cfg.get("providers", []) if p["id"] == llm.get("provider_id")), {})
+    return llm, provider
+
+
+def _find_references(entity_type: str, entity_id: str, cfg: dict) -> list[str]:
+    """Findet alle Referenzen auf eine Entity (provider oder llm).
+
+    Returns Liste von Strings wie "User alice (Primary)", "LLM claude-primary", etc.
+    """
+    refs: list[str] = []
+
+    if entity_type == "provider":
+        # Welche LLMs referenzieren diesen Provider?
+        for llm in cfg.get("llms", []):
+            if llm.get("provider_id") == entity_id:
+                refs.append(f"LLM: {llm.get('name', llm['id'])}")
+        # Embedding
+        emb = cfg.get("embedding", {})
+        if emb.get("provider_id") == entity_id:
+            refs.append("Embedding (Primary)")
+        if emb.get("fallback_provider_id") == entity_id:
+            refs.append("Embedding (Fallback)")
+
+    elif entity_type == "llm":
+        # Welche User referenzieren dieses LLM?
+        for user in cfg.get("users", []):
+            uid = user.get("id", "?")
+            if user.get("primary_llm") == entity_id:
+                refs.append(f"User {uid} (Primary)")
+            if user.get("fallback_llm") == entity_id:
+                refs.append(f"User {uid} (Fallback)")
+            if user.get("extraction_llm") == entity_id:
+                refs.append(f"User {uid} (Extraction)")
+        # Memory global
+        mem = cfg.get("memory", {})
+        if mem.get("extraction_llm") == entity_id:
+            refs.append("Memory Extraction (Global)")
+        if mem.get("extraction_llm_fallback") == entity_id:
+            refs.append("Memory Extraction Fallback (Global)")
+
+    return refs
+
+
 def load_config() -> dict:
     if CONF_FILE.exists():
         try:
             cfg = json.loads(CONF_FILE.read_text(encoding="utf-8"))
             # Embeddings-Use-Case entfernen (wurde in separate Sektion ausgelagert)
             cfg.get("use_cases", {}).pop("embeddings", None)
+            # Migration von alter Struktur
+            if _migrate_config(cfg):
+                save_config(cfg)
             _ensure_system_users(cfg)
             return cfg
         except Exception:
             pass
     cfg = dict(DEFAULT_CONFIG)
+    cfg["providers"] = list(DEFAULT_CONFIG["providers"])
+    cfg["llms"] = list(DEFAULT_CONFIG["llms"])
+    cfg["users"] = list(DEFAULT_CONFIG["users"])
     _ensure_system_users(cfg)
     return cfg
 
@@ -375,6 +524,16 @@ async def post_config(request: Request):
         raise HTTPException(400, "Ungültiges JSON")
     save_config(body)
     return {"ok": True}
+
+
+@app.get("/api/references/{entity_type}/{entity_id}")
+async def get_references(entity_type: str, entity_id: str):
+    """Gibt alle Referenzen auf eine Entity (provider/llm) zurück."""
+    if entity_type not in ("provider", "llm"):
+        raise HTTPException(400, "entity_type muss 'provider' oder 'llm' sein")
+    cfg = load_config()
+    refs = _find_references(entity_type, entity_id, cfg)
+    return {"refs": refs, "count": len(refs)}
 
 
 # ── API: CLAUDE.md ────────────────────────────────────────────────────────────
@@ -1309,15 +1468,25 @@ def _start_agent_container(user: dict, cfg: dict) -> dict:
     api_port      = user["api_port"]
     container_name = user.get("container_name", f"haana-instanz-{uid}-1")
     template      = user.get("claude_md_template", "user")
-    primary_slot  = user.get("primary_llm_slot", 1)
-    extract_slot  = user.get("extraction_llm_slot", 3)
     write_scopes  = f"{uid}_memory,household_memory"
     read_scopes   = f"{uid}_memory,household_memory"
 
-    # LLM-Slot-Infos aus Config
-    slots = {s["slot"]: s for s in cfg.get("llm_providers", [])}
-    pslot = slots.get(primary_slot, {})
-    eslot = slots.get(extract_slot, {})
+    # LLM-Infos aus Config auflösen
+    primary_llm_id = user.get("primary_llm", "")
+    extract_llm_id = user.get("extraction_llm", "") or cfg.get("memory", {}).get("extraction_llm", "")
+    p_llm, p_prov = _resolve_llm(primary_llm_id, cfg)
+    e_llm, e_prov = _resolve_llm(extract_llm_id, cfg)
+
+    # Ollama-URL: aus Embedding-Provider oder Services-Fallback
+    emb = cfg.get("embedding", {})
+    emb_prov = next((p for p in cfg.get("providers", []) if p["id"] == emb.get("provider_id")), {})
+    ollama_url = cfg.get("services", {}).get("ollama_url", "")
+    # Wenn Embedding-Provider ein Ollama ist, dessen URL bevorzugen
+    if emb_prov.get("type") == "ollama" and emb_prov.get("url"):
+        ollama_url = emb_prov["url"]
+    # Wenn Extraktions-Provider ein Ollama ist, dessen URL als Fallback
+    if not ollama_url and e_prov.get("type") == "ollama" and e_prov.get("url"):
+        ollama_url = e_prov["url"]
 
     env = {
         "HAANA_INSTANCE":         uid,
@@ -1325,14 +1494,14 @@ def _start_agent_container(user: dict, cfg: dict) -> dict:
         "HAANA_LOG_DIR":          "/data/logs",
         "HAANA_WRITE_SCOPES":     write_scopes,
         "HAANA_READ_SCOPES":      read_scopes,
-        "HAANA_MODEL":            pslot.get("model", "claude-sonnet-4-6"),
-        "HAANA_MEMORY_MODEL":     eslot.get("model", "ministral-3-32k:3b"),
+        "HAANA_MODEL":            p_llm.get("model", "claude-sonnet-4-6"),
+        "HAANA_MEMORY_MODEL":     e_llm.get("model", "ministral-3-32k:3b"),
         "HAANA_WINDOW_SIZE":      str(cfg.get("memory", {}).get("window_size", 20)),
         "HAANA_WINDOW_MINUTES":   str(cfg.get("memory", {}).get("window_minutes", 60)),
-        "HAANA_EMBEDDING_MODEL":  cfg.get("embedding", {}).get("model", "bge-m3"),
-        "HAANA_EMBEDDING_DIMS":   str(cfg.get("embedding", {}).get("dims", 1024)),
+        "HAANA_EMBEDDING_MODEL":  emb.get("model", "bge-m3"),
+        "HAANA_EMBEDDING_DIMS":   str(emb.get("dims", 1024)),
         "QDRANT_URL":             cfg.get("services", {}).get("qdrant_url", "http://qdrant:6333"),
-        "OLLAMA_URL":             cfg.get("services", {}).get("ollama_url", ""),
+        "OLLAMA_URL":             ollama_url,
         "HA_URL":                 cfg.get("services", {}).get("ha_url", ""),
         "HA_TOKEN":               cfg.get("services", {}).get("ha_token", ""),
     }
@@ -1354,19 +1523,19 @@ def _start_agent_container(user: dict, cfg: dict) -> dict:
             env["HA_MCP_TYPE"] = ha_mcp_type  # agent needs this for SSE vs HTTP
 
     # Anthropic API-Key oder Custom URL
-    is_minimax = pslot.get("type") == "minimax" or (pslot.get("url", "") and "minimax" in pslot.get("url", "").lower())
+    is_minimax = p_prov.get("type") == "minimax"
     if is_minimax:
         # MiniMax: Anthropic-kompatibel, eigene Auth + Env-Vars
-        env["ANTHROPIC_BASE_URL"]  = pslot.get("url") or "https://api.minimax.io/anthropic"
-        env["ANTHROPIC_AUTH_TOKEN"] = pslot.get("key", "")
-        env["ANTHROPIC_MODEL"]     = pslot.get("model", "MiniMax-M2.5")
+        env["ANTHROPIC_BASE_URL"]  = p_prov.get("url") or "https://api.minimax.io/anthropic"
+        env["ANTHROPIC_AUTH_TOKEN"] = p_prov.get("key", "")
+        env["ANTHROPIC_MODEL"]     = p_llm.get("model", "MiniMax-M2.5")
         env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
         # ANTHROPIC_API_KEY darf bei MiniMax NICHT gesetzt sein
     else:
-        if pslot.get("key"):
-            env["ANTHROPIC_API_KEY"] = pslot["key"]
-        if pslot.get("url"):
-            env["ANTHROPIC_BASE_URL"] = pslot["url"]
+        if p_prov.get("key"):
+            env["ANTHROPIC_API_KEY"] = p_prov["key"]
+        if p_prov.get("url"):
+            env["ANTHROPIC_BASE_URL"] = p_prov["url"]
 
     image = _get_agent_image()
     network = _get_compose_network()
@@ -1459,13 +1628,17 @@ async def create_user(request: Request):
     used_ports = [u.get("api_port", 0) for u in cfg.get("users", [])]
     port = _find_free_port(used_ports)
 
+    # Default-LLMs aus Config
+    default_primary = cfg.get("llms", [{}])[0].get("id", "") if cfg.get("llms") else ""
+
     # User-Objekt aufbauen
     user: dict = {
         "id":                  uid,
         "display_name":        body.get("display_name") or uid.capitalize(),
         "role":                body.get("role", "user"),
-        "primary_llm_slot":    int(body.get("primary_llm_slot", 1)),
-        "extraction_llm_slot": int(body.get("extraction_llm_slot", 3)),
+        "primary_llm":         body.get("primary_llm", default_primary),
+        "fallback_llm":        body.get("fallback_llm", ""),
+        "extraction_llm":      body.get("extraction_llm", ""),
         "ha_user":             body.get("ha_user", uid),
         "whatsapp_phone":      body.get("whatsapp_phone", ""),
         "api_port":            port,
@@ -1511,7 +1684,7 @@ async def update_user(user_id: str, request: Request):
     if not user:
         raise HTTPException(404, f"User '{user_id}' nicht gefunden")
 
-    restart_fields = {"primary_llm_slot", "extraction_llm_slot", "ha_user", "role", "claude_md_template"}
+    restart_fields = {"primary_llm", "fallback_llm", "extraction_llm", "ha_user", "role", "claude_md_template"}
     needs_restart = any(k in body and body[k] != user.get(k) for k in restart_fields)
 
     user.update({k: v for k, v in body.items() if k not in ("id", "api_port", "container_name")})
