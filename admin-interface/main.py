@@ -54,6 +54,10 @@ try:
 except Exception:
     _docker_client = None
 
+from core.process_manager import (
+    detect_mode, create_agent_manager, AgentManager,
+)
+
 app = FastAPI(title="HAANA Admin", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
@@ -109,11 +113,23 @@ async def _cleanup_loop():
         _cleanup_logs_once()
 
 
+# ── Betriebsmodus ────────────────────────────────────────────────────────────
+HAANA_MODE = detect_mode()
+_agent_manager: Optional[AgentManager] = None
+
 @app.on_event("startup")
 async def startup_event():
+    global _agent_manager
     asyncio.create_task(_cleanup_loop())
-    # Rebuild-Zustand aus config.json-Users erweitern (dynamische Instanzen)
     _sync_rebuild_state()
+    # AgentManager initialisieren (nach Config-Laden, damit _resolve_llm verfügbar ist)
+    _agent_manager = create_agent_manager(
+        HAANA_MODE,
+        main_app=app,
+        docker_client=_docker_client,
+        resolve_llm_fn=_resolve_llm,
+        find_ollama_url_fn=_find_ollama_url,
+    )
 
 # ── Pfade ────────────────────────────────────────────────────────────────────
 
@@ -803,89 +819,47 @@ async def memory_stats():
 
 # ── Instanz-Steuerung (Container stop/restart) ────────────────────────────────
 
-def _get_instance_container(instance: str) -> Optional[str]:
-    """Gibt Container-Name für eine Instanz zurück."""
-    cfg = load_config()
-    user = next((u for u in cfg.get("users", []) if u["id"] == instance), None)
-    if user:
-        return user.get("container_name", f"haana-instanz-{instance}-1")
-    # Compose-Naming-Konvention
-    return f"haana-instanz-{instance}-1"
-
-
 @app.post("/api/instances/{instance}/restart")
 async def restart_instance(instance: str):
-    """Container einer Instanz neu starten."""
+    """Agent-Instanz neu starten."""
     if instance not in get_all_instances():
         raise HTTPException(404)
-    container_name = _get_instance_container(instance)
-    if not _docker_client:
-        return {"ok": False, "error": "Docker nicht verfügbar"}
-    try:
-        c = _docker_client.containers.get(container_name)
-        c.restart(timeout=10)
-        return {"ok": True, "container": container_name}
-    except Exception as e:
-        return {"ok": False, "error": str(e)[:200]}
+    return await _agent_manager.restart_agent(instance)
 
 
 @app.post("/api/instances/{instance}/stop")
 async def stop_instance(instance: str):
-    """Container einer Instanz graceful stoppen (SIGTERM, 10s timeout)."""
+    """Agent-Instanz graceful stoppen."""
     if instance not in get_all_instances():
         raise HTTPException(404)
-    container_name = _get_instance_container(instance)
-    if not _docker_client:
-        return {"ok": False, "error": "Docker nicht verfügbar"}
-    try:
-        c = _docker_client.containers.get(container_name)
-        c.stop(timeout=10)
-        return {"ok": True, "container": container_name}
-    except Exception as e:
-        return {"ok": False, "error": str(e)[:200]}
+    return await _agent_manager.stop_agent(instance)
 
 
 @app.post("/api/instances/{instance}/force-stop")
 async def force_stop_instance(instance: str):
-    """Container einer Instanz sofort beenden (SIGKILL – laufende Memory-Extraktion geht verloren)."""
+    """Agent-Instanz sofort beenden (laufende Memory-Extraktion geht verloren)."""
     if instance not in get_all_instances():
         raise HTTPException(404)
-    container_name = _get_instance_container(instance)
-    if not _docker_client:
-        return {"ok": False, "error": "Docker nicht verfügbar"}
-    try:
-        c = _docker_client.containers.get(container_name)
-        c.kill()
-        return {"ok": True, "container": container_name}
-    except Exception as e:
-        return {"ok": False, "error": str(e)[:200]}
+    return await _agent_manager.stop_agent(instance, force=True)
 
 
 @app.post("/api/instances/restart-all")
 async def restart_all_instances():
-    """Alle Agent-Container mit aktueller Config neu erstellen (neue Env-Vars)."""
-    if not _docker_client:
-        return {"ok": False, "error": "Docker nicht verfügbar"}
-
+    """Alle Agent-Instanzen mit aktueller Config neu starten."""
     cfg = load_config()
     results = {}
 
-    # Dynamische User-Container
+    # Dynamische User-Agents
     for user in cfg.get("users", []):
         uid = user["id"]
-        result = _start_agent_container(user, cfg)
+        result = await _agent_manager.start_agent(user, cfg)
         results[uid] = result
 
-    # Statische Compose-Instanzen (ohne User-Config)
+    # Statische Instanzen (ohne User-Config)
     for inst in INSTANCES:
         if inst not in results:
-            container_name = _get_instance_container(inst)
-            try:
-                c = _docker_client.containers.get(container_name)
-                c.restart(timeout=10)
-                results[inst] = {"ok": True, "container": container_name}
-            except Exception as e:
-                results[inst] = {"ok": False, "error": str(e)[:200]}
+            result = await _agent_manager.restart_agent(inst)
+            results[inst] = result
 
     all_ok = all(r.get("ok", False) for r in results.values())
     return {"ok": all_ok, "results": results}
@@ -893,7 +867,7 @@ async def restart_all_instances():
 
 @app.post("/api/qdrant/restart")
 async def restart_qdrant():
-    """Qdrant-Container neu starten."""
+    """Qdrant-Container neu starten (nur im Standalone-Modus)."""
     if not _docker_client:
         return {"ok": False, "error": "Docker nicht verfügbar"}
     try:
@@ -1486,190 +1460,14 @@ def _find_free_port(existing_ports: list[int]) -> int:
     return port
 
 
-def _get_agent_image() -> str:
-    """Agent-Image auto-detektieren (erstes HAANA-Image das läuft)."""
-    if not _docker_client:
-        return AGENT_IMAGE
-    try:
-        containers = _docker_client.containers.list(all=True)
-        for c in containers:
-            if "instanz-" in c.name or "haana-instanz" in c.name:
-                return c.image.tags[0] if c.image.tags else AGENT_IMAGE
-    except Exception:
-        pass
-    return AGENT_IMAGE
-
-
-def _get_compose_network() -> str:
-    """Docker-Netzwerk auto-detektieren."""
-    if not _docker_client:
-        return COMPOSE_NETWORK
-    try:
-        for net_name in [COMPOSE_NETWORK, "haana-default", "haana_default", "bridge"]:
-            try:
-                _docker_client.networks.get(net_name)
-                return net_name
-            except Exception:
-                pass
-    except Exception:
-        pass
-    return COMPOSE_NETWORK
-
-
-def _container_status(container_name: str) -> str:
-    """Container-Status abfragen."""
-    if not _docker_client:
-        return "unknown"
-    try:
-        c = _docker_client.containers.get(container_name)
-        return c.status  # "running", "exited", "created", etc.
-    except Exception:
-        return "absent"
-
-
-def _start_agent_container(user: dict, cfg: dict) -> dict:
-    """Startet einen Agent-Container für einen User via Docker SDK."""
-    if not _docker_client:
-        return {"ok": False, "error": "Docker nicht verfügbar (kein Socket gemountet?)"}
-
-    uid           = user["id"]
-    display_name  = user.get("display_name", uid)
-    api_port      = user["api_port"]
-    container_name = user.get("container_name", f"haana-instanz-{uid}-1")
-    template      = user.get("claude_md_template", "user")
-    write_scopes  = f"{uid}_memory,household_memory"
-    read_scopes   = f"{uid}_memory,household_memory"
-
-    # LLM-Infos aus Config auflösen
-    primary_llm_id = user.get("primary_llm", "")
-    extract_llm_id = user.get("extraction_llm", "") or cfg.get("memory", {}).get("extraction_llm", "")
-    p_llm, p_prov = _resolve_llm(primary_llm_id, cfg)
-    e_llm, e_prov = _resolve_llm(extract_llm_id, cfg)
-
-    # Ollama-URL aus Providern ableiten (nicht mehr aus services.ollama_url)
-    ollama_url = _find_ollama_url(cfg)
-    emb = cfg.get("embedding", {})
-
-    env = {
-        "HAANA_INSTANCE":         uid,
-        "HAANA_API_PORT":         str(api_port),
-        "HAANA_LOG_DIR":          "/data/logs",
-        "HAANA_WRITE_SCOPES":     write_scopes,
-        "HAANA_READ_SCOPES":      read_scopes,
-        "HAANA_MODEL":            p_llm.get("model", "claude-sonnet-4-6"),
-        "HAANA_MEMORY_MODEL":     e_llm.get("model", "ministral-3-32k:3b"),
-        "HAANA_WINDOW_SIZE":      str(cfg.get("memory", {}).get("window_size", 20)),
-        "HAANA_WINDOW_MINUTES":   str(cfg.get("memory", {}).get("window_minutes", 60)),
-        "HAANA_EMBEDDING_MODEL":  emb.get("model", "bge-m3"),
-        "HAANA_EMBEDDING_DIMS":   str(emb.get("dims", 1024)),
-        "QDRANT_URL":             cfg.get("services", {}).get("qdrant_url", "http://qdrant:6333"),
-        "OLLAMA_URL":             ollama_url,
-        "HA_URL":                 cfg.get("services", {}).get("ha_url", ""),
-        "HA_TOKEN":               cfg.get("services", {}).get("ha_token", ""),
-    }
-
-    # HA MCP-Server URL (optional)
-    services = cfg.get("services", {})
-    if services.get("ha_mcp_enabled"):
-        ha_mcp_type = services.get("ha_mcp_type", "extended")
-        ha_mcp_url = services.get("ha_mcp_url", "").strip()
-        if not ha_mcp_url:
-            # Auto-detect URL based on type
-            ha_url = services.get("ha_url", "").rstrip("/")
-            if ha_url:
-                if ha_mcp_type == "builtin":
-                    ha_mcp_url = f"{ha_url}/mcp_server/sse"
-                # extended: no auto-URL, must be configured manually
-        if ha_mcp_url:
-            env["HA_MCP_URL"] = ha_mcp_url
-            env["HA_MCP_TYPE"] = ha_mcp_type  # agent needs this for SSE vs HTTP
-
-    # Anthropic API-Key oder Custom URL
-    is_minimax = p_prov.get("type") == "minimax"
-    if is_minimax:
-        # MiniMax: Anthropic-kompatibel, eigene Auth + Env-Vars
-        env["ANTHROPIC_BASE_URL"]  = p_prov.get("url") or "https://api.minimax.io/anthropic"
-        env["ANTHROPIC_AUTH_TOKEN"] = p_prov.get("key", "")
-        env["ANTHROPIC_MODEL"]     = p_llm.get("model", "MiniMax-M2.5")
-        env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
-        # ANTHROPIC_API_KEY darf bei MiniMax NICHT gesetzt sein
-    elif p_prov.get("type") == "openai":
-        if p_prov.get("key"):
-            env["OPENAI_API_KEY"] = p_prov["key"]
-        if p_prov.get("url"):
-            env["OPENAI_BASE_URL"] = p_prov["url"]
-        env["OPENAI_MODEL"] = p_llm.get("model", "gpt-4o")
-    elif p_prov.get("type") == "gemini":
-        if p_prov.get("key"):
-            env["GEMINI_API_KEY"] = p_prov["key"]
-        env["GEMINI_MODEL"] = p_llm.get("model", "gemini-2.0-flash")
-    else:
-        if p_prov.get("key"):
-            env["ANTHROPIC_API_KEY"] = p_prov["key"]
-        if p_prov.get("url"):
-            env["ANTHROPIC_BASE_URL"] = p_prov["url"]
-
-    image = _get_agent_image()
-    network = _get_compose_network()
-
-    # Host-Pfad für CLAUDE.md
-    host_claude_md = f"{HOST_BASE}/instanzen/{uid}/CLAUDE.md"
-    host_skills    = f"{HOST_BASE}/skills"
-    host_claude_config = "/root/.claude"
-
-    volumes = {
-        host_claude_md:     {"bind": "/app/CLAUDE.md",        "mode": "ro"},
-        host_skills:        {"bind": "/app/skills",            "mode": "ro"},
-        DATA_VOLUME:        {"bind": "/data",                  "mode": "rw"},
-    }
-
-    # Claude OAuth-Credentials mounten
-    is_oauth = p_prov.get("type") == "anthropic" and p_prov.get("auth_method") == "oauth"
-    if is_oauth and p_prov.get("oauth_dir"):
-        # Provider-spezifisches OAuth-Dir mounten
-        volumes[p_prov["oauth_dir"]] = {"bind": "/home/haana/.claude", "mode": "rw"}
-    elif not is_minimax and p_prov.get("type") not in ("openai", "gemini"):
-        volumes[host_claude_config] = {"bind": "/home/haana/.claude", "mode": "rw"}
-        claude_json_host = Path("/root/.claude.json")
-        try:
-            has_claude_json = claude_json_host.is_file()
-        except PermissionError:
-            has_claude_json = False
-        if has_claude_json:
-            volumes[str(claude_json_host)] = {"bind": "/home/haana/.claude.json", "mode": "rw"}
-
-    try:
-        # Eventuell alten Container entfernen
-        try:
-            old = _docker_client.containers.get(container_name)
-            old.stop(timeout=5)
-            old.remove()
-        except Exception:
-            pass
-
-        container = _docker_client.containers.run(
-            image,
-            name=container_name,
-            environment=env,
-            volumes=volumes,
-            ports={f"{api_port}/tcp": api_port},
-            network=network,
-            detach=True,
-            restart_policy={"Name": "unless-stopped"},
-        )
-        return {"ok": True, "container_id": container.short_id, "container_name": container_name}
-    except Exception as e:
-        return {"ok": False, "error": str(e)[:300]}
-
-
 @app.get("/api/users")
 async def get_users():
-    """User-Liste mit Container-Status."""
+    """User-Liste mit Agent-Status."""
     cfg = load_config()
     users = cfg.get("users", [])
     result = []
     for u in users:
-        status = _container_status(u.get("container_name", f"haana-instanz-{u['id']}-1"))
+        status = _agent_manager.agent_status(u["id"])
         result.append({**u, "container_status": status})
     return result
 
@@ -1733,8 +1531,8 @@ async def create_user(request: Request):
     )
     (claude_md_dir / "CLAUDE.md").write_text(claude_md_content, encoding="utf-8")
 
-    # Container starten
-    result = _start_agent_container(user, cfg)
+    # Agent starten
+    result = await _agent_manager.start_agent(user, cfg)
 
     # User in config speichern (auch wenn Container-Start fehlschlägt)
     cfg.setdefault("users", []).append(user)
@@ -1775,7 +1573,7 @@ async def update_user(user_id: str, request: Request):
 
     container_result = None
     if needs_restart:
-        container_result = _start_agent_container(user, cfg)
+        container_result = await _agent_manager.start_agent(user, cfg)
 
     return {"ok": True, "user": user, "restarted": needs_restart, "container": container_result}
 
@@ -1791,18 +1589,9 @@ async def delete_user(user_id: str):
     if user.get("system"):
         raise HTTPException(403, "System-Instanzen können nicht gelöscht werden")
 
-    container_name = user.get("container_name", f"haana-instanz-{user_id}-1")
-
-    # Container stoppen + entfernen
-    container_removed = False
-    if _docker_client:
-        try:
-            c = _docker_client.containers.get(container_name)
-            c.stop(timeout=5)
-            c.remove()
-            container_removed = True
-        except Exception:
-            pass
+    # Agent stoppen + entfernen
+    remove_result = await _agent_manager.remove_agent(user_id)
+    container_removed = remove_result.get("ok", False)
 
     # CLAUDE.md-Verzeichnis löschen
     import shutil
@@ -1821,38 +1610,34 @@ async def delete_user(user_id: str):
 
 @app.post("/api/users/{user_id}/restart")
 async def restart_user_container(user_id: str):
-    """Container für einen User neu starten."""
+    """Agent für einen User neu starten."""
     cfg = load_config()
     user = next((u for u in cfg.get("users", []) if u["id"] == user_id), None)
     if not user:
         raise HTTPException(404, f"User '{user_id}' nicht gefunden")
-    result = _start_agent_container(user, cfg)
+    result = await _agent_manager.start_agent(user, cfg)
     return {"ok": result.get("ok", False), "container": result}
 
 
 @app.post("/api/users/{user_id}/stop")
 async def stop_user_container(user_id: str):
-    """Container für einen User stoppen."""
+    """Agent für einen User stoppen."""
     cfg = load_config()
     user = next((u for u in cfg.get("users", []) if u["id"] == user_id), None)
     if not user:
         raise HTTPException(404, f"User '{user_id}' nicht gefunden")
-    container_name = user.get("container_name", f"haana-instanz-{user_id}-1")
-    if not _docker_client:
-        return {"ok": False, "error": "Docker nicht verfügbar"}
-    try:
-        c = _docker_client.containers.get(container_name)
-        c.stop(timeout=5)
-        return {"ok": True}
-    except Exception as e:
-        return {"ok": False, "error": str(e)[:200]}
+    return await _agent_manager.stop_agent(user_id)
 
 
 def _get_agent_url(instance: str) -> str:
-    """Agent-URL aus AGENT_URLS oder dynamisch aus config."""
+    """Agent-URL: AgentManager oder Fallback aus AGENT_URLS/Config."""
+    if _agent_manager:
+        url = _agent_manager.agent_url(instance)
+        if url:
+            return url
+    # Fallback für statische Instanzen
     if instance in AGENT_URLS:
         return AGENT_URLS[instance]
-    # Dynamischer User: URL aus api_port
     cfg = load_config()
     user = next((u for u in cfg.get("users", []) if u["id"] == instance), None)
     if user:

@@ -348,7 +348,7 @@ def test_load_config_ensures_system_users(tmp_path):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Tests: _start_agent_container – Env-Var Mapping (neue Struktur)
+# Tests: _build_agent_env – Env-Var Mapping (AgentManager-Abstraktion)
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _make_cfg(**overrides):
@@ -400,18 +400,17 @@ def _make_user(**overrides):
     return user
 
 
-def test_start_container_basic_env_vars():
+def _build_env(user, cfg):
+    """Helper: ruft _build_agent_env mit den richtigen Resolve-Funktionen auf."""
     main = _import_main()
+    from core.process_manager import _build_agent_env
+    return _build_agent_env(user, cfg, main._resolve_llm, main._find_ollama_url)
+
+
+def test_build_env_basic():
     cfg = _make_cfg()
     user = _make_user()
-
-    with mock.patch.object(main, "_docker_client", mock.MagicMock()) as dc:
-        dc.containers.get.side_effect = Exception("not found")
-        dc.containers.run.return_value = mock.MagicMock(short_id="abc123")
-        main._start_agent_container(user, cfg)
-
-    call_kwargs = dc.containers.run.call_args
-    env = call_kwargs[1]["environment"] if "environment" in call_kwargs[1] else call_kwargs.kwargs["environment"]
+    env = _build_env(user, cfg)
     assert env["HAANA_INSTANCE"] == "testuser"
     assert env["HAANA_API_PORT"] == "8001"
     assert env["HAANA_MODEL"] == "claude-sonnet-4-6"
@@ -420,39 +419,24 @@ def test_start_container_basic_env_vars():
     assert env["OLLAMA_URL"] == "http://ollama:11434"
 
 
-def test_start_container_extraction_llm():
+def test_build_env_extraction_llm():
     """Extraction-LLM wird aus User oder Global-Memory aufgeloest."""
-    main = _import_main()
     cfg = _make_cfg()
     user = _make_user()  # extraction_llm leer → fällt auf global zurück
-
-    with mock.patch.object(main, "_docker_client", mock.MagicMock()) as dc:
-        dc.containers.get.side_effect = Exception("not found")
-        dc.containers.run.return_value = mock.MagicMock(short_id="abc123")
-        main._start_agent_container(user, cfg)
-
-    env = dc.containers.run.call_args[1]["environment"]
+    env = _build_env(user, cfg)
     assert env["HAANA_MEMORY_MODEL"] == "ministral-3-32k:3b"
 
 
-def test_start_container_user_extraction_override():
+def test_build_env_user_extraction_override():
     """User-spezifisches Extraction-LLM ueberschreibt Global."""
-    main = _import_main()
     cfg = _make_cfg()
     user = _make_user(extraction_llm="claude-primary")
-
-    with mock.patch.object(main, "_docker_client", mock.MagicMock()) as dc:
-        dc.containers.get.side_effect = Exception("not found")
-        dc.containers.run.return_value = mock.MagicMock(short_id="abc123")
-        main._start_agent_container(user, cfg)
-
-    env = dc.containers.run.call_args[1]["environment"]
+    env = _build_env(user, cfg)
     assert env["HAANA_MEMORY_MODEL"] == "claude-sonnet-4-6"
 
 
-def test_start_container_minimax_provider():
+def test_build_env_minimax_provider():
     """MiniMax-Provider setzt ANTHROPIC_BASE_URL/AUTH_TOKEN statt API_KEY."""
-    main = _import_main()
     cfg = _make_cfg(providers=[
         {"id": "mm-1", "name": "MiniMax", "type": "minimax",
          "url": "https://api.minimax.io/anthropic", "key": "mm-key"},
@@ -460,80 +444,40 @@ def test_start_container_minimax_provider():
         {"id": "mm-llm", "name": "MiniMax M2.5", "provider_id": "mm-1", "model": "MiniMax-M2.5"},
     ])
     user = _make_user(primary_llm="mm-llm")
-
-    with mock.patch.object(main, "_docker_client", mock.MagicMock()) as dc:
-        dc.containers.get.side_effect = Exception("not found")
-        dc.containers.run.return_value = mock.MagicMock(short_id="abc123")
-        main._start_agent_container(user, cfg)
-
-    env = dc.containers.run.call_args[1]["environment"]
+    env = _build_env(user, cfg)
     assert env["ANTHROPIC_BASE_URL"] == "https://api.minimax.io/anthropic"
     assert env["ANTHROPIC_AUTH_TOKEN"] == "mm-key"
     assert "ANTHROPIC_API_KEY" not in env
 
 
-def test_start_container_mcp_enabled():
-    main = _import_main()
+def test_build_env_mcp_enabled():
     cfg = _make_cfg()
     cfg["services"]["ha_mcp_enabled"] = True
     cfg["services"]["ha_mcp_url"] = "http://ha:9583/private_abc"
     user = _make_user()
-
-    with mock.patch.object(main, "_docker_client", mock.MagicMock()) as dc:
-        dc.containers.get.side_effect = Exception("not found")
-        dc.containers.run.return_value = mock.MagicMock(short_id="abc123")
-        result = main._start_agent_container(user, cfg)
-
-    assert result["ok"] is True
-    env = dc.containers.run.call_args[1]["environment"]
+    env = _build_env(user, cfg)
     assert env["HA_MCP_URL"] == "http://ha:9583/private_abc"
     assert env["HA_MCP_TYPE"] == "extended"
 
 
-def test_start_container_no_mcp_when_disabled():
-    main = _import_main()
+def test_build_env_no_mcp_when_disabled():
     cfg = _make_cfg()
     user = _make_user()
-
-    with mock.patch.object(main, "_docker_client", mock.MagicMock()) as dc:
-        dc.containers.get.side_effect = Exception("not found")
-        dc.containers.run.return_value = mock.MagicMock(short_id="abc123")
-        main._start_agent_container(user, cfg)
-
-    env = dc.containers.run.call_args[1]["environment"]
+    env = _build_env(user, cfg)
     assert "HA_MCP_URL" not in env
     assert "HA_MCP_TYPE" not in env
 
 
-def test_start_container_builtin_auto_url():
-    main = _import_main()
+def test_build_env_builtin_auto_url():
     cfg = _make_cfg()
     cfg["services"]["ha_mcp_enabled"] = True
     cfg["services"]["ha_mcp_type"] = "builtin"
     cfg["services"]["ha_mcp_url"] = ""
     cfg["services"]["ha_url"] = "http://homeassistant.local:8123"
     user = _make_user()
-
-    with mock.patch.object(main, "_docker_client", mock.MagicMock()) as dc:
-        dc.containers.get.side_effect = Exception("not found")
-        dc.containers.run.return_value = mock.MagicMock(short_id="abc123")
-        main._start_agent_container(user, cfg)
-
-    env = dc.containers.run.call_args[1]["environment"]
+    env = _build_env(user, cfg)
     assert env["HA_MCP_URL"] == "http://homeassistant.local:8123/mcp_server/sse"
     assert env["HA_MCP_TYPE"] == "builtin"
-
-
-def test_start_container_no_docker():
-    main = _import_main()
-    cfg = _make_cfg()
-    user = _make_user()
-
-    with mock.patch.object(main, "_docker_client", None):
-        result = main._start_agent_container(user, cfg)
-
-    assert result["ok"] is False
-    assert "Docker" in result["error"]
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -675,9 +619,8 @@ def test_find_ollama_url_empty():
 # Tests: Container-Start mit OpenAI/Gemini/OAuth Providern
 # ══════════════════════════════════════════════════════════════════════════════
 
-def test_start_container_openai_provider():
+def test_build_env_openai_provider():
     """OpenAI-Provider setzt OPENAI_API_KEY und OPENAI_MODEL."""
-    main = _import_main()
     cfg = _make_cfg(providers=[
         {"id": "oa-1", "name": "OpenAI", "type": "openai", "key": "sk-openai", "url": ""},
         {"id": "ollama-home", "name": "Ollama", "type": "ollama", "url": "http://ollama:11434", "key": ""},
@@ -686,21 +629,14 @@ def test_start_container_openai_provider():
         {"id": "ollama-extract", "name": "Ministral", "provider_id": "ollama-home", "model": "ministral-3-32k:3b"},
     ])
     user = _make_user(primary_llm="gpt")
-
-    with mock.patch.object(main, "_docker_client", mock.MagicMock()) as dc:
-        dc.containers.get.side_effect = Exception("not found")
-        dc.containers.run.return_value = mock.MagicMock(short_id="abc123")
-        main._start_agent_container(user, cfg)
-
-    env = dc.containers.run.call_args[1]["environment"]
+    env = _build_env(user, cfg)
     assert env["OPENAI_API_KEY"] == "sk-openai"
     assert env["OPENAI_MODEL"] == "gpt-4o"
     assert "ANTHROPIC_API_KEY" not in env
 
 
-def test_start_container_gemini_provider():
+def test_build_env_gemini_provider():
     """Gemini-Provider setzt GEMINI_API_KEY und GEMINI_MODEL."""
-    main = _import_main()
     cfg = _make_cfg(providers=[
         {"id": "gem-1", "name": "Gemini", "type": "gemini", "key": "AIza-test", "url": ""},
         {"id": "ollama-home", "name": "Ollama", "type": "ollama", "url": "http://ollama:11434", "key": ""},
@@ -709,21 +645,14 @@ def test_start_container_gemini_provider():
         {"id": "ollama-extract", "name": "Ministral", "provider_id": "ollama-home", "model": "ministral-3-32k:3b"},
     ])
     user = _make_user(primary_llm="gem-llm")
-
-    with mock.patch.object(main, "_docker_client", mock.MagicMock()) as dc:
-        dc.containers.get.side_effect = Exception("not found")
-        dc.containers.run.return_value = mock.MagicMock(short_id="abc123")
-        main._start_agent_container(user, cfg)
-
-    env = dc.containers.run.call_args[1]["environment"]
+    env = _build_env(user, cfg)
     assert env["GEMINI_API_KEY"] == "AIza-test"
     assert env["GEMINI_MODEL"] == "gemini-2.0-flash"
     assert "ANTHROPIC_API_KEY" not in env
 
 
-def test_start_container_oauth_provider():
-    """OAuth-Provider mounted provider-spezifisches oauth_dir."""
-    main = _import_main()
+def test_build_env_oauth_provider():
+    """OAuth-Provider: Env-Vars werden korrekt gesetzt (keine API_KEY)."""
     cfg = _make_cfg(providers=[
         {"id": "anth-oauth", "name": "Pro", "type": "anthropic",
          "auth_method": "oauth", "oauth_dir": "/data/claude-auth/anth-oauth", "key": "", "url": ""},
@@ -733,12 +662,38 @@ def test_start_container_oauth_provider():
         {"id": "ollama-extract", "name": "Ministral", "provider_id": "ollama-home", "model": "ministral-3-32k:3b"},
     ])
     user = _make_user(primary_llm="claude-oauth")
+    env = _build_env(user, cfg)
+    assert env["HAANA_MODEL"] == "claude-sonnet-4-6"
+    assert "ANTHROPIC_API_KEY" not in env  # OAuth hat keinen Key
 
-    with mock.patch.object(main, "_docker_client", mock.MagicMock()) as dc:
-        dc.containers.get.side_effect = Exception("not found")
-        dc.containers.run.return_value = mock.MagicMock(short_id="abc123")
-        main._start_agent_container(user, cfg)
 
-    volumes = dc.containers.run.call_args[1]["volumes"]
-    assert "/data/claude-auth/anth-oauth" in volumes
-    assert volumes["/data/claude-auth/anth-oauth"]["bind"] == "/home/haana/.claude"
+# ══════════════════════════════════════════════════════════════════════════════
+# Tests: AgentManager – detect_mode + DockerAgentManager
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_detect_mode_auto_no_docker():
+    """Ohne Docker-Socket → addon Modus."""
+    from core.process_manager import detect_mode
+    with mock.patch("core.process_manager.Path") as MockPath:
+        MockPath.return_value.exists.return_value = False
+        with mock.patch.dict(os.environ, {"HAANA_MODE": "auto"}):
+            assert detect_mode() == "addon"
+
+
+def test_detect_mode_explicit():
+    """Expliziter Modus wird respektiert."""
+    from core.process_manager import detect_mode
+    with mock.patch.dict(os.environ, {"HAANA_MODE": "standalone"}):
+        assert detect_mode() == "standalone"
+
+
+def test_docker_agent_manager_status_no_client():
+    """DockerAgentManager ohne Client gibt 'unknown' zurueck."""
+    from core.process_manager import DockerAgentManager
+    dam = DockerAgentManager(
+        None, host_base="/opt/haana", data_volume="vol",
+        compose_network="net", agent_image="img",
+        resolve_llm_fn=lambda *a: ({}, {}), find_ollama_url_fn=lambda c: "",
+    )
+    assert dam.agent_status("test") == "unknown"
+    assert dam.agent_url("test") == "http://haana-instanz-test-1:8001"
