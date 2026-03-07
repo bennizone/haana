@@ -148,7 +148,7 @@ function _renderProvBodyAnthropic(p, i) {
       <div class="form-group" style="margin-bottom:10px;">
         <label>${t('config_provider.name')}</label>
         <input type="text" id="prov-${i}-name" value="${escAttr(p.name||'')}"
-          oninput="document.getElementById('prov-${i}-label').textContent=this.value||'${escAttr(p.id)}'">
+          oninput="document.getElementById('prov-${i}-label').textContent=this.value||'${escAttr(p.id)}';if(cfg&&cfg.providers&&cfg.providers[${i}])cfg.providers[${i}].name=this.value;">
       </div>
       <div class="form-group" style="margin-bottom:10px;">
         <label>${t('config_provider.url')} <span style="font-size:11px;color:var(--muted);">(${t('config_provider.url_hint')})</span></label>
@@ -192,7 +192,7 @@ function _renderProvBodyAnthropic(p, i) {
       <div class="form-group">
         <label>${t('config_provider.name')}</label>
         <input type="text" id="prov-${i}-name" value="${escAttr(p.name||'')}"
-          oninput="document.getElementById('prov-${i}-label').textContent=this.value||'${escAttr(p.id)}'">
+          oninput="document.getElementById('prov-${i}-label').textContent=this.value||'${escAttr(p.id)}';if(cfg&&cfg.providers&&cfg.providers[${i}])cfg.providers[${i}].name=this.value;">
       </div>
       <div class="form-group">
         <label>${t('config_provider.api_key')}</label>
@@ -216,7 +216,7 @@ function _renderProvBodyOllama(p, i) {
       <div class="form-group">
         <label>${t('config_provider.name')}</label>
         <input type="text" id="prov-${i}-name" value="${escAttr(p.name||'')}"
-          oninput="document.getElementById('prov-${i}-label').textContent=this.value||'${escAttr(p.id)}'">
+          oninput="document.getElementById('prov-${i}-label').textContent=this.value||'${escAttr(p.id)}';if(cfg&&cfg.providers&&cfg.providers[${i}])cfg.providers[${i}].name=this.value;">
       </div>
       <div class="form-group">
         <label>${t('config_provider.server_url')} <span style="color:var(--red);">*</span></label>
@@ -236,7 +236,7 @@ function _renderProvBodyMinimax(p, i) {
       <div class="form-group">
         <label>${t('config_provider.name')}</label>
         <input type="text" id="prov-${i}-name" value="${escAttr(p.name||'')}"
-          oninput="document.getElementById('prov-${i}-label').textContent=this.value||'${escAttr(p.id)}'">
+          oninput="document.getElementById('prov-${i}-label').textContent=this.value||'${escAttr(p.id)}';if(cfg&&cfg.providers&&cfg.providers[${i}])cfg.providers[${i}].name=this.value;">
       </div>
       <div class="form-group">
         <label>${t('config_provider.api_key')}</label>
@@ -260,7 +260,7 @@ function _renderProvBodyOpenai(p, i) {
       <div class="form-group">
         <label>${t('config_provider.name')}</label>
         <input type="text" id="prov-${i}-name" value="${escAttr(p.name||'')}"
-          oninput="document.getElementById('prov-${i}-label').textContent=this.value||'${escAttr(p.id)}'">
+          oninput="document.getElementById('prov-${i}-label').textContent=this.value||'${escAttr(p.id)}';if(cfg&&cfg.providers&&cfg.providers[${i}])cfg.providers[${i}].name=this.value;">
       </div>
       <div class="form-group">
         <label>${t('config_provider.api_key')}</label>
@@ -284,7 +284,7 @@ function _renderProvBodyGemini(p, i) {
       <div class="form-group">
         <label>${t('config_provider.name')}</label>
         <input type="text" id="prov-${i}-name" value="${escAttr(p.name||'')}"
-          oninput="document.getElementById('prov-${i}-label').textContent=this.value||'${escAttr(p.id)}'">
+          oninput="document.getElementById('prov-${i}-label').textContent=this.value||'${escAttr(p.id)}';if(cfg&&cfg.providers&&cfg.providers[${i}])cfg.providers[${i}].name=this.value;">
       </div>
       <div class="form-group">
         <label>${t('config_provider.api_key')}</label>
@@ -304,7 +304,7 @@ function _renderProvBodyCustom(p, i) {
       <div class="form-group">
         <label>${t('config_provider.name')}</label>
         <input type="text" id="prov-${i}-name" value="${escAttr(p.name||'')}"
-          oninput="document.getElementById('prov-${i}-label').textContent=this.value||'${escAttr(p.id)}'">
+          oninput="document.getElementById('prov-${i}-label').textContent=this.value||'${escAttr(p.id)}';if(cfg&&cfg.providers&&cfg.providers[${i}])cfg.providers[${i}].name=this.value;">
       </div>
       <div class="form-group">
         <label>${t('config_provider.api_key')}</label>
