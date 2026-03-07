@@ -115,6 +115,7 @@ services:
       - "8080:8080"
     volumes:
       - ./instanzen:/app/instanzen
+      - ./core:/app/core:ro
       - haana-data:/data
       - /var/run/docker.sock:/var/run/docker.sock
       - /root/.claude:/claude-auth
