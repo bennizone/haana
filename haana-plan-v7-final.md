@@ -539,7 +539,7 @@ Echter gemeinsamer Chatverlauf über alle Kanäle. Eine Session, mehrere Eingabe
 - Letzter Lauf: Zeitstempel + Zusammenfassung (was zusammengeführt, was markiert)
 - Protokoll: aufklappbar
 
-**Dienste global:** HA URL + Token, Ollama URL
+**Dienste global:** HA URL + Token (Ollama URL entfernt – wird aus Providern abgeleitet)
 
 **Backup:** SMB/CIFS Ziel, Credentials, Zeitplan, Retention, manuell auslösen
 
@@ -698,7 +698,7 @@ Schritt 7: Privacy
 - Config → Retention: Log-Aufbewahrungsfristen konfigurierbar
 - Users-Tab: Expandierbare Karten, CLAUDE.md Inline-Editor pro User, Dropdown HA Person-Entity
 - Chat-Tab: kanalübergreifend, SSE Live-Updates, Agent-Online/Offline-Status
-- i18n: Key-basiertes Übersetzungssystem (de.json + en.json, ~220 Keys), `t()` Funktion, `data-i18n` Attribute, Sprachauswahl im Header
+- i18n: Key-basiertes Übersetzungssystem (de.json + en.json, 388 Keys), `t()` Funktion, `data-i18n` Attribute, Sprachauswahl im Header, alle JS-Module vollständig konvertiert
 - Design: Modernisiert mit Glassmorphism, Gradient-Buttons, CSS Custom Properties, Dark Theme
 - Responsive: Mobile-first CSS, Breakpoints bei 640px und 1024px
 - Modular: CSS extrahiert (admin.css), JS-Utilities extrahiert (i18n.js, utils.js, modal.js)
@@ -751,17 +751,22 @@ Schritt 7: Privacy
 - Config-Tabs umstrukturiert: Services → Home Assistant / WhatsApp / Infra (logische Gruppierung)
 - HA Auto-Backup: Konfigurierbar im Admin-Interface, Agent erstellt HA-Backup vor Automations-/Script-Änderungen
 - MCP-Typ-Auswahl: Admin kann zwischen Built-in (SSE, 6 Tools) und Extended (HTTP, 89 Tools) MCP wählen
-- Test-Suite: 44 Unit-Tests (test_agent, test_config, test_i18n, test_memory)
-- Integration-Test: Automatisierter End-to-End-Test (User-CRUD, Chat, MiniMax, MCP, Memory, User-Setup-Verifizierung)
+- Test-Suite: 81 Unit-Tests (test_config: 42, test_agent: 16, test_memory: 15, test_i18n: 8)
+- Integration-Test: Automatisierter End-to-End-Test, 16/16 PASS (User-CRUD, Chat, MiniMax, MCP, Memory, User-Setup-Verifizierung)
 - Multi-Agent Development: 4 spezialisierte Agenten (Webinterface, Review, Test, Docs) mit Briefing-Dokumenten
 
-**Noch offen:**
-- Admin-Interface: Restliche hardcoded deutsche Strings in dynamischem JS durch `t()`-Aufrufe ersetzen
-- Admin-Interface: Claude Code OAuth-Login im Webinterface ermöglichen (Token-Refresh ohne SSH)
-- Backup auf TrueNAS: SMB/CIFS, täglich, Logs unbegrenzt / Qdrant 7 Tage
-- Docker Image Optimierung: Agent-Images 10.5 GB wegen PyTorch/CUDA (sentence-transformers). CPU-only oder entfernen → ~1-2 GB
+**Weitere erledigte Aufgaben (Session 2025-03-07) ✅:**
+- i18n vollständig: 388 Keys pro Sprache (de.json + en.json), alle JS-Module konvertiert (chat.js, config.js), keine hardcoded Strings mehr
+- Claude Code OAuth im Admin-Interface: Zwei Auth-Optionen (API-Key direkt + OAuth Login Flow), PTY-basierter OAuth-Flow mit /proc/net/tcp Port-Detection, kein Shell-Zugriff nötig
+- Docker Image Optimierung: 10.5 GB → 327 MB (sentence-transformers + PyTorch/CUDA entfernt, CPU-only)
+- Integration-Test: 16/16 PASS (User-CRUD, Chat, MiniMax, MCP, Memory, User-Setup)
+- MiniMax Provider: Env-Var-Mapping (MINIMAX_API_KEY, MINIMAX_BASE_URL), Auto-Detection
+- Provider-Redesign: Typspezifische Formulare (Anthropic, Ollama, MiniMax, OpenAI, Gemini, Custom), OAuth pro Provider mit eigenen Credential-Pfaden, `services.ollama_url` entfernt (wird aus Providern abgeleitet), Infra-Tab nur noch Qdrant, OpenAI/Gemini API-Keys in Container-Start
 
-**Ergebnis:** Alice chattet per WhatsApp (Text + Sprache, bidirektional). Agent kennt ihn bereits (Phase 1 Memory). STT + TTS via Nabu Casa. Admin-Interface unter `http://10.83.1.11:8080` zugänglich, responsiv, mehrsprachig vorbereitet.
+**Noch offen:**
+- Backup auf TrueNAS: SMB/CIFS, täglich, Logs unbegrenzt / Qdrant 7 Tage
+
+**Ergebnis:** Alice chattet per WhatsApp (Text + Sprache, bidirektional). Agent kennt ihn bereits (Phase 1 Memory). STT + TTS via Nabu Casa. Admin-Interface unter `http://10.83.1.11:8080` zugänglich, responsiv, vollständig mehrsprachig (388 Keys). Claude OAuth pro Provider ohne SSH möglich. 6 Provider-Typen mit typspezifischen Formularen.
 
 ---
 
