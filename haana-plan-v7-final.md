@@ -541,7 +541,7 @@ Echter gemeinsamer Chatverlauf über alle Kanäle. Eine Session, mehrere Eingabe
 
 **Dienste global:** HA URL + Token (Ollama URL entfernt – wird aus Providern abgeleitet)
 
-**Backup:** SMB/CIFS Ziel, Credentials, Zeitplan, Retention, manuell auslösen
+**Backup:** HA-eigene Backup-Routine (Config in `/data` → automatisch, Logs in `/media` → optional). SMB/CIFS auf TrueNAS optional für Standalone-Betrieb.
 
 **Anonymisierer:** Aktivieren/Deaktivieren, bekannte Namen verwalten, automatisch erkannte anzeigen
 
@@ -566,10 +566,14 @@ Echter gemeinsamer Chatverlauf über alle Kanäle. Eine Session, mehrere Eingabe
     ├── tool-calls/
     └── dream-process/
 
-Backup: täglich → SMB/CIFS → TrueNAS
-    → Logs: komprimiert (zip), unbegrenzt aufbewahren
-    → Qdrant + Config: komprimiert, 7 Tage Retention
-    → Restore: /data zurückkopieren → docker compose up -d → fertig
+Backup (HA Add-on Modus):
+    → Config + Qdrant + Context in /data → automatisch im HA-Backup
+    → Logs in /media/haana/logs → optional im HA Media-Backup
+    → Restore: HA-Backup wiederherstellen → Add-on startet
+
+Backup (Standalone-Modus):
+    → Optional: SMB/CIFS → TrueNAS (nicht priorisiert)
+    → /data zurückkopieren → docker compose up -d → fertig
 ```
 
 **Zugangsdaten:** Plaintext in `config/`, nur auf dem LXC, kein externer Zugang. Authentik/Vault kommt auf die "für später"-Liste wenn sowieso ein einheitliches Auth-System für alle Self-Hosted-Dienste kommt.
@@ -596,6 +600,7 @@ API-Keys und Passwörter gehen grundsätzlich nie ans LLM – separate, immer ak
 ## Docker-Stack
 
 ```
+## Standalone (Entwicklung)
 docker-compose.yml
 ├── instanz-alice          (Python, Claude Code SDK Agent, Admin)
 ├── instanz-bob           (Python, Claude Code SDK Agent, User)
@@ -605,6 +610,16 @@ docker-compose.yml
 ├── qdrant                 (Vector Store, Port 6333)
 ├── mem0                   (Memory Layer)
 └── ollama                 (optional – wenn kein externer GPU-Server)
+
+## HA Add-on (Produktion)
+haana-addons/              (Multi-Add-on Repository im selben Git-Repo)
+├── haana/                 (Haupt-Add-on: Admin + In-Process Agents + Qdrant via S6)
+├── haana-ollama-cpu/      (Optional: CPU-only Ollama, auswählbare Modelle)
+└── haana-whatsapp/        (Optional: WhatsApp Bridge)
+
+AgentManager-Abstraktion (core/process_manager.py):
+├── DockerAgentManager     → Standalone: Container via Docker SDK
+└── InProcessAgentManager  → Add-on: Agents als Python-Objekte im selben Prozess
 
 Nicht im Stack (extern, bereits laufend):
 ├── Ollama GPU-Server      (GTX 1080Ti, alle Modelle geladen)
@@ -763,10 +778,21 @@ Schritt 7: Privacy
 - MiniMax Provider: Env-Var-Mapping (MINIMAX_API_KEY, MINIMAX_BASE_URL), Auto-Detection
 - Provider-Redesign: Typspezifische Formulare (Anthropic, Ollama, MiniMax, OpenAI, Gemini, Custom), OAuth pro Provider mit eigenen Credential-Pfaden, `services.ollama_url` entfernt (wird aus Providern abgeleitet), Infra-Tab nur noch Qdrant, OpenAI/Gemini API-Keys in Container-Start
 
-**Noch offen:**
-- Backup auf TrueNAS: SMB/CIFS, täglich, Logs unbegrenzt / Qdrant 7 Tage
+**Weitere erledigte Aufgaben (HA Add-on Vorbereitung) ✅:**
+- AgentManager-Abstraktion: `core/process_manager.py` mit DockerAgentManager (Standalone) + InProcessAgentManager (Add-on), Auto-Detection via Docker-Socket
+- Docker-SDK Code aus `main.py` extrahiert, alle Endpoints nutzen `_agent_manager.*`
+- HA Add-on Repository: `haana-addons/` mit 3 Add-ons (haana, haana-ollama-cpu, haana-whatsapp)
+- S6 Overlay Services: Qdrant + HAANA als longrun Services mit Dependencies
+- CPU-Only Ollama Add-on: Auswählbare Modelle (Embedding: nomic/minilm/bge-m3, LLM: qwen3 0.6b/1.7b)
+- Datenpfade: Config in `/data` (HA-Backup automatisch), Logs in `/media/haana/logs` (HA Media-Backup optional)
+- Backup-Strategie: HA-eigene Backup-Routine statt SMB/CIFS (SMB nach hinten verschoben als optional)
+- Test-Suite: 83 Unit-Tests (44 test_config, 16 test_agent, 15 test_memory, 8 test_i18n)
 
-**Ergebnis:** Alice chattet per WhatsApp (Text + Sprache, bidirektional). Agent kennt ihn bereits (Phase 1 Memory). STT + TTS via Nabu Casa. Admin-Interface unter `http://10.83.1.11:8080` zugänglich, responsiv, vollständig mehrsprachig (388 Keys). Claude OAuth pro Provider ohne SSH möglich. 6 Provider-Typen mit typspezifischen Formularen.
+**Noch offen:**
+- HA Add-on in Test-HA installieren und testen
+- Backup auf TrueNAS (SMB/CIFS) → optional, nachrangig
+
+**Ergebnis:** Alice chattet per WhatsApp (Text + Sprache, bidirektional). Agent kennt ihn bereits (Phase 1 Memory). STT + TTS via Nabu Casa. Admin-Interface unter `http://10.83.1.11:8080` zugänglich, responsiv, vollständig mehrsprachig (388 Keys). Claude OAuth pro Provider ohne SSH möglich. 6 Provider-Typen mit typspezifischen Formularen. HA Add-on Packaging vorbereitet (3 Add-ons, Dual-Mode Architektur).
 
 ---
 
@@ -857,7 +883,7 @@ Schritt 7: Privacy
 - Daily Brief persönlicher, kontextsensitiver
 - Setup-Wizard polieren, README für Community
 - GitHub Repo public
-- HA Add-on Paketierung (HAOS-kompatibel, Schritt 5 im Setup-Wizard entfällt)
+- HA Add-on Paketierung: ✅ Grundstruktur fertig (3 Add-ons, S6 Services, Dual-Mode AgentManager). Noch zu testen in HA.
 
 ---
 
@@ -878,6 +904,7 @@ Schritt 7: Privacy
 - Multi-User-Wissensbasis (Outline/AppFlowy) wenn Auth-System steht
 - MariaDB direkter HA-Zugriff (fragil wegen undokumentiertem Schema, vorerst Webhook-Weg)
 - HA Add-on Store Veröffentlichung (Phase 7)
+- Backup auf TrueNAS via SMB/CIFS (optional, nachrangig – HA-Backup-Routine reicht für Add-on-Modus)
 
 **Evaluation:**
 - bge-m3 + ministral-3-32k:3b als lokaler Stack: Extraktion und Voice bestätigt, Vision noch zu evaluieren
