@@ -234,7 +234,7 @@ DEFAULT_CONFIG = {
         {
             "id": "alice", "display_name": "Alice", "role": "admin",
             "primary_llm": "claude-primary", "fallback_llm": "claude-fallback",
-            "extraction_llm": "",
+
             "ha_user": "alice", "whatsapp_phone": "",
             "api_port": 8001, "container_name": "haana-instanz-alice-1",
             "claude_md_template": "admin",
@@ -245,7 +245,7 @@ DEFAULT_CONFIG = {
         {
             "id": "bob", "display_name": "Bob", "role": "user",
             "primary_llm": "claude-primary", "fallback_llm": "claude-fallback",
-            "extraction_llm": "",
+
             "ha_user": "bob", "whatsapp_phone": "",
             "api_port": 8002, "container_name": "haana-instanz-bob-1",
             "claude_md_template": "user",
@@ -257,7 +257,7 @@ DEFAULT_CONFIG = {
             "id": "ha-assist", "display_name": "HAANA Voice", "role": "voice",
             "system": True,
             "primary_llm": "ollama-extract", "fallback_llm": "",
-            "extraction_llm": "",
+
             "ha_user": "", "whatsapp_phone": "",
             "api_port": 8003, "container_name": "haana-instanz-ha-assist-1",
             "claude_md_template": "ha-assist",
@@ -269,7 +269,7 @@ DEFAULT_CONFIG = {
             "id": "ha-advanced", "display_name": "HAANA Advanced", "role": "voice-advanced",
             "system": True,
             "primary_llm": "claude-primary", "fallback_llm": "",
-            "extraction_llm": "",
+
             "ha_user": "", "whatsapp_phone": "",
             "api_port": 8004, "container_name": "haana-instanz-ha-advanced-1",
             "claude_md_template": "ha-advanced",
@@ -371,8 +371,9 @@ def _migrate_config(cfg: dict) -> bool:
             old_slot = user.pop("primary_llm_slot")
             user["primary_llm"] = slot_to_llm_id.get(old_slot, llms[0]["id"] if llms else "")
         if "extraction_llm_slot" in user:
-            old_slot = user.pop("extraction_llm_slot")
-            user["extraction_llm"] = slot_to_llm_id.get(old_slot, "")
+            user.pop("extraction_llm_slot")
+        # extraction_llm ist jetzt nur noch global (memory.extraction_llm)
+        user.pop("extraction_llm", None)
         user.setdefault("fallback_llm", "")
 
     # Embedding migrieren: provider → provider_id
@@ -491,8 +492,6 @@ def _find_references(entity_type: str, entity_id: str, cfg: dict) -> list[str]:
                 refs.append(f"User {uid} (Primary)")
             if user.get("fallback_llm") == entity_id:
                 refs.append(f"User {uid} (Fallback)")
-            if user.get("extraction_llm") == entity_id:
-                refs.append(f"User {uid} (Extraction)")
         # Memory global
         mem = cfg.get("memory", {})
         if mem.get("extraction_llm") == entity_id:
@@ -1873,7 +1872,6 @@ async def create_user(request: Request):
         "role":                body.get("role", "user"),
         "primary_llm":         body.get("primary_llm", default_primary),
         "fallback_llm":        body.get("fallback_llm", ""),
-        "extraction_llm":      body.get("extraction_llm", ""),
         "ha_user":             body.get("ha_user", uid),
         "whatsapp_phone":      body.get("whatsapp_phone", ""),
         "api_port":            port,
@@ -1919,7 +1917,7 @@ async def update_user(user_id: str, request: Request):
     if not user:
         raise HTTPException(404, f"User '{user_id}' nicht gefunden")
 
-    restart_fields = {"primary_llm", "fallback_llm", "extraction_llm", "ha_user", "role", "claude_md_template"}
+    restart_fields = {"primary_llm", "fallback_llm", "ha_user", "role", "claude_md_template"}
     needs_restart = any(k in body and body[k] != user.get(k) for k in restart_fields)
 
     user.update({k: v for k, v in body.items() if k not in ("id", "api_port", "container_name")})

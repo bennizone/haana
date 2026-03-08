@@ -63,7 +63,7 @@ def _build_agent_env(user: dict, cfg: dict, resolve_llm_fn, find_ollama_url_fn) 
     read_scopes = f"{uid}_memory,household_memory"
 
     primary_llm_id = user.get("primary_llm", "")
-    extract_llm_id = user.get("extraction_llm", "") or cfg.get("memory", {}).get("extraction_llm", "")
+    extract_llm_id = cfg.get("memory", {}).get("extraction_llm", "")
     p_llm, p_prov = resolve_llm_fn(primary_llm_id, cfg)
     e_llm, e_prov = resolve_llm_fn(extract_llm_id, cfg)
 

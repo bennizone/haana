@@ -85,13 +85,6 @@ function renderUserCard(u) {
             ${_llmOpts(u.fallback_llm)}
           </select>
         </div>
-        <div class="form-group">
-          <label>${t('users.extraction_llm')}</label>
-          <select id="uf-${escAttr(u.id)}-extract-llm">
-            <option value="">${t('config_memory.extraction_llm_hint')}</option>
-            ${_llmOpts(u.extraction_llm)}
-          </select>
-        </div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
         <button class="btn btn-primary" onclick="saveUserEdit('${escAttr(u.id)}')">${t('common.save')}</button>
@@ -177,7 +170,6 @@ async function saveUserEdit(uid) {
     role:           document.getElementById(`uf-${uid}-role`)?.value,
     primary_llm:    document.getElementById(`uf-${uid}-primary-llm`)?.value || '',
     fallback_llm:   document.getElementById(`uf-${uid}-fallback-llm`)?.value || '',
-    extraction_llm: document.getElementById(`uf-${uid}-extract-llm`)?.value || '',
   };
   if (!isVoice) {
     body.ha_user        = document.getElementById(`uf-${uid}-ha`)?.value || '';

@@ -427,12 +427,13 @@ def test_build_env_extraction_llm():
     assert env["HAANA_MEMORY_MODEL"] == "ministral-3-32k:3b"
 
 
-def test_build_env_user_extraction_override():
-    """User-spezifisches Extraction-LLM ueberschreibt Global."""
+def test_build_env_extraction_always_global():
+    """Extraction-LLM kommt immer aus globalem memory.extraction_llm (nicht per User)."""
     cfg = _make_cfg()
-    user = _make_user(extraction_llm="claude-primary")
+    user = _make_user(extraction_llm="claude-primary")  # User-Feld wird ignoriert
     env = _build_env(user, cfg)
-    assert env["HAANA_MEMORY_MODEL"] == "claude-sonnet-4-6"
+    # Global ist "ollama-extract" (ministral-3-32k:3b), nicht claude-primary
+    assert env["HAANA_MEMORY_MODEL"] == "ministral-3-32k:3b"
 
 
 def test_build_env_minimax_provider():
