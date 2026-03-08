@@ -352,3 +352,92 @@ def test_build_mem0_config_embed_openai_no_key_returns_none():
         embed_type="openai", embed_key="",
     )
     assert cfg is None
+
+
+# ── _call_anthropic_direct Tests ─────────────────────────────────────────────
+
+class _FakeConfig:
+    model = "test-model"
+    max_tokens = 1024
+
+
+class _FakeTextBlock:
+    def __init__(self, text):
+        self.text = text
+
+
+class _FakeThinkingBlock:
+    def __init__(self, thinking):
+        self.thinking = thinking
+
+
+class _FakeResponse:
+    def __init__(self, content):
+        self.content = content
+
+
+class _FakeClient:
+    def __init__(self, response):
+        self._response = response
+        self.messages = self
+
+    def create(self, **kwargs):
+        self._last_kwargs = kwargs
+        return self._response
+
+
+class _FakeLLM:
+    def __init__(self, response):
+        self.config = _FakeConfig()
+        self.client = _FakeClient(response)
+
+
+def test_call_anthropic_direct_text_only():
+    """Normaler TextBlock wird korrekt extrahiert."""
+    resp = _FakeResponse([_FakeTextBlock('{"facts": ["test"]}')])
+    llm = _FakeLLM(resp)
+    result = m._call_anthropic_direct(llm, messages=[
+        {"role": "system", "content": "Extract facts."},
+        {"role": "user", "content": "Hello"},
+    ])
+    assert result == '{"facts": ["test"]}'
+    # System-Message separat, nur user in messages
+    assert llm.client._last_kwargs["system"] == "Extract facts."
+    assert len(llm.client._last_kwargs["messages"]) == 1
+    assert llm.client._last_kwargs["messages"][0]["role"] == "user"
+
+
+def test_call_anthropic_direct_thinking_plus_text():
+    """ThinkingBlock wird übersprungen, TextBlock extrahiert."""
+    resp = _FakeResponse([
+        _FakeThinkingBlock("Let me think..."),
+        _FakeTextBlock('{"facts": ["cat is named Mystique"]}'),
+    ])
+    llm = _FakeLLM(resp)
+    result = m._call_anthropic_direct(llm, messages=[
+        {"role": "user", "content": "Test"},
+    ])
+    assert "Mystique" in result
+    assert "think" not in result
+
+
+def test_call_anthropic_direct_empty_content():
+    """Leere Response gibt leeren String zurück."""
+    resp = _FakeResponse([])
+    llm = _FakeLLM(resp)
+    result = m._call_anthropic_direct(llm, messages=[
+        {"role": "user", "content": "Test"},
+    ])
+    assert result == ""
+
+
+def test_call_anthropic_direct_only_thinking():
+    """Nur ThinkingBlock ohne TextBlock → Fallback auf String."""
+    resp = _FakeResponse([_FakeThinkingBlock("Just thinking")])
+    llm = _FakeLLM(resp)
+    result = m._call_anthropic_direct(llm, messages=[
+        {"role": "user", "content": "Test"},
+    ])
+    # Fallback: str() des ersten Blocks
+    assert isinstance(result, str)
+    assert len(result) > 0

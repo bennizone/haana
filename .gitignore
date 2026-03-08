@@ -209,3 +209,4 @@ __marimo__/
 # HAANA project-specific
 data/
 .claude/
+test-results/

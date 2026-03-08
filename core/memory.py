@@ -725,7 +725,9 @@ class HaanaMemory:
                 _limiter = self._extract_limiter
                 _cli_mode = self._use_cli_extraction
                 _cli_model = self._memory_model
-                _has_thinking = self._extract_type in ("minimax",)
+                # Provider mit Extended Thinking: Mem0 crasht bei ThinkingBlock → direkte API
+                _THINKING_PROVIDERS = ("minimax",)
+                _has_thinking = self._extract_type in _THINKING_PROVIDERS
                 def _sanitized_generate(*args, **kwargs):
                     import json as _json
                     _limiter.wait()
