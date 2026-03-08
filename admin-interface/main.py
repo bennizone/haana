@@ -138,6 +138,7 @@ async def startup_event():
         get_config=load_config,
         resolve_llm=_resolve_llm,
         find_ollama_url=_find_ollama_url,
+        get_agent_url=lambda inst: _agent_manager.agent_url(inst),
     )
     app.include_router(ollama_router)
     # Add-on Modus: Agents beim Start automatisch starten (kein Docker-SDK)

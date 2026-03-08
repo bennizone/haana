@@ -15,8 +15,7 @@ from core.ollama_compat import (
     _extract_messages, _ollama_tools_to_anthropic,
     _ollama_msgs_to_anthropic, _anthropic_response_to_ollama,
     _openai_response_to_ollama, _raw_response,
-    _inject_delegation_instructions, _handle_delegation,
-    DELEGATION_MARKER, _DELEGATION_INSTRUCTIONS,
+    _inject_delegation_instructions, _DELEGATION_INSTRUCTIONS,
 )
 
 
@@ -932,20 +931,6 @@ def test_inject_delegation_instructions_without_system():
     assert "[DELEGATE]" in result[0]["content"]
 
 
-_DELEGATION_USERS = [
-    {"id": "ha-assist", "primary_llm": "ollama-ministral"},
-    {"id": "ha-advanced", "primary_llm": "haiku"},
-]
-_DELEGATION_LLMS = [
-    {"id": "ollama-ministral", "provider_id": "ollama-home", "model": "ministral-3-32k:3b"},
-    {"id": "haiku", "provider_id": "anthropic-main", "model": "claude-3-haiku-20240307"},
-]
-_DELEGATION_PROVIDERS = [
-    {"id": "ollama-home", "type": "ollama", "url": "http://localhost:11434", "key": ""},
-    {"id": "anthropic-main", "type": "anthropic", "key": "sk-test-123"},
-]
-
-
 @pytest.fixture
 def config_with_delegation():
     return {
@@ -954,34 +939,35 @@ def config_with_delegation():
             "exposed_models": ["ha-assist", "ha-advanced"],
             "delegation": {"ha-assist": "ha-advanced"},
         },
-        "users": list(_DELEGATION_USERS),
-        "llms": list(_DELEGATION_LLMS),
-        "providers": list(_DELEGATION_PROVIDERS),
+        "users": list(_USERS),
+        "llms": list(_LLMS),
+        "providers": list(_PROVIDERS),
     }
+
+
+def _make_delegation_app(cfg, agent_url_map=None):
+    """Erstellt eine Test-App mit Delegation-Support."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    app = FastAPI()
+    router = create_ollama_router(
+        get_config=lambda: cfg,
+        resolve_llm=_resolve_llm,
+        find_ollama_url=lambda c: "http://localhost:11434",
+        get_agent_url=lambda inst: (agent_url_map or {}).get(inst, ""),
+    )
+    app.include_router(router)
+    return TestClient(app)
 
 
 @mock.patch("core.ollama_compat._memory_search", return_value="")
 @mock.patch("core.ollama_compat._call_llm")
-def test_delegation_triggered(mock_llm, mock_mem, config_with_delegation):
-    """[DELEGATE] in Antwort löst Weiterleitung an ha-advanced aus."""
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
-    # Erster Call (ha-assist): gibt [DELEGATE] zurück
-    # Zweiter Call (ha-advanced): gibt echte Antwort zurück
-    mock_llm.side_effect = [
-        _ollama_llm_response("[DELEGATE]"),
-        _ollama_llm_response("Morgen wird es sonnig, 22 Grad.", model="claude-3-haiku-20240307"),
-    ]
-
-    app = FastAPI()
-    router = create_ollama_router(
-        get_config=lambda: config_with_delegation,
-        resolve_llm=_resolve_llm,
-        find_ollama_url=lambda c: "http://localhost:11434",
-    )
-    app.include_router(router)
-    client = TestClient(app)
+@mock.patch("core.ollama_compat._handle_delegation", return_value="Morgen wird es sonnig, 22 Grad.")
+def test_delegation_triggered(mock_deleg, mock_llm, mock_mem, config_with_delegation):
+    """[DELEGATE] in Antwort löst Weiterleitung an ha-advanced Agent aus."""
+    mock_llm.return_value = _ollama_llm_response("[DELEGATE]")
+    client = _make_delegation_app(config_with_delegation, {"ha-advanced": "http://agent:8002"})
 
     resp = client.post("/api/chat", json={
         "model": "ha-assist",
@@ -996,38 +982,25 @@ def test_delegation_triggered(mock_llm, mock_mem, config_with_delegation):
     data = resp.json()
     assert data["message"]["content"] == "Morgen wird es sonnig, 22 Grad."
     assert data["model"] == "ha-assist"  # Alias bleibt erhalten
-    assert mock_llm.call_count == 2
 
-    # Erster Call: ha-assist mit Delegation-Instructions
-    first_call = mock_llm.call_args_list[0][1]
-    assert first_call["model"] == "ministral-3-32k:3b"
-    system_sent = first_call["messages"][0]["content"]
-    assert "[DELEGATE]" in system_sent  # Delegation-Instructions injiziert
+    # Delegation wurde mit User-Message und Agent-URL aufgerufen
+    mock_deleg.assert_called_once()
+    call_args = mock_deleg.call_args
+    assert call_args[0][0] == "ha-advanced"
+    assert call_args[0][1] == "Wie wird das Wetter morgen?"
 
-    # Zweiter Call: ha-advanced ohne Delegation-Instructions
-    second_call = mock_llm.call_args_list[1][1]
-    assert second_call["provider_type"] == "anthropic"
-    assert second_call["model"] == "claude-3-haiku-20240307"
-    assert second_call["api_key"] == "sk-test-123"
+    # Delegation-Instructions wurden in ha-assist System-Prompt injiziert
+    llm_call = mock_llm.call_args[1]
+    assert "[DELEGATE]" in llm_call["messages"][0]["content"]
 
 
 @mock.patch("core.ollama_compat._memory_search", return_value="")
 @mock.patch("core.ollama_compat._call_llm")
-def test_no_delegation_for_direct_answers(mock_llm, mock_mem, config_with_delegation):
+@mock.patch("core.ollama_compat._handle_delegation")
+def test_no_delegation_for_direct_answers(mock_deleg, mock_llm, mock_mem, config_with_delegation):
     """Normale Antworten werden nicht delegiert."""
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
     mock_llm.return_value = _ollama_llm_response("Licht ist an.")
-
-    app = FastAPI()
-    router = create_ollama_router(
-        get_config=lambda: config_with_delegation,
-        resolve_llm=_resolve_llm,
-        find_ollama_url=lambda c: "http://localhost:11434",
-    )
-    app.include_router(router)
-    client = TestClient(app)
+    client = _make_delegation_app(config_with_delegation, {"ha-advanced": "http://agent:8002"})
 
     resp = client.post("/api/chat", json={
         "model": "ha-assist",
@@ -1036,30 +1009,16 @@ def test_no_delegation_for_direct_answers(mock_llm, mock_mem, config_with_delega
     })
 
     assert resp.json()["message"]["content"] == "Licht ist an."
-    assert mock_llm.call_count == 1  # Kein zweiter Call
+    mock_deleg.assert_not_called()
 
 
 @mock.patch("core.ollama_compat._memory_search", return_value="")
 @mock.patch("core.ollama_compat._call_llm")
-def test_delegation_fallback_on_failure(mock_llm, mock_mem, config_with_delegation):
+@mock.patch("core.ollama_compat._handle_delegation", return_value=None)
+def test_delegation_fallback_on_failure(mock_deleg, mock_llm, mock_mem, config_with_delegation):
     """Bei Delegation-Fehler wird ha-assist Antwort als Fallback genutzt."""
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
-    # ha-assist sagt [DELEGATE], ha-advanced schlägt fehl
-    mock_llm.side_effect = [
-        _ollama_llm_response("[DELEGATE] Wetter-Frage"),
-        Exception("Connection refused"),
-    ]
-
-    app = FastAPI()
-    router = create_ollama_router(
-        get_config=lambda: config_with_delegation,
-        resolve_llm=_resolve_llm,
-        find_ollama_url=lambda c: "http://localhost:11434",
-    )
-    app.include_router(router)
-    client = TestClient(app)
+    mock_llm.return_value = _ollama_llm_response("[DELEGATE] Wetter-Frage")
+    client = _make_delegation_app(config_with_delegation, {"ha-advanced": "http://agent:8002"})
 
     resp = client.post("/api/chat", json={
         "model": "ha-assist",
@@ -1067,64 +1026,16 @@ def test_delegation_fallback_on_failure(mock_llm, mock_mem, config_with_delegati
         "stream": False,
     })
 
-    # Fallback: ha-assist Antwort (mit [DELEGATE]) wird trotzdem zurückgegeben
     assert resp.status_code == 200
     assert resp.json()["message"]["content"] == "[DELEGATE] Wetter-Frage"
-
-
-@mock.patch("core.ollama_compat._memory_search", return_value="[household_memory] Alice mag warmweiss")
-@mock.patch("core.ollama_compat._call_llm")
-def test_delegation_passes_memories(mock_llm, mock_mem, config_with_delegation):
-    """Memories werden auch an die delegierte Instanz weitergegeben."""
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
-    mock_llm.side_effect = [
-        _ollama_llm_response("[DELEGATE]"),
-        _ollama_llm_response("Antwort mit Memory"),
-    ]
-
-    app = FastAPI()
-    router = create_ollama_router(
-        get_config=lambda: config_with_delegation,
-        resolve_llm=_resolve_llm,
-        find_ollama_url=lambda c: "http://localhost:11434",
-    )
-    app.include_router(router)
-    client = TestClient(app)
-
-    client.post("/api/chat", json={
-        "model": "ha-assist",
-        "messages": [
-            {"role": "system", "content": "HA context"},
-            {"role": "user", "content": "Was mag Alice?"},
-        ],
-        "stream": False,
-    })
-
-    # ha-advanced bekommt auch die Memories
-    second_call = mock_llm.call_args_list[1][1]
-    system = second_call["messages"][0]["content"]
-    assert "Alice mag warmweiss" in system
 
 
 @mock.patch("core.ollama_compat._memory_search", return_value="")
 @mock.patch("core.ollama_compat._call_llm")
 def test_no_delegation_without_config(mock_llm, mock_mem, config_enabled):
     """Ohne delegation-Config wird [DELEGATE] als normale Antwort behandelt."""
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
     mock_llm.return_value = _ollama_llm_response("[DELEGATE]")
-
-    app = FastAPI()
-    router = create_ollama_router(
-        get_config=lambda: config_enabled,
-        resolve_llm=_resolve_llm,
-        find_ollama_url=lambda c: "http://localhost:11434",
-    )
-    app.include_router(router)
-    client = TestClient(app)
+    client = _make_delegation_app(config_enabled)
 
     resp = client.post("/api/chat", json={
         "model": "ha-assist",
@@ -1132,28 +1043,17 @@ def test_no_delegation_without_config(mock_llm, mock_mem, config_enabled):
         "stream": False,
     })
 
-    # [DELEGATE] wird als normaler Text zurückgegeben
     assert resp.json()["message"]["content"] == "[DELEGATE]"
-    assert mock_llm.call_count == 1  # Kein zweiter Call
+    assert mock_llm.call_count == 1
 
 
 @mock.patch("core.ollama_compat._memory_search", return_value="")
 @mock.patch("core.ollama_compat._call_llm")
-def test_no_delegation_for_tool_results(mock_llm, mock_mem, config_with_delegation):
-    """Bei Tool-Result Follow-ups wird nicht delegiert (keine Instructions injiziert)."""
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
+@mock.patch("core.ollama_compat._handle_delegation")
+def test_no_delegation_for_tool_results(mock_deleg, mock_llm, mock_mem, config_with_delegation):
+    """Bei Tool-Result Follow-ups wird nicht delegiert."""
     mock_llm.return_value = _ollama_llm_response("Temperatur ist 21 Grad.")
-
-    app = FastAPI()
-    router = create_ollama_router(
-        get_config=lambda: config_with_delegation,
-        resolve_llm=_resolve_llm,
-        find_ollama_url=lambda c: "http://localhost:11434",
-    )
-    app.include_router(router)
-    client = TestClient(app)
+    client = _make_delegation_app(config_with_delegation, {"ha-advanced": "http://agent:8002"})
 
     resp = client.post("/api/chat", json={
         "model": "ha-assist",
@@ -1169,45 +1069,25 @@ def test_no_delegation_for_tool_results(mock_llm, mock_mem, config_with_delegati
     })
 
     assert resp.status_code == 200
-    # System-Prompt sollte KEINE Delegation-Instructions enthalten
+    # Keine Delegation-Instructions bei Tool-Result
     call_kw = mock_llm.call_args[1]
-    system = call_kw["messages"][0]["content"]
-    assert "[DELEGATE]" not in system
+    assert "[DELEGATE]" not in call_kw["messages"][0]["content"]
+    mock_deleg.assert_not_called()
 
 
 @mock.patch("core.ollama_compat._memory_search", return_value="")
 @mock.patch("core.ollama_compat._call_llm")
-def test_delegation_with_tool_calls_in_response(mock_llm, mock_mem, config_with_delegation):
-    """Delegation-Target antwortet mit Tool-Calls → werden korrekt zurückgegeben."""
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
-    mock_llm.side_effect = [
-        _ollama_llm_response("[DELEGATE]"),
-        _ollama_tool_call_response([{
-            "id": "call_adv_1", "type": "function",
-            "function": {"name": "GetLiveContext", "arguments": '{"area": "all"}'},
-        }], model="claude-3-haiku-20240307"),
-    ]
-
-    app = FastAPI()
-    router = create_ollama_router(
-        get_config=lambda: config_with_delegation,
-        resolve_llm=_resolve_llm,
-        find_ollama_url=lambda c: "http://localhost:11434",
-    )
-    app.include_router(router)
-    client = TestClient(app)
+def test_no_delegation_without_agent_url(mock_llm, mock_mem, config_with_delegation):
+    """Wenn Agent nicht läuft (keine URL), wird nicht delegiert."""
+    mock_llm.return_value = _ollama_llm_response("[DELEGATE]")
+    # Leere agent_url_map → Agent nicht erreichbar
+    client = _make_delegation_app(config_with_delegation, {})
 
     resp = client.post("/api/chat", json={
         "model": "ha-assist",
-        "messages": [{"role": "user", "content": "Wie ist die Temperatur überall?"}],
-        "tools": [{"function": {"name": "GetLiveContext", "parameters": {}}}],
+        "messages": [{"role": "user", "content": "Wetter?"}],
         "stream": False,
     })
 
-    data = resp.json()
-    assert data["done"] is False
-    assert data["done_reason"] == "tool_calls"
-    assert len(data["message"]["tool_calls"]) == 1
-    assert data["model"] == "ha-assist"  # Alias
+    # Fallback auf eigene Antwort
+    assert resp.json()["message"]["content"] == "[DELEGATE]"

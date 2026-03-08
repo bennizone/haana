@@ -349,8 +349,17 @@ class DockerAgentManager:
 
     def agent_url(self, instance: str) -> str:
         container_name = self._container_name(instance)
-        port = self._port_cache.get(instance, 8001)
-        return f"http://{container_name}:{port}"
+        port = self._port_cache.get(instance)
+        if port is None and self._client:
+            # Port aus laufendem Container lesen und cachen
+            try:
+                c = self._client.containers.get(container_name)
+                env_dict = dict(e.split("=", 1) for e in (c.attrs.get("Config", {}).get("Env") or []) if "=" in e)
+                port = int(env_dict.get("HAANA_API_PORT", 8001))
+                self._port_cache[instance] = port
+            except Exception:
+                port = 8001
+        return f"http://{container_name}:{port or 8001}"
 
     def get_agent(self, instance: str):
         """Gibt None zurück – im Docker-Modus kein direkter Agent-Zugriff."""

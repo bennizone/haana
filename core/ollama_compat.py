@@ -21,6 +21,7 @@ Endpoints:
 
 import json
 import logging
+import os
 import time
 import uuid
 from typing import Callable
@@ -260,6 +261,27 @@ def _openai_response_to_ollama(data: dict, model: str) -> dict:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# OAuth-Token-Lookup
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _resolve_api_key(provider: dict) -> str:
+    """Gibt den API-Key für einen Provider zurück (direkt oder via OAuth-Token)."""
+    if provider.get("key"):
+        return provider["key"]
+    if provider.get("auth_method") == "oauth" and provider.get("oauth_dir"):
+        creds_path = os.path.join(provider["oauth_dir"], ".credentials.json")
+        try:
+            with open(creds_path) as f:
+                creds = json.load(f)
+            token = creds.get("claudeAiOauth", {}).get("accessToken", "")
+            if token:
+                return token
+        except Exception as e:
+            logger.warning("[ollama-compat] OAuth-Token nicht lesbar (%s): %s", creds_path, e)
+    return ""
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Universeller LLM-Call (mit Tool-Support)
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -300,10 +322,13 @@ async def _call_llm(
         if tools:
             payload["tools"] = _ollama_tools_to_anthropic(tools)
         headers = {
-            "x-api-key": api_key,
             "anthropic-version": "2023-06-01",
             "content-type": "application/json",
         }
+        if api_key and api_key.startswith("sk-ant-oat"):
+            headers["Authorization"] = f"Bearer {api_key}"
+        else:
+            headers["x-api-key"] = api_key
 
     else:
         # OpenAI-kompatibel (OpenAI, Gemini, Custom)
@@ -428,58 +453,24 @@ def _inject_delegation_instructions(messages: list[dict]) -> list[dict]:
 
 async def _handle_delegation(
     target_instance: str,
-    original_body: dict,
-    memories: str,
+    user_message: str,
     *,
-    get_config,
-    resolve_llm,
-    find_ollama_url,
-) -> dict | None:
-    """Delegiert an die Ziel-Instanz. Returns Ollama-Response-Dict oder None bei Fehler."""
-    cfg = get_config()
-    target_user = next((u for u in cfg.get("users", []) if u["id"] == target_instance), None)
-    if not target_user:
+    get_agent_url: Callable,
+) -> str | None:
+    """Delegiert an den laufenden Agent. Returns Antwort-Text oder None bei Fehler."""
+    agent_url = get_agent_url(target_instance)
+    if not agent_url:
+        logger.warning("[ollama-compat] Delegation: Agent '%s' nicht erreichbar", target_instance)
         return None
-
-    target_llm, target_prov = resolve_llm(target_user.get("primary_llm", ""), cfg)
-    if not target_llm or not target_prov:
-        return None
-
-    # Original-Messages wiederherstellen (ohne Delegation-Instructions)
-    messages = list(original_body.get("messages", []))
-    tools = original_body.get("tools")
-
-    # Memories auch für Delegation-Ziel injizieren
-    if memories:
-        enriched = []
-        for msg in messages:
-            if msg.get("role") == "system":
-                m = msg.copy()
-                m["content"] = msg["content"] + f"\n\nAdditional context from household memory:\n{memories}"
-                enriched.append(m)
-            else:
-                enriched.append(msg)
-        messages = enriched
-
-    # Provider bestimmen
-    ptype = target_prov.get("type", "ollama")
-    model = target_llm.get("model", "")
-    key = target_prov.get("key", "")
-
-    if ptype == "ollama":
-        url = target_prov.get("url") or find_ollama_url(cfg) or "http://localhost:11434"
-    elif ptype == "minimax":
-        url = target_prov.get("url") or "https://api.minimax.io/anthropic"
-    elif ptype == "anthropic":
-        url = target_prov.get("url") or "https://api.anthropic.com"
-    else:
-        url = target_prov.get("url", "")
 
     try:
-        return await _call_llm(
-            provider_type=ptype, url=url, model=model,
-            messages=messages, api_key=key, tools=tools,
-        )
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            r = await client.post(
+                f"{agent_url.rstrip('/')}/chat",
+                json={"message": user_message, "channel": "ha_voice"},
+            )
+            r.raise_for_status()
+            return r.json().get("response", "")
     except Exception as e:
         logger.error("[ollama-compat] Delegation an %s fehlgeschlagen: %s", target_instance, e)
         return None
@@ -494,6 +485,7 @@ def create_ollama_router(
     get_config: Callable,
     resolve_llm: Callable,
     find_ollama_url: Callable,
+    get_agent_url: Callable | None = None,
 ) -> APIRouter:
     """Erstellt Ollama-kompatiblen Router — universeller LLM-Proxy mit Tool-Support."""
     router = APIRouter(tags=["ollama-compat"])
@@ -608,7 +600,7 @@ def create_ollama_router(
         # LLM-Provider bestimmen
         provider_type = prov.get("type", "ollama")
         model_name = llm.get("model", "")
-        api_key = prov.get("key", "")
+        api_key = _resolve_api_key(prov)
 
         if provider_type == "ollama":
             llm_url = prov.get("url") or find_ollama_url(cfg) or "http://localhost:11434"
@@ -633,28 +625,23 @@ def create_ollama_router(
         elapsed = time.monotonic() - t_start
         resp_text = ollama_resp.get("message", {}).get("content", "")
 
-        # ── Delegation: [DELEGATE] erkannt → an Ziel-Instanz weiterleiten ──
-        if delegation_target and resp_text.strip().startswith(DELEGATION_MARKER):
-            delegate_resp = await _handle_delegation(
-                delegation_target, body, memories,
-                get_config=get_config, resolve_llm=resolve_llm,
-                find_ollama_url=find_ollama_url,
+        # ── Delegation: [DELEGATE] erkannt → an laufenden Agent weiterleiten ──
+        if delegation_target and resp_text.strip().startswith(DELEGATION_MARKER) and get_agent_url:
+            delegate_text = await _handle_delegation(
+                delegation_target, user_message,
+                get_agent_url=get_agent_url,
             )
-            if delegate_resp is not None:
+            if delegate_text is not None:
                 d_elapsed = time.monotonic() - t_start
-                delegate_resp["model"] = model_raw
-                d_text = delegate_resp.get("message", {}).get("content", "")
-                d_tc = bool(delegate_resp.get("message", {}).get("tool_calls"))
                 logger.info(
                     "[ollama-compat] %s → %s (delegated): %.2fs | Q: %s | A: %s",
                     instance, delegation_target, d_elapsed,
-                    user_message[:80] if user_message else "(tool-result)", d_text[:120],
+                    user_message[:80] if user_message else "(tool-result)",
+                    delegate_text[:120],
                 )
-                if d_tc:
-                    return _raw_response(delegate_resp, d_elapsed)
                 if stream:
-                    return _make_response(d_text, model_raw, d_elapsed, True)
-                return _raw_response(delegate_resp, d_elapsed)
+                    return _make_response(delegate_text, model_raw, d_elapsed, True)
+                return _text_response(delegate_text, model_raw, d_elapsed)
             # Delegation fehlgeschlagen → Fallback auf eigene Antwort
             logger.warning("[ollama-compat] Delegation %s → %s fehlgeschlagen, Fallback", instance, delegation_target)
 
