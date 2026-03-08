@@ -184,10 +184,10 @@ def _build_mem0_config(collection_name: str, *,
             llm_cfg["anthropic_base_url"] = extract_url
         llm_config = {"provider": "anthropic", "config": llm_cfg}
         llm_label = f"{extract_type}/{memory_llm} @ {extract_url or 'api.anthropic.com'}"
-    elif extract_type in ("openai", "gemini"):
+    elif extract_type == "openai":
         if not extract_key:
             logger.warning(
-                f"[{collection_name}] Kein API-Key für {extract_type}. "
+                f"[{collection_name}] Kein API-Key für OpenAI. "
                 "Memory für diesen Scope deaktiviert."
             )
             return None
@@ -199,7 +199,23 @@ def _build_mem0_config(collection_name: str, *,
         if extract_url:
             llm_cfg["openai_base_url"] = extract_url
         llm_config = {"provider": "openai", "config": llm_cfg}
-        llm_label = f"{extract_type}/{memory_llm} @ {extract_url or 'api.openai.com'}"
+        llm_label = f"OpenAI/{memory_llm} @ {extract_url or 'api.openai.com'}"
+    elif extract_type == "gemini":
+        if not extract_key:
+            logger.warning(
+                f"[{collection_name}] Kein API-Key für Gemini. "
+                "Memory für diesen Scope deaktiviert."
+            )
+            return None
+        llm_config = {
+            "provider": "gemini",
+            "config": {
+                "model": memory_llm,
+                "api_key": extract_key,
+                "temperature": 0.1,
+            },
+        }
+        llm_label = f"Gemini/{memory_llm}"
     else:
         logger.warning(f"[{collection_name}] Unbekannter extract_type: {extract_type}")
         return None
@@ -640,14 +656,9 @@ class HaanaMemory:
 
     def _classify_scope_via_llm(self, text: str) -> Optional[str]:
         """
-        Fragt das Ollama-LLM ob die Information persönlich oder haushaltsbezogen ist.
-        Gibt den passenden Scope zurück oder None bei Fehler.
+        Fragt das Extraction-LLM ob die Information persönlich oder haushaltsbezogen ist.
+        Nutzt denselben Provider wie die Memory-Extraktion (_call_extract_llm).
         """
-        ollama_url = self._ollama_url
-        if not ollama_url:
-            return None
-
-        model = self._memory_model
         personal_scope = next(
             (s for s in self.write_scopes if s != "household_memory"),
             None,
@@ -665,28 +676,17 @@ class HaanaMemory:
             "Antworte mit genau einem Wort: PERSONAL oder HOUSEHOLD"
         )
 
-        try:
-            import requests
-            r = requests.post(
-                f"{ollama_url}/api/generate",
-                json={"model": model, "prompt": prompt, "stream": False},
-                timeout=15,
-            )
-            if r.status_code != 200:
-                logger.warning(
-                    f"[{self.instance}] Scope-Klassifikation: Ollama HTTP {r.status_code}"
-                )
-                return None
-            answer = r.json().get("response", "").strip().upper()
-            if "HOUSEHOLD" in answer:
-                return "household_memory"
-            if "PERSONAL" in answer:
-                return personal_scope
-            logger.warning(
-                f"[{self.instance}] Scope-Klassifikation: unerwartete Antwort '{answer[:50]}'"
-            )
-        except Exception as e:
-            logger.warning(f"[{self.instance}] Scope-Klassifikation fehlgeschlagen: {e}")
+        answer = self._call_extract_llm(prompt)
+        if not answer:
+            return None
+        answer = answer.strip().upper()
+        if "HOUSEHOLD" in answer:
+            return "household_memory"
+        if "PERSONAL" in answer:
+            return personal_scope
+        logger.warning(
+            f"[{self.instance}] Scope-Klassifikation: unerwartete Antwort '{answer[:50]}'"
+        )
 
         return None
 
@@ -902,7 +902,7 @@ class HaanaMemory:
                     for block in data.get("content", []):
                         if block.get("type") == "text":
                             return block.get("text", "").strip()
-            elif self._extract_type in ("openai", "gemini"):
+            elif self._extract_type == "openai":
                 url = self._extract_url or "https://api.openai.com/v1"
                 r = req.post(
                     f"{url}/chat/completions",
@@ -919,6 +919,28 @@ class HaanaMemory:
                 )
                 if r.status_code == 200:
                     return r.json()["choices"][0]["message"]["content"].strip()
+            elif self._extract_type == "gemini":
+                api_url = (
+                    f"https://generativelanguage.googleapis.com/v1beta/"
+                    f"models/{self._memory_model}:generateContent"
+                    f"?key={self._extract_key}"
+                )
+                r = req.post(
+                    api_url,
+                    headers={"Content-Type": "application/json"},
+                    json={
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {"temperature": 0.1},
+                    },
+                    timeout=60,
+                )
+                if r.status_code == 200:
+                    data = r.json()
+                    candidates = data.get("candidates", [])
+                    if candidates:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        if parts:
+                            return parts[0].get("text", "").strip()
         except Exception as e:
             logger.debug(f"[{self.instance}] _call_extract_llm Fehler: {e}")
 
