@@ -175,6 +175,7 @@
     "rebuild_refresh": "Aktualisieren",
     "rebuild_start": "Rebuild starten",
     "rebuild_cancel": "Abbrechen",
+    "rebuild_cancel_pause": "Abbrechen / Pausieren",
     "rebuild_confirm": "Memory für {count} Instanz(en) neu aufbauen?\n{instances}\n\n{total} Einträge total – kann Minuten bis Stunden dauern.",
     "rebuild_entries": "{done} / {total} Einträge",
     "rebuild_no_instance": "Keine Instanz ausgewählt",

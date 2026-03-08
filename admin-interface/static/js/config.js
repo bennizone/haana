@@ -1010,7 +1010,7 @@ async function startRebuild(resumeMode = false) {
           continue;
         }
         if (d.skipped_trivial > 0) {
-          toast(`${inst}: ${d.skipped_trivial} triviale Eintr\u00e4ge \u00fcbersprungen`, 'info');
+          toast(`${inst}: ${t('config_memory.rebuild_scan_result', {relevant: d.total - d.skipped_trivial, total: d.total + d.skipped_trivial, filtered: d.skipped_trivial})}`, 'info');
         }
         await new Promise(resolve => startRebuildSSE(inst, resolve));
       } catch(e) {
@@ -1021,7 +1021,8 @@ async function startRebuild(resumeMode = false) {
     overall.textContent = '\u2713 ' + t('config_memory.rebuild_done') + ' (' + selected.length + ' ' + t('config_memory.rebuild_instances_label') + ')';
     btn.disabled = false;
     cancel.style.display = 'none';
-    document.getElementById('rebuild-resume-info').style.display = 'none';
+    const _resumeEl = document.getElementById('rebuild-resume-info');
+    if (_resumeEl) _resumeEl.style.display = 'none';
     loadMemoryStats();
     checkResumeInfo();
   });

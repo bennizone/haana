@@ -175,6 +175,7 @@
     "rebuild_refresh": "Refresh",
     "rebuild_start": "Start rebuild",
     "rebuild_cancel": "Cancel",
+    "rebuild_cancel_pause": "Cancel / Pause",
     "rebuild_confirm": "Rebuild memory for {count} instance(s)?\n{instances}\n\n{total} entries total – may take minutes to hours.",
     "rebuild_entries": "{done} / {total} entries",
     "rebuild_no_instance": "No instance selected",

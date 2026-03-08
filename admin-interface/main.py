@@ -1305,7 +1305,6 @@ def _is_trivial_entry(rec: dict) -> bool:
         r"^(licht|lampe|rollo|jalousie|heizung|temperatur|status|wetter)\b.{0,30}$",
         r"^(schalte|mach|stell|dreh|öffne|schließe)\b.{0,40}$",
     ]
-    import re
     lower = user_msg.lower()
     for pat in _trivial_patterns:
         if re.match(pat, lower):
@@ -1430,7 +1429,10 @@ async def start_rebuild(instance: str, request: Request):
     except Exception:
         body = {}
     skip_trivial = body.get("skip_trivial", True)
-    delay_ms = max(0, min(5000, int(body.get("delay_ms", 0))))
+    try:
+        delay_ms = max(0, min(5000, int(body.get("delay_ms", 0))))
+    except (ValueError, TypeError):
+        delay_ms = 0
     resume = body.get("resume", False)
 
     # Scan mit Pre-Filtering
