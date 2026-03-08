@@ -108,6 +108,8 @@ Assistant: Erledigt!
 Output: {"facts": []}
 
 Gib die Fakten als JSON zurück. Nur das JSON-Objekt mit dem Key "facts", nichts anderes.
+WICHTIG: "facts" muss eine FLACHE LISTE von Strings sein, z.B. {"facts": ["Fakt 1", "Fakt 2"]}.
+KEINE verschachtelten Objekte, KEINE Kategorien, KEINE Dicts — nur einfache Strings.
 Erkenne die Sprache des Users und schreibe die Fakten in derselben Sprache.\
 """
 
@@ -464,7 +466,53 @@ class HaanaMemory:
 
             try:
                 from mem0 import Memory
-                self._memories[scope] = Memory.from_config(config)
+                mem = Memory.from_config(config)
+                # Monkeypatch: LLM-Antworten sanitizen (manche LLMs geben Dicts statt Strings)
+                _orig_generate = mem.llm.generate_response
+                def _sanitized_generate(*args, **kwargs):
+                    import json as _json
+                    resp = _orig_generate(*args, **kwargs)
+                    try:
+                        from mem0.utils.helper import remove_code_blocks
+                        cleaned = remove_code_blocks(resp)
+                        parsed = _json.loads(cleaned)
+                        changed = False
+                        # Facts-Liste: Dicts -> Strings
+                        if "facts" in parsed and isinstance(parsed["facts"], list):
+                            sanitized = []
+                            for f in parsed["facts"]:
+                                if isinstance(f, str):
+                                    sanitized.append(f)
+                                elif isinstance(f, dict):
+                                    for k, v in f.items():
+                                        if isinstance(v, dict):
+                                            for k2, v2 in v.items():
+                                                sanitized.append(f"{k2}: {v2}")
+                                        else:
+                                            sanitized.append(f"{k}: {v}")
+                                else:
+                                    sanitized.append(str(f))
+                            parsed["facts"] = sanitized
+                            changed = True
+                        # Memory-Actions: Strings -> Dicts mit text+event
+                        if "memory" in parsed and isinstance(parsed["memory"], list):
+                            sanitized_mem = []
+                            for item in parsed["memory"]:
+                                if isinstance(item, str):
+                                    sanitized_mem.append({"text": item, "event": "ADD"})
+                                elif isinstance(item, dict):
+                                    sanitized_mem.append(item)
+                                else:
+                                    sanitized_mem.append({"text": str(item), "event": "ADD"})
+                            parsed["memory"] = sanitized_mem
+                            changed = True
+                        if changed:
+                            return _json.dumps(parsed)
+                    except Exception:
+                        pass
+                    return resp
+                mem.llm.generate_response = _sanitized_generate
+                self._memories[scope] = mem
                 logger.info(f"[{self.instance}] Memory-Instanz '{scope}' bereit.")
             except Exception as e:
                 logger.error(
