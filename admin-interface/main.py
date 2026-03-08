@@ -1289,8 +1289,134 @@ async def whatsapp_logout():
         return {"ok": False, "error": str(e)[:200]}
 
 
+def _is_trivial_entry(rec: dict) -> bool:
+    """Prüft ob ein Konversations-Eintrag trivial ist (kein Memory-Wert)."""
+    user_msg = (rec.get("user") or "").strip()
+    asst_msg = (rec.get("assistant") or "").strip()
+    # Leere Nachrichten
+    if not user_msg and not asst_msg:
+        return True
+    # Sehr kurze User-Nachrichten ohne Substanz
+    if len(user_msg) < 15 and not asst_msg:
+        return True
+    # Typische Kommando-Patterns (Licht, Status, Hallo etc.)
+    _trivial_patterns = [
+        r"^(hallo|hi|hey|moin|guten (morgen|tag|abend)|tschüss|bye|danke|ok|ja|nein|stop|abbrechen)\.?!?$",
+        r"^(licht|lampe|rollo|jalousie|heizung|temperatur|status|wetter)\b.{0,30}$",
+        r"^(schalte|mach|stell|dreh|öffne|schließe)\b.{0,40}$",
+    ]
+    import re
+    lower = user_msg.lower()
+    for pat in _trivial_patterns:
+        if re.match(pat, lower):
+            return True
+    return False
+
+
+def _scan_rebuild_entries(instance: str, skip_trivial: bool = True) -> dict:
+    """Scannt Logs und gibt Statistiken + gefilterte Einträge zurück."""
+    conv_files = sorted(
+        _glob.glob(str(LOG_ROOT / "conversations" / instance / "*.jsonl"))
+    )
+    total_raw = 0
+    total_filtered = 0
+    entries = []  # (file_path, line_index, rec)
+
+    for fpath in conv_files:
+        if not Path(fpath).exists():
+            continue
+        lines = Path(fpath).read_text(encoding="utf-8").splitlines()
+        for i, line in enumerate(lines):
+            line = line.strip()
+            if not line:
+                continue
+            total_raw += 1
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if skip_trivial and _is_trivial_entry(rec):
+                total_filtered += 1
+                continue
+            entries.append((fpath, i, rec))
+
+    return {
+        "total_raw": total_raw,
+        "total_filtered": total_filtered,
+        "total_relevant": len(entries),
+        "entries": entries,
+        "files": conv_files,
+    }
+
+
+@app.post("/api/rebuild-scan/{instance}")
+async def rebuild_scan(instance: str, request: Request):
+    """Scannt Logs und gibt Statistiken zurück (Pre-Filtering, Cost Estimation)."""
+    if instance not in get_all_instances():
+        raise HTTPException(404)
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    skip_trivial = body.get("skip_trivial", True)
+
+    scan = _scan_rebuild_entries(instance, skip_trivial=skip_trivial)
+    # Token-Schätzung: ~150 Token pro Eintrag (User+Assistant avg)
+    est_tokens = scan["total_relevant"] * 150
+    # Provider-Typ für Kostenhinweis
+    cfg = load_config()
+    mem_cfg = cfg.get("memory", {})
+    extract_llm_id = mem_cfg.get("extraction_llm", "")
+    provider_type = "ollama"
+    for llm in cfg.get("llms", []):
+        if llm.get("id") == extract_llm_id:
+            for prov in cfg.get("providers", []):
+                if prov.get("id") == llm.get("provider_id"):
+                    provider_type = prov.get("type", "ollama")
+            break
+
+    return {
+        "total_raw": scan["total_raw"],
+        "total_filtered": scan["total_filtered"],
+        "total_relevant": scan["total_relevant"],
+        "est_tokens": est_tokens,
+        "provider_type": provider_type,
+        "is_api": provider_type not in ("ollama",),
+    }
+
+
+# Persistenter Rebuild-Progress (für Pause/Resume)
+_REBUILD_PROGRESS_DIR = LOG_ROOT / ".rebuild-progress"
+
+
+def _load_rebuild_progress(instance: str) -> dict | None:
+    """Lädt gespeicherten Rebuild-Fortschritt."""
+    pfile = _REBUILD_PROGRESS_DIR / f"{instance}.json"
+    if pfile.exists():
+        try:
+            return json.loads(pfile.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return None
+
+
+def _save_rebuild_progress(instance: str, progress: dict):
+    """Speichert Rebuild-Fortschritt für Pause/Resume."""
+    _REBUILD_PROGRESS_DIR.mkdir(parents=True, exist_ok=True)
+    pfile = _REBUILD_PROGRESS_DIR / f"{instance}.json"
+    pfile.write_text(json.dumps(progress), encoding="utf-8")
+
+
+def _clear_rebuild_progress(instance: str):
+    """Löscht gespeicherten Rebuild-Fortschritt."""
+    pfile = _REBUILD_PROGRESS_DIR / f"{instance}.json"
+    if pfile.exists():
+        pfile.unlink()
+
+
 @app.post("/api/rebuild-memory/{instance}")
-async def start_rebuild(instance: str):
+async def start_rebuild(instance: str, request: Request):
     """Startet den Memory-Rebuild aus Konversations-Logs für eine Instanz."""
     if instance not in get_all_instances():
         raise HTTPException(404)
@@ -1299,18 +1425,31 @@ async def start_rebuild(instance: str):
     if state and state["status"] == "running":
         return {"ok": False, "error": "Rebuild läuft bereits"}
 
-    # Konversations-Logs zählen
-    conv_files = sorted(
-        _glob.glob(str(LOG_ROOT / "conversations" / instance / "*.jsonl"))
-    )
-    total = sum(
-        sum(1 for line in Path(f).read_text(encoding="utf-8").splitlines() if line.strip())
-        for f in conv_files
-        if Path(f).exists()
-    )
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    skip_trivial = body.get("skip_trivial", True)
+    delay_ms = max(0, min(5000, int(body.get("delay_ms", 0))))
+    resume = body.get("resume", False)
 
-    if total == 0:
-        return {"ok": False, "error": "Keine Konversations-Logs gefunden"}
+    # Scan mit Pre-Filtering
+    scan = _scan_rebuild_entries(instance, skip_trivial=skip_trivial)
+    entries = scan["entries"]
+
+    if not entries:
+        return {"ok": False, "error": "Keine relevanten Konversations-Logs gefunden"}
+
+    # Resume: bereits verarbeitete Einträge überspringen
+    resume_from = 0
+    if resume:
+        progress = _load_rebuild_progress(instance)
+        if progress:
+            resume_from = progress.get("processed", 0)
+
+    if resume_from >= len(entries):
+        _clear_rebuild_progress(instance)
+        return {"ok": False, "error": "Rebuild bereits abgeschlossen"}
 
     # Agent-Erreichbarkeit prüfen vor Start
     agent_url = _get_agent_url(instance)
@@ -1323,9 +1462,12 @@ async def start_rebuild(instance: str):
     except Exception as _e:
         return {"ok": False, "error": f"Agent '{instance}' nicht erreichbar: {str(_e)[:120]}. Container läuft?"}
 
+    total = len(entries) - resume_from
     _rebuild[instance] = {
         "status": "running", "done": 0, "total": total, "errors": 0,
         "started": time.time(), "error": "",
+        "skipped_trivial": scan["total_filtered"],
+        "resumed_from": resume_from,
     }
 
     async def _run():
@@ -1333,45 +1475,74 @@ async def start_rebuild(instance: str):
         import httpx
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
-                for fpath in conv_files:
-                    lines = Path(fpath).read_text(encoding="utf-8").splitlines()
-                    for line in lines:
-                        line = line.strip()
-                        if not line:
-                            continue
-                        if state["status"] == "cancelled":
-                            return
-                        try:
-                            rec = json.loads(line)
-                            r = await client.post(
-                                f"{agent_url}/rebuild-entry",
-                                json={
-                                    "user":      rec.get("user", ""),
-                                    "assistant": rec.get("assistant", ""),
-                                },
-                            )
-                            if not r.is_success:
-                                state["errors"] += 1
-                        except Exception:
+                for idx in range(resume_from, len(entries)):
+                    if state["status"] == "cancelled":
+                        # Fortschritt speichern für Resume
+                        _save_rebuild_progress(instance, {
+                            "processed": resume_from + state["done"],
+                            "total_entries": len(entries),
+                            "paused_at": time.time(),
+                        })
+                        return
+                    _fpath, _line_idx, rec = entries[idx]
+                    try:
+                        r = await client.post(
+                            f"{agent_url}/rebuild-entry",
+                            json={
+                                "user":      rec.get("user", ""),
+                                "assistant": rec.get("assistant", ""),
+                            },
+                        )
+                        if not r.is_success:
                             state["errors"] += 1
-                        state["done"] += 1
+                    except Exception:
+                        state["errors"] += 1
+                    state["done"] += 1
+                    # Rate-Limiting
+                    if delay_ms > 0:
+                        await asyncio.sleep(delay_ms / 1000.0)
             state["status"] = "done"
+            _clear_rebuild_progress(instance)
         except Exception as e:
             state["status"] = "error"
             state["error"]  = str(e)[:200]
+            # Fortschritt speichern bei Fehler
+            _save_rebuild_progress(instance, {
+                "processed": resume_from + state["done"],
+                "total_entries": len(entries),
+                "error": str(e)[:200],
+                "paused_at": time.time(),
+            })
 
     asyncio.create_task(_run())
-    return {"ok": True, "total": total}
+    return {"ok": True, "total": total, "skipped_trivial": scan["total_filtered"], "resumed_from": resume_from}
 
 
 @app.post("/api/rebuild-cancel/{instance}")
 async def cancel_rebuild(instance: str):
-    """Bricht einen laufenden Rebuild ab."""
+    """Pausiert/bricht einen laufenden Rebuild ab. Progress wird gespeichert für Resume."""
     state = _rebuild.get(instance)
     if state and state["status"] == "running":
         state["status"] = "cancelled"
         return {"ok": True}
     return {"ok": False, "error": "Kein laufender Rebuild"}
+
+
+@app.get("/api/rebuild-resume-info/{instance}")
+async def rebuild_resume_info(instance: str):
+    """Gibt Info über gespeicherten Rebuild-Fortschritt zurück."""
+    if instance not in get_all_instances():
+        raise HTTPException(404)
+    progress = _load_rebuild_progress(instance)
+    if not progress:
+        return {"has_progress": False}
+    return {
+        "has_progress": True,
+        "processed": progress.get("processed", 0),
+        "total_entries": progress.get("total_entries", 0),
+        "paused_at": progress.get("paused_at"),
+        "error": progress.get("error", ""),
+    }
 
 
 @app.get("/api/rebuild-progress/{instance}")
@@ -1390,7 +1561,7 @@ async def rebuild_progress(instance: str, request: Request):
             status  = state.get("status", "idle")
             elapsed = time.time() - state.get("started", time.time())
             eta_s   = int((total - done) * (elapsed / done)) if done > 0 else None
-            yield f"data: {json.dumps({'done': done, 'total': total, 'status': status, 'eta_s': eta_s, 'error': state.get('error',''), 'errors': state.get('errors', 0)})}\n\n"
+            yield f"data: {json.dumps({'done': done, 'total': total, 'status': status, 'eta_s': eta_s, 'error': state.get('error',''), 'errors': state.get('errors', 0), 'skipped_trivial': state.get('skipped_trivial', 0)})}\n\n"
             if status in ("done", "error", "idle", "cancelled"):
                 break
             await asyncio.sleep(1)

@@ -922,6 +922,7 @@ async function loadMemoryStats() {
   } catch(e) {
     list.innerHTML = `<div style="color:var(--red);font-size:12px;">${t('config_memory.error_label')}: ${e.message}</div>`;
   }
+  checkResumeInfo();
 }
 
 function rebuildSelectEmpty() {
@@ -933,16 +934,54 @@ function rebuildSelectEmpty() {
 function rebuildSelectAll()  { document.querySelectorAll('.rebuild-cb').forEach(cb => cb.checked = true); }
 function rebuildSelectNone() { document.querySelectorAll('.rebuild-cb').forEach(cb => cb.checked = false); }
 
-async function startRebuild() {
+async function startRebuild(resumeMode = false) {
   const selected = [...document.querySelectorAll('.rebuild-cb:checked')].map(cb => cb.dataset.inst);
   if (!selected.length) { toast(t('config_memory.rebuild_no_instance'), 'err'); return; }
 
-  const totalEntries = selected.reduce((sum, inst) => {
-    const m = _memStats.find(x => x.instance === inst);
-    return sum + (m?.log_entries || 0);
-  }, 0);
+  const skipTrivial = document.getElementById('rebuild-skip-trivial')?.checked ?? true;
+  const delayMs = parseInt(document.getElementById('rebuild-delay')?.value || '0', 10);
+  const scanInfo = document.getElementById('rebuild-scan-info');
 
-  Modal.showConfirm(t('config_memory.rebuild_confirm', {count: selected.length, instances: selected.join(', '), total: totalEntries}), async () => {
+  // Pre-Scan: Logs analysieren und Kosten schätzen
+  scanInfo.style.display = '';
+  scanInfo.innerHTML = t('config_memory.rebuild_scanning');
+
+  let totalRelevant = 0, totalFiltered = 0, totalRaw = 0, estTokens = 0;
+  let isApi = false, providerType = '';
+  for (const inst of selected) {
+    try {
+      const r = await fetch(`/api/rebuild-scan/${inst}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({skip_trivial: skipTrivial}),
+      });
+      const d = await r.json();
+      totalRelevant += d.total_relevant;
+      totalFiltered += d.total_filtered;
+      totalRaw += d.total_raw;
+      estTokens += d.est_tokens;
+      if (d.is_api) { isApi = true; providerType = d.provider_type; }
+    } catch(e) {
+      toast(`Scan ${inst}: ${e.message}`, 'err');
+    }
+  }
+
+  let scanHtml = t('config_memory.rebuild_scan_result', {
+    relevant: totalRelevant, total: totalRaw, filtered: totalFiltered
+  }) + '<br>' + t('config_memory.rebuild_scan_tokens', {tokens: estTokens.toLocaleString()});
+  if (isApi) {
+    scanHtml += '<br><strong style="color:var(--yellow);">' +
+      t('config_memory.rebuild_scan_api_warn', {type: providerType}) + '</strong>';
+  }
+  scanInfo.innerHTML = scanHtml;
+
+  const confirmMsg = t('config_memory.rebuild_confirm_filtered', {
+    count: selected.length, instances: selected.join(', '),
+    relevant: totalRelevant, filtered: totalFiltered,
+    tokens: estTokens.toLocaleString(),
+  });
+
+  Modal.showConfirm(confirmMsg, async () => {
     const btn    = document.getElementById('rebuild-btn');
     const cancel = document.getElementById('rebuild-cancel-btn');
     const overall = document.getElementById('rebuild-overall-status');
@@ -956,11 +995,22 @@ async function startRebuild() {
       overall.textContent = (i+1) + ' / ' + selected.length + ': ' + inst;
       setRebuildProgress(0, 0, null, t('config_memory.rebuild_starting') + ' ' + inst + '\u2026');
       try {
-        const r = await fetch(`/api/rebuild-memory/${inst}`, { method: 'POST' });
+        const r = await fetch(`/api/rebuild-memory/${inst}`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            skip_trivial: skipTrivial,
+            delay_ms: delayMs,
+            resume: resumeMode,
+          }),
+        });
         const d = await r.json();
         if (!d.ok) {
           toast(`${inst}: ${d.error}`, 'err');
           continue;
+        }
+        if (d.skipped_trivial > 0) {
+          toast(`${inst}: ${d.skipped_trivial} triviale Eintr\u00e4ge \u00fcbersprungen`, 'info');
         }
         await new Promise(resolve => startRebuildSSE(inst, resolve));
       } catch(e) {
@@ -971,7 +1021,9 @@ async function startRebuild() {
     overall.textContent = '\u2713 ' + t('config_memory.rebuild_done') + ' (' + selected.length + ' ' + t('config_memory.rebuild_instances_label') + ')';
     btn.disabled = false;
     cancel.style.display = 'none';
+    document.getElementById('rebuild-resume-info').style.display = 'none';
     loadMemoryStats();
+    checkResumeInfo();
   });
 }
 
@@ -984,6 +1036,41 @@ async function cancelRebuild() {
   setRebuildProgress(0, 0, null, '\u25a0 ' + t('config_memory.rebuild_cancelled'));
   document.getElementById('rebuild-btn').disabled = false;
   document.getElementById('rebuild-cancel-btn').style.display = 'none';
+  // Nach kurzer Pause Resume-Info laden
+  setTimeout(checkResumeInfo, 1000);
+}
+
+async function checkResumeInfo() {
+  const resumeDiv = document.getElementById('rebuild-resume-info');
+  if (!resumeDiv) return;
+  const instances = [...document.querySelectorAll('.rebuild-cb')].map(cb => cb.dataset.inst);
+  let html = '';
+  for (const inst of instances) {
+    try {
+      const r = await fetch(`/api/rebuild-resume-info/${inst}`);
+      const d = await r.json();
+      if (d.has_progress) {
+        html += `<div style="margin-bottom:4px;">
+          <strong>${escHtml(inst)}</strong>: ${t('config_memory.rebuild_resume_info', {processed: d.processed, total: d.total_entries})}
+          <button class="btn btn-sm btn-primary" style="margin-left:8px;" onclick="resumeRebuild('${escAttr(inst)}')">${t('config_memory.rebuild_resume')}</button>
+        </div>`;
+      }
+    } catch(e) { /* ignore */ }
+  }
+  if (html) {
+    resumeDiv.innerHTML = html;
+    resumeDiv.style.display = '';
+  } else {
+    resumeDiv.style.display = 'none';
+  }
+}
+
+async function resumeRebuild(inst) {
+  // Instanz auswählen und Resume starten
+  document.querySelectorAll('.rebuild-cb').forEach(cb => {
+    cb.checked = cb.dataset.inst === inst;
+  });
+  startRebuild(true);
 }
 
 function startRebuildSSE(inst, onDone) {

@@ -772,3 +772,91 @@ def test_create_agent_manager_addon():
         find_ollama_url_fn=lambda c: "",
     )
     assert isinstance(mgr, InProcessAgentManager)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Tests: Pre-Filtering (_is_trivial_entry)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_trivial_empty_entry():
+    main = _import_main()
+    assert main._is_trivial_entry({"user": "", "assistant": ""}) is True
+
+def test_trivial_short_user_no_assistant():
+    main = _import_main()
+    assert main._is_trivial_entry({"user": "hi", "assistant": ""}) is True
+
+def test_trivial_greeting():
+    main = _import_main()
+    assert main._is_trivial_entry({"user": "Hallo", "assistant": "Hi!"}) is True
+    assert main._is_trivial_entry({"user": "guten morgen", "assistant": "Guten Morgen!"}) is True
+
+def test_trivial_light_command():
+    main = _import_main()
+    assert main._is_trivial_entry({"user": "Licht an im Bad", "assistant": "Erledigt."}) is True
+
+def test_trivial_switch_command():
+    main = _import_main()
+    assert main._is_trivial_entry({"user": "Schalte das Licht im Flur aus", "assistant": "Erledigt."}) is True
+
+def test_not_trivial_meaningful_conversation():
+    main = _import_main()
+    assert main._is_trivial_entry({
+        "user": "Ich trinke morgens gerne Kaffee, aber keinen Tee",
+        "assistant": "Okay, ich merke mir das!",
+    }) is False
+
+def test_not_trivial_preference():
+    main = _import_main()
+    assert main._is_trivial_entry({
+        "user": "Meine Lieblingsfarbe ist blau und ich mag Pizza",
+        "assistant": "Notiert!",
+    }) is False
+
+def test_not_trivial_question():
+    main = _import_main()
+    assert main._is_trivial_entry({
+        "user": "Was weißt du über mich?",
+        "assistant": "Du magst Kaffee und Pizza.",
+    }) is False
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Tests: _scan_rebuild_entries
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_scan_rebuild_entries_filters_trivial(tmp_path, monkeypatch):
+    main = _import_main()
+    # Temporäre Logs erstellen
+    conv_dir = tmp_path / "conversations" / "test-user"
+    conv_dir.mkdir(parents=True)
+    log_file = conv_dir / "2026-03-08.jsonl"
+    log_file.write_text(
+        '{"user":"Hallo","assistant":"Hi!"}\n'
+        '{"user":"Ich trinke gerne Kaffee am Morgen","assistant":"Notiert!"}\n'
+        '{"user":"Licht an","assistant":"Erledigt"}\n'
+        '{"user":"Mein Geburtstag ist am 15. Mai","assistant":"Okay!"}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(main, "LOG_ROOT", tmp_path)
+    result = main._scan_rebuild_entries("test-user", skip_trivial=True)
+    assert result["total_raw"] == 4
+    assert result["total_filtered"] >= 2  # Hallo + Licht an
+    assert result["total_relevant"] <= 2  # Kaffee + Geburtstag
+    assert result["total_relevant"] == len(result["entries"])
+
+def test_scan_rebuild_entries_no_filter(tmp_path, monkeypatch):
+    main = _import_main()
+    conv_dir = tmp_path / "conversations" / "test-user"
+    conv_dir.mkdir(parents=True)
+    log_file = conv_dir / "2026-03-08.jsonl"
+    log_file.write_text(
+        '{"user":"Hallo","assistant":"Hi!"}\n'
+        '{"user":"Ich trinke gerne Kaffee","assistant":"Notiert!"}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(main, "LOG_ROOT", tmp_path)
+    result = main._scan_rebuild_entries("test-user", skip_trivial=False)
+    assert result["total_raw"] == 2
+    assert result["total_filtered"] == 0
+    assert result["total_relevant"] == 2
