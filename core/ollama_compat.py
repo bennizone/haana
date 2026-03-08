@@ -4,11 +4,12 @@ HAANA Fake-Ollama-API – Ollama-kompatible Endpoints für HA Voice Integration
 Stellt HAANA als Ollama-Server dar, sodass Home Assistants eingebaute
 Ollama-Integration direkt verbinden kann – keine HACS-Abhängigkeit nötig.
 
-Architektur: Universeller LLM-Proxy mit Tool-Calling-Support.
+Architektur: Universeller LLM-Proxy mit Tool-Calling-Support und Delegation.
 - Empfängt Requests im Ollama-Format (von HA)
 - Injiziert Memory-Kontext (Qdrant Embeddings)
 - Übersetzt und leitet an beliebigen Provider weiter (Ollama, Anthropic, OpenAI, MiniMax, Gemini)
 - Übersetzt Tool-Calls zurück ins Ollama-Format (für HA)
+- Delegation: ha-assist kann komplexe Anfragen an ha-advanced weiterleiten ([DELEGATE]-Marker)
 
 Endpoints:
   GET  /api/tags     → Listet konfigurierte Modelle
@@ -29,6 +30,14 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 logger = logging.getLogger(__name__)
+
+DELEGATION_MARKER = "[DELEGATE]"
+
+_DELEGATION_INSTRUCTIONS = """
+IMPORTANT: You are a fast voice assistant. For complex questions that you cannot answer directly, respond ONLY with the exact text "[DELEGATE]" (nothing else).
+Delegate when the question is about: weather, forecasts, calendar, appointments, recipes, cooking, complex explanations ("how does X work", "why does X happen"), general knowledge, or anything you are unsure about.
+Do NOT delegate for: controlling devices (lights, switches, climate), reading sensor states, simple status queries, timers, or simple household questions.
+"""
 
 _MODEL_META = {
     "format": "haana",
@@ -397,6 +406,86 @@ async def _stream_response(text: str, model: str, elapsed: float):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Delegation: ha-assist → ha-advanced
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _inject_delegation_instructions(messages: list[dict]) -> list[dict]:
+    """Fügt Delegation-Instructions in den System-Prompt ein."""
+    result = []
+    has_system = False
+    for msg in messages:
+        if msg.get("role") == "system":
+            has_system = True
+            enriched = msg.copy()
+            enriched["content"] = msg["content"] + "\n" + _DELEGATION_INSTRUCTIONS
+            result.append(enriched)
+        else:
+            result.append(msg)
+    if not has_system:
+        result.insert(0, {"role": "system", "content": _DELEGATION_INSTRUCTIONS.strip()})
+    return result
+
+
+async def _handle_delegation(
+    target_instance: str,
+    original_body: dict,
+    memories: str,
+    *,
+    get_config,
+    resolve_llm,
+    find_ollama_url,
+) -> dict | None:
+    """Delegiert an die Ziel-Instanz. Returns Ollama-Response-Dict oder None bei Fehler."""
+    cfg = get_config()
+    target_user = next((u for u in cfg.get("users", []) if u["id"] == target_instance), None)
+    if not target_user:
+        return None
+
+    target_llm, target_prov = resolve_llm(target_user.get("primary_llm", ""), cfg)
+    if not target_llm or not target_prov:
+        return None
+
+    # Original-Messages wiederherstellen (ohne Delegation-Instructions)
+    messages = list(original_body.get("messages", []))
+    tools = original_body.get("tools")
+
+    # Memories auch für Delegation-Ziel injizieren
+    if memories:
+        enriched = []
+        for msg in messages:
+            if msg.get("role") == "system":
+                m = msg.copy()
+                m["content"] = msg["content"] + f"\n\nAdditional context from household memory:\n{memories}"
+                enriched.append(m)
+            else:
+                enriched.append(msg)
+        messages = enriched
+
+    # Provider bestimmen
+    ptype = target_prov.get("type", "ollama")
+    model = target_llm.get("model", "")
+    key = target_prov.get("key", "")
+
+    if ptype == "ollama":
+        url = target_prov.get("url") or find_ollama_url(cfg) or "http://localhost:11434"
+    elif ptype == "minimax":
+        url = target_prov.get("url") or "https://api.minimax.io/anthropic"
+    elif ptype == "anthropic":
+        url = target_prov.get("url") or "https://api.anthropic.com"
+    else:
+        url = target_prov.get("url", "")
+
+    try:
+        return await _call_llm(
+            provider_type=ptype, url=url, model=model,
+            messages=messages, api_key=key, tools=tools,
+        )
+    except Exception as e:
+        logger.error("[ollama-compat] Delegation an %s fehlgeschlagen: %s", target_instance, e)
+        return None
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Router
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -507,8 +596,16 @@ def create_ollama_router(
                     enriched_messages.append(msg)
             messages = enriched_messages
 
-        # LLM-Provider bestimmen
+        # Delegation-Check: Hat diese Instanz ein Delegationsziel?
         cfg = get_config()
+        delegation_map = cfg.get("ollama_compat", {}).get("delegation", {})
+        delegation_target = delegation_map.get(instance, "")
+
+        # Delegation-Instructions in System-Prompt injizieren
+        if delegation_target and not has_tool_result:
+            messages = _inject_delegation_instructions(messages)
+
+        # LLM-Provider bestimmen
         provider_type = prov.get("type", "ollama")
         model_name = llm.get("model", "")
         api_key = prov.get("key", "")
@@ -534,12 +631,37 @@ def create_ollama_router(
             return _make_response("Entschuldigung, es ist ein Fehler aufgetreten.", model_raw, time.monotonic() - t_start, stream)
 
         elapsed = time.monotonic() - t_start
+        resp_text = ollama_resp.get("message", {}).get("content", "")
+
+        # ── Delegation: [DELEGATE] erkannt → an Ziel-Instanz weiterleiten ──
+        if delegation_target and resp_text.strip().startswith(DELEGATION_MARKER):
+            delegate_resp = await _handle_delegation(
+                delegation_target, body, memories,
+                get_config=get_config, resolve_llm=resolve_llm,
+                find_ollama_url=find_ollama_url,
+            )
+            if delegate_resp is not None:
+                d_elapsed = time.monotonic() - t_start
+                delegate_resp["model"] = model_raw
+                d_text = delegate_resp.get("message", {}).get("content", "")
+                d_tc = bool(delegate_resp.get("message", {}).get("tool_calls"))
+                logger.info(
+                    "[ollama-compat] %s → %s (delegated): %.2fs | Q: %s | A: %s",
+                    instance, delegation_target, d_elapsed,
+                    user_message[:80] if user_message else "(tool-result)", d_text[:120],
+                )
+                if d_tc:
+                    return _raw_response(delegate_resp, d_elapsed)
+                if stream:
+                    return _make_response(d_text, model_raw, d_elapsed, True)
+                return _raw_response(delegate_resp, d_elapsed)
+            # Delegation fehlgeschlagen → Fallback auf eigene Antwort
+            logger.warning("[ollama-compat] Delegation %s → %s fehlgeschlagen, Fallback", instance, delegation_target)
 
         # Modell-Name im Response auf den Alias setzen
         ollama_resp["model"] = model_raw
 
         # Logging
-        resp_text = ollama_resp.get("message", {}).get("content", "")
         has_tc = bool(ollama_resp.get("message", {}).get("tool_calls"))
         _mem_count = len(memories.splitlines()) if memories else 0
         _q = user_message[:80] if user_message else "(tool-result)"
