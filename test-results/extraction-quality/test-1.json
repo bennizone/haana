@@ -1,0 +1,495 @@
+{
+  "test_number": 1,
+  "extraction_llm": "ministral",
+  "embedding_provider": "ollama-2",
+  "embedding_model": "bge-m3",
+  "embedding_dims": 1024,
+  "context_enrichment": true,
+  "duration_seconds": 421,
+  "rebuild_entries": 76,
+  "points": {
+    "alice_memory": 18,
+    "household_memory": 61,
+    "total": 79
+  },
+  "memories": {
+    "alice_memory": [
+      {
+        "id": "0c87293a-4ea2-4ad6-b432-27528f3ab0c0",
+        "memory": "Urlaubspläne (nicht konkretisiert, Zeitraum: März 2026)",
+        "hash": "18261798aeff2de3edb52165e2cde59f",
+        "created_at": "2026-03-08T09:05:39.882021-07:00"
+      },
+      {
+        "id": "0e5eee54-7e68-4081-9a38-03e8720e5df0",
+        "memory": "Urlaub vom 6. März bis 29. März 2026 (Smart-Home-Einstellungen für Urlaubszeit anpassen)",
+        "hash": "1bf6498d3e77c4a525d0d9b8ba6e5f26",
+        "created_at": "2026-03-08T09:04:32.630538-07:00"
+      },
+      {
+        "id": "1054b521-0f23-4bb0-a72b-bc0c0bec809d",
+        "memory": "Urlaub von 6. März bis 29. März 2026",
+        "hash": "d01f288afcb0bd1d6339825e2a2f57f2",
+        "created_at": "2026-03-08T09:03:53.140552-07:00"
+      },
+      {
+        "id": "39b5b328-f458-4556-8e7f-ae3eea8ae28f",
+        "memory": "Geboren am 1. Juli 1983",
+        "hash": "6e83f8568c7c6bff53b28d3387ae3833",
+        "created_at": "2026-03-08T09:03:35.468350-07:00"
+      },
+      {
+        "id": "3bd21694-c44c-47cc-a39a-cee8b14ee3a6",
+        "memory": "Haustier: Mystique (auch 'Mausi')",
+        "hash": "829558ac72644703a8055c4e27a665e5",
+        "created_at": "2026-03-08T09:02:52.446359-07:00"
+      },
+      {
+        "id": "3ec2d9d8-312a-4522-a1c1-d0886d528e25",
+        "memory": "Alice nutzt Tools wie Trilium, CalDAV, IMAP/SMTP",
+        "hash": "dddecd2a3ac8700cd0bc5c2a1f8ab075",
+        "created_at": "2026-03-08T09:08:32.753794-07:00"
+      },
+      {
+        "id": "40d31e17-90e1-4c2e-a94f-d02ead0e1441",
+        "memory": "Haustier: Lady Amaya (auch 'Pony')",
+        "hash": "72aee3678a436ee8feea6833178c646e",
+        "created_at": "2026-03-08T09:02:52.458493-07:00"
+      },
+      {
+        "id": "5aa35ece-6cf5-4666-9ae1-d374b0751ac9",
+        "memory": "Wohnort ist Sindelfingen",
+        "hash": "685464ee98ebf783079cc194654d7734",
+        "created_at": "2026-03-08T09:02:52.413686-07:00"
+      },
+      {
+        "id": "68f5d22e-c983-4a16-a5de-9efc18549537",
+        "memory": "Name ist Alice",
+        "hash": "1f71e7155d4dcec44ec1a517e32cda35",
+        "created_at": "2026-03-08T09:02:52.378659-07:00"
+      },
+      {
+        "id": "6eee300a-994f-4aad-a921-b2f867ec8350",
+        "memory": "Mitbewohner Bob (Geburtstag: 22. April 1982)",
+        "hash": "3d5d5faeb3b0ba8db98ba4f8dd584314",
+        "created_at": "2026-03-08T09:05:39.729848-07:00"
+      },
+      {
+        "id": "745d1206-b4b0-4f84-aed0-e6139b621ed0",
+        "memory": "Zwei Maine Coon-Katzen im Haushalt: Lady Amaya (Spitzname Pony)",
+        "hash": "4ebf1661e481c9054e4c8cf45f74da57",
+        "created_at": "2026-03-08T09:04:09.443555-07:00"
+      },
+      {
+        "id": "a7c7369a-d1bc-492a-8fe5-ebd1f5cc026f",
+        "memory": "Aktueller Urlaub vom 6. bis 29. März 2026",
+        "hash": "46760db8244d822283de0be6e865302e",
+        "created_at": "2026-03-08T09:02:52.397598-07:00"
+      },
+      {
+        "id": "adcd8065-e072-4ba9-acd0-655e96ed2a03",
+        "memory": "Lieblingsfarbe ist blau",
+        "hash": "56fd6d7a774f05d3011c35551c3b478b",
+        "created_at": "2026-03-08T09:08:39.688346-07:00"
+      },
+      {
+        "id": "b0033a71-ab1b-4b5b-8f56-18d86d5632e7",
+        "memory": "Haushalt enthält mindestens eine Maine Coon-Katze namens Lady Amaya (alias Pony)",
+        "hash": "4b826ec833e5abae47547baf61999a21",
+        "created_at": "2026-03-08T09:04:09.458892-07:00"
+      },
+      {
+        "id": "cc33c8c1-6495-463b-98c5-ac0c88300f47",
+        "memory": "Mag Pizza",
+        "hash": "fc7cfecd6e060e65baa0f7c4f986e9e0",
+        "created_at": "2026-03-08T09:08:39.712740-07:00"
+      },
+      {
+        "id": "d7a5de11-f050-46d5-8d0e-97269e6df179",
+        "memory": "Zwei Maine Coon-Katzen im Haushalt: Mystique (Spitzname Mausi)",
+        "hash": "aed31cef11341ced1fa4cc5294098bce",
+        "created_at": "2026-03-08T09:04:09.433152-07:00"
+      },
+      {
+        "id": "dfd48430-4f4b-4176-bb88-94a0f7d0669c",
+        "memory": "Mitbewohner ist Bob (Geburtstag: 22. April 1982)",
+        "hash": "36388f68fd736aa15fb80cfe49fc20d0",
+        "created_at": "2026-03-08T09:02:52.424691-07:00"
+      },
+      {
+        "id": "fac7fa9a-49ea-4a9f-b52d-2a887d3213d0",
+        "memory": "Smart-Home-Einstellungen für Urlaubszeit: aktiviert",
+        "hash": "f939d0b91ecd566343b4ad789b51cf46",
+        "created_at": "2026-03-08T09:06:22.783459-07:00"
+      }
+    ],
+    "household_memory": [
+      {
+        "id": "0498721c-eae9-4434-b464-f8d074317509",
+        "memory": "Zwei Subbuttons für die Automatiken sind vorhanden: ⏰ Subbutton '23:00 Aus' → `automation.boiler_23_00_abschalten` (toggelt Automatik für 23:00) und 🔔 Subbutton 'Morgens An' → `automation.boiler_morgens_einschalten_mit_wecker_logik` (toggelt Morgens-Automatik)",
+        "hash": "a62c315cb59ae1845ebe8b28d8d91cf7",
+        "created_at": "2026-03-08T09:07:38.816315-07:00"
+      },
+      {
+        "id": "0c67bf30-89b7-4e37-825b-1f2173c87481",
+        "memory": "Katze hat Spitzname Pony",
+        "hash": "34c40cad98f0cfa7b151942103419f2e",
+        "created_at": "2026-03-08T09:04:45.344982-07:00"
+      },
+      {
+        "id": "0ef3189a-f409-427e-8cad-3d81c2bec17e",
+        "memory": "Nutzt Kalender (CalDAV)",
+        "hash": "7c0d8c7d844d4731fe783d4c77d9f629",
+        "created_at": "2026-03-08T09:08:23.366004-07:00"
+      },
+      {
+        "id": "150e0b36-20f6-48bd-87d2-ce957579c1cf",
+        "memory": "Lady Amaya (auch Pony)",
+        "hash": "cadb2800b4fb4ec7db5fd79bfcc4038d",
+        "created_at": "2026-03-08T09:06:00.901177-07:00"
+      },
+      {
+        "id": "159f008b-1f8d-4bd4-a34a-f199d50f81ed",
+        "memory": "Katze heißt Mystique (auch bekannt als Mausi)",
+        "hash": "b71f8b0fb5db706f1a6bd493191c3029",
+        "created_at": "2026-03-08T09:03:04.742069-07:00"
+      },
+      {
+        "id": "1d4a0a40-5bf3-46b4-9b10-50e6e77317f2",
+        "memory": "Katze hat Spitzname Mausi",
+        "hash": "259a9220390357b5022a20223ea2b0ff",
+        "created_at": "2026-03-08T09:03:27.705520-07:00"
+      },
+      {
+        "id": "1f15c24b-f6f0-402b-82c3-d2ce80313144",
+        "memory": "Admin des HAANA-Stacks",
+        "hash": "ae54e87a2332fb887da19dba1cc3ac45",
+        "created_at": "2026-03-08T09:03:47.412897-07:00"
+      },
+      {
+        "id": "1fbcdeae-c9a0-4f2b-bb83-3660a4d9d88b",
+        "memory": "Zwei Katzen: Mystique (Spitzname Mausi) und Lady Amaya (Spitzname Pony)",
+        "hash": "bf11becbcd9aabe0898909b4d88e6238",
+        "created_at": "2026-03-08T09:05:19.077088-07:00"
+      },
+      {
+        "id": "208c3453-4293-4f55-8a4c-d9a78ed1938f",
+        "memory": "Es gibt einen Automatik-Button, der beide Boiler-Automationen synchron schaltet",
+        "hash": "da7d36810c5a48ac7e42aad7bf5893d6",
+        "created_at": "2026-03-08T09:07:56.720745-07:00"
+      },
+      {
+        "id": "210604a1-a17f-468c-9676-dd31ed03b729",
+        "memory": "Im Haushalt gibt es eine Katze namens Mystique (auch 'Mausi' genannt)",
+        "hash": "5a1cb9e3c116474f1a83caa175194b4f",
+        "created_at": "2026-03-08T09:07:38.834680-07:00"
+      },
+      {
+        "id": "2b6db2a7-2339-429b-8654-86c469d6162a",
+        "memory": "Katze 1 ist Mystique (auch bekannt als Mausi)",
+        "hash": "3a4d11b20625231a1dd15ff24fd7fbf9",
+        "created_at": "2026-03-08T09:05:30.667820-07:00"
+      },
+      {
+        "id": "2d38970a-244b-42c8-870c-483fdcfa9388",
+        "memory": "Nutzt Smart Home mit Home Assistant",
+        "hash": "56e8b50510ff16343b76b4015bb3fcd2",
+        "created_at": "2026-03-08T09:08:23.355441-07:00"
+      },
+      {
+        "id": "2e509e72-7c01-4bde-b2e9-11d1a17a7658",
+        "memory": "In der HAANA-Instanz sind die Sprachmodelle Home Assistant (Standard Cloud), MiniMax-M2.5, Ministral 3 3B und LFM2 konfiguriert",
+        "hash": "ece9812b5cc9ad5ce29060d12ab8c33e",
+        "created_at": "2026-03-08T09:05:00.859049-07:00"
+      },
+      {
+        "id": "2f0a23a4-3206-4676-9e95-49bf15553a3a",
+        "memory": "Es gibt einen neuen Button für den Boiler im Dashboard unter der Küche-Section (Deckenlampe) mit manueller Schaltung (An/Aus) → **Erweiterung um synchronisierte Automatikschaltung**",
+        "hash": "c018dfc31a38c1bfd233e91be876caaa",
+        "created_at": "2026-03-08T09:07:38.641538-07:00"
+      },
+      {
+        "id": "300069ce-c1c8-48e4-af87-002a889e56c4",
+        "memory": "Zwei Maine Coon-Katzen",
+        "hash": "7d60fbee778868c035c9160799d4d4d4",
+        "created_at": "2026-03-08T09:02:44.415963-07:00"
+      },
+      {
+        "id": "3c8e7a72-797d-49fc-87bf-0ad59478f9b8",
+        "memory": "Das System überwacht das `input_boolean.boiler_automatik` und schaltet beide Boiler-Automationen gleichzeitig an/aus",
+        "hash": "b8c537b922d679387422e33965c7c090",
+        "created_at": "2026-03-08T09:07:56.765053-07:00"
+      },
+      {
+        "id": "3d518212-5f8c-4fc8-8c95-4cfeed164390",
+        "memory": "Betreibt Infrastruktur mit TrueNAS",
+        "hash": "664ad66d078fad361376c37dae9777c8",
+        "created_at": "2026-03-08T09:08:23.323330-07:00"
+      },
+      {
+        "id": "454269b7-55b6-4f8b-9a7d-90b7b0cdda88",
+        "memory": "Wenn Wecker vor 9:00 Uhr liegt → Boiler wird um ~8:45 Uhr eingeschaltet; wenn kein Wecker vor 9:00 Uhr oder beide nach 9:00 Uhr liegen → Boiler wird um 9:00 Uhr eingeschaltet.",
+        "hash": "0973890a6ebff472304a051bac3f3955",
+        "created_at": "2026-03-08T09:06:58.733811-07:00"
+      },
+      {
+        "id": "4af221a6-7537-4fd1-be24-5e73208480ff",
+        "memory": "621 Entities in 31 Domains vorhanden",
+        "hash": "5f0047c765a2fd96d00352e95b8cccec",
+        "created_at": "2026-03-08T09:03:27.532348-07:00"
+      },
+      {
+        "id": "4b3c31da-df02-4398-a694-8eead686116e",
+        "memory": "Heizpläne für Schlafzimmer, Wohnzimmer, Bad, Arbeitszimmer",
+        "hash": "ac5efda4780748bb1a4066b5b523a56e",
+        "created_at": "2026-03-08T09:05:00.710242-07:00"
+      },
+      {
+        "id": "50a019be-76da-4e04-ae51-1b493b6e5de9",
+        "memory": "Automationen sind bereits aktiv: `automation.boiler_23_00_abschalten` und `automation.boiler_morgens_einschalten_mit_wecker_logik` → **Erweiterung um synchronisierte Steuerung durch `input_boolean.boiler_automatik`**",
+        "hash": "7ff0060de8e98987c9cccfd418fbf7c0",
+        "created_at": "2026-03-08T09:07:08.468006-07:00"
+      },
+      {
+        "id": "56171204-75a2-4041-8519-3e1b97f62a3e",
+        "memory": "Beide sind Maine Coons",
+        "hash": "c1aa6ebd913721a3431bf2b9fef6a81e",
+        "created_at": "2026-03-08T09:05:30.697322-07:00"
+      },
+      {
+        "id": "5776af2c-f9b0-4dec-9028-dbcf1b2a30f8",
+        "memory": "Haustiere vorhanden",
+        "hash": "c9e4759a113d45cd023629bf62004a4d",
+        "created_at": "2026-03-08T09:06:00.874059-07:00"
+      },
+      {
+        "id": "5ba35863-77b8-4513-9470-08e0e1959a7a",
+        "memory": "Name ist Alice",
+        "hash": "1f71e7155d4dcec44ec1a517e32cda35",
+        "created_at": "2026-03-08T09:04:45.175146-07:00"
+      },
+      {
+        "id": "614033d0-f71c-4b3a-a778-9f89c2de3da6",
+        "memory": "Trinkt morgens keinen Kaffee",
+        "hash": "0d3a9f09b656496e5a80d8b035200b22",
+        "created_at": "2026-03-08T09:03:47.397177-07:00"
+      },
+      {
+        "id": "65043576-cf14-40f5-abea-4a51a54e03ef",
+        "memory": "Geboren am 1. Juli 1983",
+        "hash": "6e83f8568c7c6bff53b28d3387ae3833",
+        "created_at": "2026-03-08T09:03:47.374746-07:00"
+      },
+      {
+        "id": "6880572a-4396-4e75-be89-69627f2dfa2a",
+        "memory": "Nach den Änderungen wurden ohne neues Backup weitere Schritte durchgeführt: Input Boolean erstellt, Proxy-Automation erstellt, Dashboard angepasst",
+        "hash": "6486d08336b1791c033ac950c8b6b8e5",
+        "created_at": "2026-03-08T09:08:11.647726-07:00"
+      },
+      {
+        "id": "6c6d8073-96ee-4222-a139-2a80f325b0fb",
+        "memory": "Es gibt einen Subbutton 'Automatik' unter der Deckenlampe in der Küche (`light.deckenlampe_01`) mit Toggling der Automation `automation.autolicht_kuche` → **Erweiterung um `input_boolean.boiler_automatik` für synchronisierte Boiler-Automatik**",
+        "hash": "15663df1461de0c523f2b84f67578ede",
+        "created_at": "2026-03-08T09:07:19.791021-07:00"
+      },
+      {
+        "id": "6f5001ca-1a1d-4988-86a1-991a3c9333e5",
+        "memory": "6 Echo-Geräte + Apple TV + Monitor",
+        "hash": "f05e6c4ebfa188a0a09da41fb3b249e9",
+        "created_at": "2026-03-08T09:03:27.741552-07:00"
+      },
+      {
+        "id": "71194630-423b-4e33-8b4c-dc2950139dd9",
+        "memory": "Waschtrockner (Samsung) mit SmartThings-Integration",
+        "hash": "1a51c98d0627d9aa4bcfcb2e82aaf9f6",
+        "created_at": "2026-03-08T09:03:27.773267-07:00"
+      },
+      {
+        "id": "7410f50d-48d1-4893-98b5-54b26986b99c",
+        "memory": "Der Boiler-Button hat das Icon 💧 `mdi:water-boiler`",
+        "hash": "bfa881944569690751edb871bbe43b5e",
+        "created_at": "2026-03-08T09:07:38.654590-07:00"
+      },
+      {
+        "id": "7431148e-92ac-4a1f-889c-537a85b09a9f",
+        "memory": "Wohnort ist Sindelfingen",
+        "hash": "685464ee98ebf783079cc194654d7734",
+        "created_at": "2026-03-08T09:06:16.224525-07:00"
+      },
+      {
+        "id": "7c48f8c1-ca0e-4e41-ac30-ce694deb28b2",
+        "memory": "Boiler wird um 23:00 Uhr automatisch ausgeschaltet (basierend auf Weckerlogik)",
+        "hash": "86dbbe3d10f6257ffeffc337d0afc072",
+        "created_at": "2026-03-08T09:06:39.022909-07:00"
+      },
+      {
+        "id": "80124134-c97b-4d73-9308-77d2d8b82720",
+        "memory": "Boiler wird über `switch.boiler_kuche` gesteuert",
+        "hash": "8bba512fecfdcd7c92fdb84c4a4bd3e9",
+        "created_at": "2026-03-08T09:06:38.969245-07:00"
+      },
+      {
+        "id": "82c1a8c3-3e7a-4bbc-8e78-9d1d68e4d11d",
+        "memory": "Hat zwei Maine Coon-Katzen: Mystique (Spitzname: Mausi) und Lady Amaya (Spitzname: Pony)",
+        "hash": "4f75fe7b82b707e27f1e8be9a7303c48",
+        "created_at": "2026-03-08T09:05:48.564543-07:00"
+      },
+      {
+        "id": "883d98e8-ca59-46d0-98f4-0f04d927b44a",
+        "memory": "Entwickler ist Anthropic",
+        "hash": "afcaf87e98a2206d1e574193ea40e109",
+        "created_at": "2026-03-08T09:04:45.361822-07:00"
+      },
+      {
+        "id": "8a128f01-a5d3-48e4-a80e-cb7b5311f76c",
+        "memory": "Hat Urlaub geplant",
+        "hash": "0d6e0c52aa89c595eba4c2ad6067d475",
+        "created_at": "2026-03-08T09:06:16.264522-07:00"
+      },
+      {
+        "id": "995682ad-36f4-4b98-881b-173473fb30ff",
+        "memory": "Zugriff auf Home Assistant möglich",
+        "hash": "fe61a6b6c54881ae79d0800ae506fc0a",
+        "created_at": "2026-03-08T09:03:27.518810-07:00"
+      },
+      {
+        "id": "a2160329-4a73-445b-8482-f342150a8a94",
+        "memory": "Lebt zusammen mit Bob (Geburtstag: 22. April 1982)",
+        "hash": "b0a029662f02c6df316ffc2ea44db336",
+        "created_at": "2026-03-08T09:03:04.583140-07:00"
+      },
+      {
+        "id": "a6dd75d0-a5ac-4b55-8cd8-a3dacfd168db",
+        "memory": "Sensor für Echo im Schlafzimmer ist `sensor.echo_schlafzimmer_next_alarm`",
+        "hash": "23ba63466f4e68b6b0baebc63c99b4ab",
+        "created_at": "2026-03-08T09:06:38.985485-07:00"
+      },
+      {
+        "id": "b3709120-d33c-4024-bba0-1a902545756e",
+        "memory": "Aktuelle Luftfeuchtigkeit im Wohnzimmer: 41,11%",
+        "hash": "5df1b0d3aa22c4b37b8dbe099d1e2578",
+        "created_at": "2026-03-08T09:06:07.593967-07:00"
+      },
+      {
+        "id": "b4cb8680-4c9e-4af0-afcb-1f6c15d42500",
+        "memory": "Heizpläne für Schlafzimmer, Wohnzimmer, Bad, Arbeitszimmer",
+        "hash": "ac5efda4780748bb1a4066b5b523a56e",
+        "created_at": "2026-03-08T09:03:27.762029-07:00"
+      },
+      {
+        "id": "b7784974-06e2-460f-9ab2-a30828db7f1b",
+        "memory": "Automatisierung prüft Weckerzeiten von `sensor.echo_schlafzimmer_next_alarm` und `sensor.echo_bob_next_alarm` für Boilersteuerung basierend auf Priorität des frühesten Weckens",
+        "hash": "b488098091a962e5f69d4fef9c0ebe88",
+        "created_at": "2026-03-08T09:06:07.580629-07:00"
+      },
+      {
+        "id": "ba31f3b4-e7f4-4211-8073-aaa69e42123c",
+        "memory": "Wecker im Echo Schlafzimmer (`sensor.echo_schlafzimmer_next_alarm`) und Wecker im Echo Bob (`sensor.echo_bob_next_alarm`) prüfen Priorität für Boilersteuerung.",
+        "hash": "c9353f159831c88db99e94b7bed84f5f",
+        "created_at": "2026-03-08T09:06:59.179495-07:00"
+      },
+      {
+        "id": "c496e2a0-3ca4-489b-ba9c-f9597d136f81",
+        "memory": "Ein neues Backup mit dem Namen `Before_Boiler_Dashboard_Changes` wurde nach den Änderungen erstellt",
+        "hash": "5a8bba50d55741c1722b07867af61809",
+        "created_at": "2026-03-08T09:08:11.802276-07:00"
+      },
+      {
+        "id": "c9370e66-1be0-403c-b956-97a9681ca396",
+        "memory": "Nutzt E-Mail (IMAP/SMTP)",
+        "hash": "0098add733222076d2b8337637040634",
+        "created_at": "2026-03-08T09:08:23.376597-07:00"
+      },
+      {
+        "id": "ca0d5e33-faa0-4b36-8d2c-a9a10fc0b92e",
+        "memory": "Sensor für nächsten Wecker (aggregiert Alice und Bob) ist `sensor.alice_nächster_wecker`",
+        "hash": "3418b4de61bd0d67d46dc06a378ce825",
+        "created_at": "2026-03-08T09:06:39.001233-07:00"
+      },
+      {
+        "id": "ccaf7376-9435-4362-943d-27716ced3903",
+        "memory": "Ein Backup mit dem Namen `Before_Boiler_Automation` wurde vor den Änderungen erstellt",
+        "hash": "3fa40ba4947d9961cade5175a8842e2a",
+        "created_at": "2026-03-08T09:08:11.628607-07:00"
+      },
+      {
+        "id": "ccca800e-35ce-4a15-8577-14afafb285ad",
+        "memory": "Katze heißt Lady Amaya (auch bekannt als Pony)",
+        "hash": "1538a3180d002cdb7d7302093fa76d2b",
+        "created_at": "2026-03-08T09:03:04.600121-07:00"
+      },
+      {
+        "id": "cd0d34d6-d2a2-41b1-9c5a-88f40b724f09",
+        "memory": "Der Button ist als `input_boolean.boiler_automatik` implementiert",
+        "hash": "daeafff9de74b323ac97cebbd687bd57",
+        "created_at": "2026-03-08T09:07:56.745196-07:00"
+      },
+      {
+        "id": "d167581b-8e98-4909-a7c4-ca1dc229fa5f",
+        "memory": "Geburtstag ist 1. Juli 1983",
+        "hash": "3c1c13221ec84f7df999684c2bab3707",
+        "created_at": "2026-03-08T09:03:47.360907-07:00"
+      },
+      {
+        "id": "d1aa6a01-4017-4b26-be83-1d808749a86b",
+        "memory": "12 Lampen im System (Deckenlampen, Stehlampe, Sternenhimmel, Nachtlicht)",
+        "hash": "8f94ff64a912fb97bf871116766616a1",
+        "created_at": "2026-03-08T09:03:27.725714-07:00"
+      },
+      {
+        "id": "d246c3b5-ad74-46e0-8daf-4512594194a4",
+        "memory": "Boiler wird um 8:45 Uhr (mit Safety-Margin 8:30 Uhr) eingeschaltet basierend auf den Weckzeiten der beiden Echos (`sensor.echo_schlafzimmer_next_alarm` und `sensor.echo_bob_next_alarm`).",
+        "hash": "388b4a6e7ac0873dd187354d31f5126d",
+        "created_at": "2026-03-08T09:03:27.676628-07:00"
+      },
+      {
+        "id": "d36528d8-39b1-4382-8427-87de9c8755a5",
+        "memory": "Katze 2 ist Lady Amaya (auch bekannt als Pony)",
+        "hash": "a30702e08724f5e84cfb759d4ea96d19",
+        "created_at": "2026-03-08T09:05:30.681279-07:00"
+      },
+      {
+        "id": "d4e06ca8-6cc5-43a4-ab0a-ec95413b4c17",
+        "memory": "Automatisierung basiert auf beiden Sensoren: `sensor.echo_schlafzimmer_next_alarm` und `sensor.echo_bob_next_alarm` für Energiesparen durch gezieltes Ausschalten um 23:00 Uhr und Vermeidung unnötiger Vorwärmzeit am Morgen.",
+        "hash": "11322bac47fff3ad0a7fb12a4eec58e7",
+        "created_at": "2026-03-08T09:06:39.011925-07:00"
+      },
+      {
+        "id": "d75228fc-3716-465b-93a5-d34409444291",
+        "memory": "Boiler wird um 23 Uhr abschalten",
+        "hash": "c4361f8f9678f626c45b2ff82d4f6ff8",
+        "created_at": "2026-03-08T09:03:27.689479-07:00"
+      },
+      {
+        "id": "e33c1167-ce74-45ac-9eb6-b9085fce6c37",
+        "memory": "Nutzt Trilium für Notizen",
+        "hash": "75f5dfcd9c076288a43f0e33853aedef",
+        "created_at": "2026-03-08T09:08:23.387236-07:00"
+      },
+      {
+        "id": "e538915d-7c3b-41f4-bb66-cb7291049a97",
+        "memory": "Betreibt Infrastruktur mit Proxmox",
+        "hash": "07867d3997817f85146f000580083ad6",
+        "created_at": "2026-03-08T09:08:23.309476-07:00"
+      },
+      {
+        "id": "ea807583-9906-4c23-b1b0-ce171938fdf3",
+        "memory": "Mystique (auch Mausi)",
+        "hash": "b22506819dce15c9b07115061f003fc5",
+        "created_at": "2026-03-08T09:06:00.890414-07:00"
+      },
+      {
+        "id": "ebd6de62-cdd3-408e-9211-d1b386a69cda",
+        "memory": "Todo-Listen: Einkaufsliste, Fressnapf, Lidl, Action",
+        "hash": "f4abe9e9676fe50942d5f838825c1fdb",
+        "created_at": "2026-03-08T09:03:27.783959-07:00"
+      },
+      {
+        "id": "f74c2ada-3422-4ba1-89d5-0f061952ff5b",
+        "memory": "Betreibt Infrastruktur mit OPNsense",
+        "hash": "e098114243e8ad2121c4471552618787",
+        "created_at": "2026-03-08T09:08:23.339341-07:00"
+      }
+    ]
+  }
+}

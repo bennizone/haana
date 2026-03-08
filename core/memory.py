@@ -519,6 +519,37 @@ def _find_claude_cli() -> Optional[str]:
     return found
 
 
+def _call_anthropic_direct(llm_instance, *args, **kwargs) -> str:
+    """Ruft Anthropic-kompatible API direkt auf und extrahiert TextBlock.
+
+    Workaround für Mem0-Bug: generate_response crasht bei ThinkingBlock
+    (MiniMax und andere Modelle mit Extended Thinking).
+    """
+    messages = kwargs.get("messages", args[0] if args else [])
+    system_message = ""
+    filtered = []
+    for msg in messages:
+        if isinstance(msg, dict):
+            if msg.get("role") == "system":
+                system_message = msg.get("content", "")
+            else:
+                filtered.append(msg)
+    params = {
+        "model": llm_instance.config.model,
+        "messages": filtered,
+        "max_tokens": getattr(llm_instance.config, "max_tokens", 2000),
+    }
+    if system_message:
+        params["system"] = system_message
+    response = llm_instance.client.messages.create(**params)
+    # TextBlock finden (ThinkingBlocks überspringen)
+    for block in response.content:
+        if hasattr(block, "text"):
+            return block.text
+    # Fallback: ersten Block als String
+    return str(response.content[0]) if response.content else ""
+
+
 def _call_claude_cli(prompt: str, model: str, timeout: int = 60) -> Optional[str]:
     """Ruft die Claude CLI auf (nutzt OAuth-Credentials automatisch).
 
@@ -678,6 +709,15 @@ class HaanaMemory:
 
                 from mem0 import Memory
                 mem = Memory.from_config(config)
+                # Mem0-Bug: AnthropicLLM ignoriert anthropic_base_url beim Client-Erstellen.
+                # Fix: base_url nachträglich setzen (nötig für MiniMax/kompatible APIs).
+                if self._extract_url and hasattr(mem.llm, "client"):
+                    _c = mem.llm.client
+                    if hasattr(_c, "_base_url"):
+                        import httpx as _hx
+                        _url = self._extract_url.rstrip("/") + "/"
+                        _c._base_url = _hx.URL(_url)
+                        logger.info(f"[{scope}] Anthropic base_url → {self._extract_url}")
                 # Monkeypatch: LLM-Antworten sanitizen (manche LLMs geben Dicts statt Strings)
                 # + Rate-Limit-Retry (429 → Backoff bis zu 3 Versuche)
                 _orig_generate = mem.llm.generate_response
@@ -685,6 +725,7 @@ class HaanaMemory:
                 _limiter = self._extract_limiter
                 _cli_mode = self._use_cli_extraction
                 _cli_model = self._memory_model
+                _has_thinking = self._extract_type in ("minimax",)
                 def _sanitized_generate(*args, **kwargs):
                     import json as _json
                     _limiter.wait()
@@ -707,7 +748,12 @@ class HaanaMemory:
                     _max_retries = 3
                     for _attempt in range(_max_retries):
                         try:
-                            resp = _orig_generate(*args, **kwargs)
+                            # ThinkingBlock-Modelle (MiniMax): Mem0 crasht bei content[0].text
+                            # → Direkt API aufrufen und TextBlock extrahieren
+                            if _has_thinking:
+                                resp = _call_anthropic_direct(mem.llm, *args, **kwargs)
+                            else:
+                                resp = _orig_generate(*args, **kwargs)
                             break
                         except Exception as _rate_err:
                             _err_str = str(_rate_err)
