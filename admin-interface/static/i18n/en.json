@@ -163,6 +163,8 @@
     "extraction_llm": "Extraction LLM",
     "extraction_llm_fallback": "Fallback Extraction LLM",
     "extraction_llm_hint": "Global for all users without custom extraction LLM",
+    "context_enrichment": "Context Enrichment",
+    "context_enrichment_hint": "Resolves pronouns and references before extraction (extra LLM call per message). Recommended only for capable models (e.g. MiniMax, Claude Haiku). May produce errors with small models.",
     "rebuild_title": "Memory Rebuild from Conversation Logs",
     "rebuild_desc": "Rebuilds Qdrant completely – useful after data loss or embedding model change. Conversation logs are the source of truth.",
     "rebuild_warning": "May take minutes to hours depending on conversation count and LLM speed.",

@@ -203,6 +203,7 @@ DEFAULT_CONFIG = {
     "memory": {
         "extraction_llm":          "ollama-extract",
         "extraction_llm_fallback": "",
+        "context_enrichment":      False,
         "window_size":    int(os.environ.get("HAANA_WINDOW_SIZE",    "20")),
         "window_minutes": int(os.environ.get("HAANA_WINDOW_MINUTES", "60")),
         "min_messages":   5,

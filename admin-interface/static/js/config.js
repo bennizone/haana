@@ -24,6 +24,10 @@ function renderConfig(c) {
   _setVal('mem-window-minutes', m.window_minutes ?? 60);
   _setVal('mem-min-messages',   m.min_messages   ?? 5);
 
+  // Context-Enrichment Toggle
+  const ctxEl = document.getElementById('mem-context-enrichment');
+  if (ctxEl) ctxEl.checked = !!m.context_enrichment;
+
   // Memory Extraction LLM Dropdowns
   const memExtEl = document.getElementById('mem-extraction-llm');
   const memExtFbEl = document.getElementById('mem-extraction-llm-fallback');
@@ -761,6 +765,7 @@ async function saveConfig() {
     memory: {
       extraction_llm:          document.getElementById('mem-extraction-llm')?.value || '',
       extraction_llm_fallback: document.getElementById('mem-extraction-llm-fallback')?.value || '',
+      context_enrichment:      document.getElementById('mem-context-enrichment')?.checked ?? false,
       window_size:    parseInt(document.getElementById('mem-window-size').value),
       window_minutes: parseInt(document.getElementById('mem-window-minutes').value),
       min_messages:   parseInt(document.getElementById('mem-min-messages').value),

@@ -199,6 +199,21 @@
             <select id="mem-extraction-llm-fallback"><!-- JS --></select>
           </div>
         </div>
+
+        <!-- Kontext-Anreicherung -->
+        <div class="form-row" style="margin-top:12px;">
+          <div class="form-group" style="flex:1;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="checkbox" id="mem-context-enrichment">
+              <span data-i18n="config_memory.context_enrichment">Kontext-Anreicherung</span>
+            </label>
+            <p class="hint" data-i18n="config_memory.context_enrichment_hint">
+              Löst Pronomen und Bezüge vor der Extraktion auf (extra LLM-Call pro Nachricht).
+              Empfohlen nur bei leistungsfähigen Modellen (z.B. MiniMax, Claude Haiku).
+              Bei kleinen Modellen kann dies zu fehlerhaften Extraktionen führen.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
 

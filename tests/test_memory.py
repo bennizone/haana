@@ -189,3 +189,98 @@ def test_classify_scope_uses_captured_ollama_url():
     assert mem._ollama_url == ""
     result = mem._classify_scope_via_llm("test text")
     assert result is None
+
+
+# ── Context-aware Extraction Tests ───────────────────────────────────────────
+
+def test_build_extraction_context_with_surrounding():
+    """Kontext wird aus umgebenden Window-Einträgen aufgebaut."""
+    mem = _make_memory(["test_memory"])
+    mem._memories = {}
+    mem._window = m.ConversationWindow(max_messages=20)
+    mem._pending_tasks = set()
+    mem._last_search_hits = 0
+
+    mem._window.add("Unsere Katze heißt Mystique", "Schöner Name!", "test_memory")
+    mem._window.add("Sie ist eine Maine Coon", "Toll!", "test_memory")
+    mem._window.add("Und 3 Jahre alt", "Notiert!", "test_memory")
+
+    target = mem._window._entries[1]  # "Sie ist eine Maine Coon"
+    context = mem._build_extraction_context(target)
+
+    assert "Mystique" in context  # Kontext von davor
+    assert ">>> AKTUELLE NACHRICHT:" in context  # Marker
+    assert "Maine Coon" in context  # Ziel-Nachricht
+    assert "3 Jahre alt" in context  # Kontext von danach
+
+
+def test_build_extraction_context_no_context_single_entry():
+    """Kein Kontext wenn nur ein Eintrag im Window."""
+    mem = _make_memory(["test_memory"])
+    mem._memories = {}
+    mem._window = m.ConversationWindow(max_messages=20)
+    mem._pending_tasks = set()
+    mem._last_search_hits = 0
+
+    mem._window.add("Hallo", "Hi!", "test_memory")
+    target = mem._window._entries[0]
+    context = mem._build_extraction_context(target)
+    assert context == ""
+
+
+def test_build_extraction_context_respects_limits():
+    """Kontext begrenzt auf context_before=3 und context_after=2."""
+    mem = _make_memory(["test_memory"])
+    mem._memories = {}
+    mem._window = m.ConversationWindow(max_messages=20)
+    mem._pending_tasks = set()
+    mem._last_search_hits = 0
+
+    # 8 Einträge hinzufügen
+    for i in range(8):
+        mem._window.add(f"msg_{i}", f"resp_{i}", "test_memory")
+
+    target = mem._window._entries[4]  # msg_4
+    context = mem._build_extraction_context(target, context_before=2, context_after=1)
+
+    assert "msg_1" not in context  # zu weit weg (idx 1, target idx 4, limit 2)
+    assert "msg_2" in context      # context_before=2
+    assert "msg_3" in context      # context_before=2
+    assert "msg_5" in context      # context_after=1
+    assert "msg_6" not in context  # zu weit weg
+
+
+def test_build_extraction_context_entry_not_in_window():
+    """Gibt leeren String zurück wenn Entry nicht im Window ist."""
+    mem = _make_memory(["test_memory"])
+    mem._memories = {}
+    mem._window = m.ConversationWindow(max_messages=20)
+    mem._pending_tasks = set()
+    mem._last_search_hits = 0
+
+    orphan = m._WindowEntry(user="orphan", assistant="resp", scope="test_memory")
+    context = mem._build_extraction_context(orphan)
+    assert context == ""
+
+
+# ── Context Preservation Tests ───────────────────────────────────────────────
+
+def test_window_persists_through_shutdown_restart(tmp_path):
+    """Window-Einträge bleiben nach Serialisierung erhalten (kein flush_all)."""
+    w = m.ConversationWindow(max_messages=20, max_age_minutes=60)
+    w.add("msg1", "resp1", "test_memory")
+    w.add("msg2", "resp2", "test_memory")
+    w.add("msg3", "resp3", "test_memory")
+
+    # Simuliert Shutdown: save ohne flush
+    data = w.to_dict()
+    assert len(data["entries"]) == 3
+
+    # Simuliert Restart: laden in neues Window
+    w2 = m.ConversationWindow(max_messages=20, max_age_minutes=60)
+    pending = w2.from_dict(data)
+    assert w2.size() == 3
+    assert w2._entries[0].user == "msg1"
+    assert w2._entries[2].user == "msg3"
+    # Keine pending Extraktionen (alles innerhalb der Limits)
+    assert len(pending) == 0

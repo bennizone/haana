@@ -70,6 +70,20 @@ def _build_agent_env(user: dict, cfg: dict, resolve_llm_fn, find_ollama_url_fn) 
     ollama_url = find_ollama_url_fn(cfg)
     emb = cfg.get("embedding", {})
 
+    # Extraction-Provider bestimmen (kann sich vom Primary-Provider unterscheiden)
+    extract_type = e_prov.get("type", "ollama")
+    extract_url = ""
+    extract_key = ""
+    if extract_type in ("anthropic", "minimax"):
+        extract_url = e_prov.get("url", "")
+        extract_key = e_prov.get("key", "")
+    elif extract_type in ("openai", "gemini"):
+        extract_url = e_prov.get("url", "")
+        extract_key = e_prov.get("key", "")
+    # Ollama: URL kommt aus OLLAMA_URL
+
+    mem_cfg = cfg.get("memory", {})
+
     env = {
         "HAANA_INSTANCE":        uid,
         "HAANA_API_PORT":        str(api_port),
@@ -78,14 +92,19 @@ def _build_agent_env(user: dict, cfg: dict, resolve_llm_fn, find_ollama_url_fn) 
         "HAANA_READ_SCOPES":     read_scopes,
         "HAANA_MODEL":           p_llm.get("model", "claude-sonnet-4-6"),
         "HAANA_MEMORY_MODEL":    e_llm.get("model", "ministral-3-32k:3b"),
-        "HAANA_WINDOW_SIZE":     str(cfg.get("memory", {}).get("window_size", 20)),
-        "HAANA_WINDOW_MINUTES":  str(cfg.get("memory", {}).get("window_minutes", 60)),
+        "HAANA_WINDOW_SIZE":     str(mem_cfg.get("window_size", 20)),
+        "HAANA_WINDOW_MINUTES":  str(mem_cfg.get("window_minutes", 60)),
         "HAANA_EMBEDDING_MODEL": emb.get("model", "bge-m3"),
         "HAANA_EMBEDDING_DIMS":  str(emb.get("dims", 1024)),
         "QDRANT_URL":            cfg.get("services", {}).get("qdrant_url", "http://qdrant:6333"),
         "OLLAMA_URL":            ollama_url,
         "HA_URL":                cfg.get("services", {}).get("ha_url", ""),
         "HA_TOKEN":              cfg.get("services", {}).get("ha_token", ""),
+        # Extraction-Provider (für Memory-LLM, kann sich von Ollama unterscheiden)
+        "HAANA_EXTRACT_URL":           extract_url,
+        "HAANA_EXTRACT_KEY":           extract_key,
+        "HAANA_EXTRACT_PROVIDER_TYPE": extract_type,
+        "HAANA_CONTEXT_ENRICHMENT":    str(mem_cfg.get("context_enrichment", False)).lower(),
     }
 
     # HA MCP-Server URL

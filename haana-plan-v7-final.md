@@ -412,14 +412,30 @@ Anfrage eingehend
 
 ### Provider-Konfiguration
 
+Config-Struktur: getrennte `providers[]` + `llms[]` Listen (nicht mehr `llm_providers[]`).
+
 ```
-Slot 1 – Primär:   Anthropic claude-sonnet-4-6 (OAuth via Claude Code CLI)
-Slot 2 – Fallback: Anthropic claude-haiku-4-5 (OAuth)
-Slot 3 – Lokal:    Ollama ministral-3-32k:3b (GPU-Server, openai-kompatibel)
-Slot 4 – Custom:   MiniMax MiniMax-M2.5 (anthropic-kompatibel, custom URL + Key)
+providers[] – Verbindungen zu LLM-Diensten:
+  Anthropic Claude (OAuth via Claude Code CLI)
+  Ollama GPU-Server (openai-kompatibel, http://10.83.1.110:11434)
+  MiniMax (anthropic-kompatibel, custom URL + Key)
+  OpenAI (API-Key)
+  Gemini (API-Key)
+  Custom (beliebig)
+
+llms[] – Modell-Definitionen (referenzieren Provider per Name):
+  claude-sonnet → Provider "Anthropic Claude"
+  claude-haiku → Provider "Anthropic Claude"
+  ministral-3-32k:3b → Provider "Ollama GPU-Server"
+  MiniMax-M2.5 → Provider "MiniMax"
+
+User-Felder (String-IDs statt Integer-Slots):
+  primary_llm: "claude-sonnet"
+  fallback_llm: "claude-haiku"
+  extraction_llm: "ministral-3-32k:3b"
 ```
 
-Jeder Slot: Typ / Base URL / API-Key / Modell (Freitextfeld, überschreibbar). "Teste Verbindung" Button pro Slot.
+Jeder Provider: Typ / Base URL / API-Key. Jedes LLM: Name / Modell-ID / Provider-Referenz. "Teste Verbindung" Button pro Provider.
 
 ---
 
@@ -522,9 +538,10 @@ Echter gemeinsamer Chatverlauf über alle Kanäle. Eine Session, mehrere Eingabe
 **Skills:** Aktivieren/Deaktivieren pro Instanz, Status + letzter Fehler
 
 **LLM-Konfiguration:**
-- Provider-Slots (4x): Typ / URL / Key / Modell
-- Pro Use Case: Primärmodell + Fallback (Dropdowns)
-- "Teste Verbindung" Button pro Slot
+- Provider-Liste: Typ / URL / Key (beliebig viele, typspezifische Formulare)
+- LLM-Liste: Name / Modell-ID / Provider-Referenz (beliebig viele)
+- Pro User: primary_llm / fallback_llm / extraction_llm (String-IDs)
+- "Teste Verbindung" Button pro Provider
 
 **Memory + Sliding Window:**
 - Anzahl Nachrichten im Context Window (Standard: 20, Minimum: 5)
@@ -708,7 +725,7 @@ Schritt 7: Privacy
 **Admin-Interface (`admin-interface/`):**
 - FastAPI + Jinja2 + Vanilla JS, Port 8080
 - Tabs: Chat, Logs (inkl. Log-Dateien), Config (Sub-Tabs: LLMs / Memory / Services / Retention / CLAUDE.md), Users, Status
-- Config → LLMs: 4 Provider-Slots als Akkordeon, LLM-Zuordnung per User (nicht global)
+- Config → LLMs: Provider-Liste + LLM-Liste (getrennt), LLM-Zuordnung per User via String-IDs
 - Config → Services: HA REST API + Test-Button, HA MCP-Konfiguration + Test, WhatsApp Bridge, STT/TTS, Infrastruktur
 - Config → Retention: Log-Aufbewahrungsfristen konfigurierbar
 - Users-Tab: Expandierbare Karten, CLAUDE.md Inline-Editor pro User, Dropdown HA Person-Entity
@@ -766,7 +783,7 @@ Schritt 7: Privacy
 - Config-Tabs umstrukturiert: Services → Home Assistant / WhatsApp / Infra (logische Gruppierung)
 - HA Auto-Backup: Konfigurierbar im Admin-Interface, Agent erstellt HA-Backup vor Automations-/Script-Änderungen
 - MCP-Typ-Auswahl: Admin kann zwischen Built-in (SSE, 6 Tools) und Extended (HTTP, 89 Tools) MCP wählen
-- Test-Suite: 81 Unit-Tests (test_config: 42, test_agent: 16, test_memory: 15, test_i18n: 8) → jetzt 85
+- Test-Suite: 81 Unit-Tests (test_config: 42, test_agent: 16, test_memory: 15, test_i18n: 8) → jetzt 94
 - Integration-Test: Automatisierter End-to-End-Test, 16/16 PASS (User-CRUD, Chat, MiniMax, MCP, Memory, User-Setup-Verifizierung)
 - Multi-Agent Development: 4 spezialisierte Agenten (Webinterface, Review, Test, Docs) mit Briefing-Dokumenten
 
@@ -786,7 +803,7 @@ Schritt 7: Privacy
 - CPU-Only Ollama Add-on: Auswählbare Modelle (Embedding: nomic/minilm/bge-m3, LLM: qwen3 0.6b/1.7b)
 - Datenpfade: Config in `/data` (HA-Backup automatisch), Logs in `/media/haana/logs` (HA Media-Backup optional)
 - Backup-Strategie: HA-eigene Backup-Routine statt SMB/CIFS (SMB nach hinten verschoben als optional)
-- Test-Suite: 83 Unit-Tests (44 test_config, 16 test_agent, 15 test_memory, 8 test_i18n)
+- Test-Suite: 83 Unit-Tests (44 test_config, 16 test_agent, 15 test_memory, 8 test_i18n) → jetzt 94
 
 **Weitere erledigte Aufgaben (Session 2026-03-07) ✅:**
 - Ollama als Primary LLM: `core/process_manager.py` neuer `ollama` Provider-Handler, OpenAI-kompatibler `/v1/` Endpoint
@@ -798,13 +815,24 @@ Schritt 7: Privacy
 - Chat-UI Erweiterung: Model-Badge in Konversationsliste, aufklappbare Memories/Tools in Konversationsdetails
 - Conversation Log erweitert: `model` und `memory_results` Felder in `logger.py` + `agent.py`
 - i18n Fix: `I18n.load()` wird beim Seitenstart automatisch aufgerufen (fehlte vorher)
-- Test-Suite: 85 Unit-Tests (45 test_config inkl. test_build_env_ollama_primary_provider, 16 test_agent, 15 test_memory, 8 test_i18n + 1 test_build_env_ollama)
+
+**Weitere erledigte Aufgaben (Session 2026-03-08) ✅:**
+- Provider/LLM-Trennung: Config-Struktur umgebaut von `llm_providers[]` auf getrennte `providers[]` + `llms[]` Listen. User-Felder `primary_llm`/`fallback_llm`/`extraction_llm` sind jetzt String-IDs statt Integer-Slots
+- Provider-Umbenennung: Live-Sync in `cfg.providers` bei Umbenennung eines Providers
+- Restart-Feedback: LLM-Änderung im Users-Tab zeigt Restart-Hinweis
+- LLM-Provider-Routing: Korrekte Env-Var-Kette für alle Provider-Typen (Anthropic, Ollama, OpenAI, Gemini, MiniMax, Custom)
+- Env-Isolation (InProcess-Modus): `agent.py` snapshots `os.environ` bei Init (`self._env`), `memory.py` speichert URLs bei Init (`self._ollama_url`, `self._qdrant_url`), InProcessAgentManager setzt Env temporaer um Init und restored danach
+- Embedding-Mismatch-Detection: Erkennt wenn Embedding-Modell gewechselt wurde, warnt vor inkompatibler Collection
+- Addon-Autostart: `_autostart_agents()` startet alle User-Agents bei Add-on-Startup
+- WhatsApp-Config Addon-Modus: `HAANA_MODE == "addon"` nutzt `http://localhost:8080/agent/{uid}` statt Container-URL
+- core/ Volume Mount: `admin-interface` Container mounted `core/` als Volume fuer InProcessAgentManager
+- Test-Suite: 94 Unit-Tests (49 test_config, 20 test_agent, 17 test_memory, 8 test_i18n)
 
 **Noch offen:**
 - HA Add-on in Test-HA installieren und testen
 - Backup auf TrueNAS (SMB/CIFS) → optional, nachrangig
 
-**Ergebnis:** Alice chattet per WhatsApp (Text + Sprache, bidirektional). Agent kennt ihn bereits (Phase 1 Memory). STT + TTS via Nabu Casa. Admin-Interface unter `http://10.83.1.11:8080` zugänglich, responsiv, vollständig mehrsprachig (388 Keys). Claude OAuth pro Provider ohne SSH möglich. 6 Provider-Typen mit typspezifischen Formularen. HA Add-on Packaging vorbereitet (3 Add-ons, Dual-Mode Architektur). Ollama als Primary LLM nutzbar (OpenAI-kompatibler `/v1/` Endpoint). Chat-UI mit Model-Badge und aufklappbaren Memory/Tool-Details. 85 Unit-Tests.
+**Ergebnis:** Alice chattet per WhatsApp (Text + Sprache, bidirektional). Agent kennt ihn bereits (Phase 1 Memory). STT + TTS via Nabu Casa. Admin-Interface unter `http://10.83.1.11:8080` zugänglich, responsiv, vollständig mehrsprachig (388 Keys). Claude OAuth pro Provider ohne SSH möglich. 6 Provider-Typen mit typspezifischen Formularen. Provider/LLM-Trennung (`providers[]` + `llms[]`). HA Add-on Packaging vorbereitet (3 Add-ons, Dual-Mode Architektur). Env-Isolation fuer InProcess-Modus. Embedding-Mismatch-Detection. Ollama als Primary LLM nutzbar (OpenAI-kompatibler `/v1/` Endpoint). Chat-UI mit Model-Badge und aufklappbaren Memory/Tool-Details. 94 Unit-Tests.
 
 ---
 
@@ -895,7 +923,7 @@ Schritt 7: Privacy
 - Daily Brief persönlicher, kontextsensitiver
 - Setup-Wizard polieren, README für Community
 - GitHub Repo public
-- HA Add-on Paketierung: ✅ Grundstruktur fertig (3 Add-ons, S6 Services, Dual-Mode AgentManager). Noch zu testen in HA.
+- HA Add-on Paketierung: ✅ Grundstruktur fertig (3 Add-ons, S6 Services, Dual-Mode AgentManager, Env-Isolation, Autostart). Noch zu testen in HA.
 
 ---
 

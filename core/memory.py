@@ -71,8 +71,12 @@ CUSTOM_FACT_EXTRACTION_PROMPT = """\
 Du bist ein Fakten-Extraktor für ein Haushalts-Assistenzsystem.
 Extrahiere alle relevanten Fakten aus dem Gespräch zwischen User und Assistant.
 
-WICHTIG: Berücksichtige BEIDE Seiten – sowohl User-Nachrichten als auch Assistant-Antworten.
-Der Assistant fasst oft Informationen zusammen oder bestätigt Fakten – diese sind genauso relevant.
+WICHTIG:
+- Berücksichtige BEIDE Seiten – sowohl User-Nachrichten als auch Assistant-Antworten.
+- Der Assistant fasst oft Informationen zusammen oder bestätigt Fakten – diese sind genauso relevant.
+- Keine Spekulation: Schreibe nur gesicherte Fakten, kein "vermutlich" oder "wahrscheinlich".
+- Verknüpfe zusammengehörige Fakten (z.B. "Mystique ist eine Maine Coon" statt getrennt "Katze: Mystique" + "Rasse: Maine Coon").
+- Ignoriere kurzfristige Aktionen (z.B. "Licht anschalten", "Test bestätigen") – nur dauerhafte Fakten.
 
 Arten von Fakten die du extrahieren sollst:
 1. Persönliche Daten: Namen, Geburtstage, Wohnort, Beruf
@@ -91,8 +95,16 @@ User: das stimmt nicht, ich trinke keinen Kaffee
 Assistant: Entschuldigung, ich korrigiere das.
 Output: {"facts": ["Trinkt keinen Kaffee"]}
 
+User: Mystique ist eine Maine Coon, 3 Jahre alt
+Assistant: Maine Coons sind tolle Katzen!
+Output: {"facts": ["Mystique ist eine Maine Coon", "Mystique ist 3 Jahre alt"]}
+
 User: Hallo
 Assistant: Hi! Wie kann ich helfen?
+Output: {"facts": []}
+
+User: Mach das Licht in der Küche an
+Assistant: Erledigt!
 Output: {"facts": []}
 
 Gib die Fakten als JSON zurück. Nur das JSON-Objekt mit dem Key "facts", nichts anderes.
@@ -105,37 +117,95 @@ def _build_mem0_config(collection_name: str, *,
                        ollama_url: str = "",
                        memory_llm: str = "",
                        embed_model: str = "",
-                       embed_dims: int = 0) -> Optional[dict]:
+                       embed_dims: int = 0,
+                       extract_url: str = "",
+                       extract_key: str = "",
+                       extract_type: str = "ollama") -> Optional[dict]:
     """
     Erstellt vollständige Mem0-Konfiguration für einen Scope.
     Gibt None zurück wenn kein LLM-Backend verfügbar ist.
     Parameter überschreiben Env-Vars (für InProcess-Modus mit mehreren Agents).
+
+    extract_type steuert den LLM-Provider für Mem0:
+      - "ollama": Lokales LLM via Ollama (default)
+      - "anthropic"/"minimax": Anthropic-kompatible API
+      - "openai"/"gemini": OpenAI-kompatible API
     """
     host, port = _get_qdrant_host_port(qdrant_url)
     ollama_url = ollama_url or os.environ.get("OLLAMA_URL", "").strip()
-
-    if not ollama_url:
-        logger.warning(
-            f"[{collection_name}] OLLAMA_URL nicht gesetzt. "
-            "Memory-Extraktion erfordert ein lokales LLM. "
-            "Memory für diesen Scope deaktiviert."
-        )
-        return None
+    extract_url  = extract_url  or os.environ.get("HAANA_EXTRACT_URL", "").strip()
+    extract_key  = extract_key  or os.environ.get("HAANA_EXTRACT_KEY", "").strip()
+    extract_type = extract_type or os.environ.get("HAANA_EXTRACT_PROVIDER_TYPE", "ollama").strip()
 
     memory_llm  = memory_llm  or os.environ.get("HAANA_MEMORY_MODEL", "ministral-3-32k:3b")
     embed_model = embed_model or os.environ.get("HAANA_EMBEDDING_MODEL",  "bge-m3")
     embed_dims  = embed_dims  or int(os.environ.get("HAANA_EMBEDDING_DIMS", "1024"))
 
-    config = {
-        "custom_fact_extraction_prompt": CUSTOM_FACT_EXTRACTION_PROMPT,
-        "llm": {
+    # LLM-Konfiguration je nach Provider-Typ
+    if extract_type == "ollama":
+        if not ollama_url:
+            logger.warning(
+                f"[{collection_name}] OLLAMA_URL nicht gesetzt. "
+                "Memory-Extraktion erfordert ein LLM-Backend. "
+                "Memory für diesen Scope deaktiviert."
+            )
+            return None
+        llm_config = {
             "provider": "ollama",
             "config": {
                 "model": memory_llm,
                 "ollama_base_url": ollama_url,
                 "temperature": 0.1,
             },
-        },
+        }
+        llm_label = f"Ollama/{memory_llm} @ {ollama_url}"
+    elif extract_type in ("anthropic", "minimax"):
+        if not extract_key:
+            logger.warning(
+                f"[{collection_name}] Kein API-Key für {extract_type}. "
+                "Memory für diesen Scope deaktiviert."
+            )
+            return None
+        llm_cfg = {
+            "model": memory_llm,
+            "api_key": extract_key,
+            "temperature": 0.1,
+        }
+        if extract_url:
+            llm_cfg["anthropic_base_url"] = extract_url
+        llm_config = {"provider": "anthropic", "config": llm_cfg}
+        llm_label = f"{extract_type}/{memory_llm} @ {extract_url or 'api.anthropic.com'}"
+    elif extract_type in ("openai", "gemini"):
+        if not extract_key:
+            logger.warning(
+                f"[{collection_name}] Kein API-Key für {extract_type}. "
+                "Memory für diesen Scope deaktiviert."
+            )
+            return None
+        llm_cfg = {
+            "model": memory_llm,
+            "api_key": extract_key,
+            "temperature": 0.1,
+        }
+        if extract_url:
+            llm_cfg["openai_base_url"] = extract_url
+        llm_config = {"provider": "openai", "config": llm_cfg}
+        llm_label = f"{extract_type}/{memory_llm} @ {extract_url or 'api.openai.com'}"
+    else:
+        logger.warning(f"[{collection_name}] Unbekannter extract_type: {extract_type}")
+        return None
+
+    # Embedder bleibt immer Ollama (Embeddings laufen lokal)
+    if not ollama_url:
+        logger.warning(
+            f"[{collection_name}] OLLAMA_URL nicht gesetzt. "
+            "Embeddings erfordern Ollama. Memory deaktiviert."
+        )
+        return None
+
+    config = {
+        "custom_fact_extraction_prompt": CUSTOM_FACT_EXTRACTION_PROMPT,
+        "llm": llm_config,
         "embedder": {
             "provider": "ollama",
             "config": {
@@ -157,7 +227,7 @@ def _build_mem0_config(collection_name: str, *,
 
     logger.debug(
         f"[{collection_name}] Mem0 config: "
-        f"LLM={memory_llm} @ {ollama_url}, "
+        f"LLM={llm_label}, "
         f"Embedder={embed_model} (dims={embed_dims}), Qdrant={host}:{port}"
     )
     return config
@@ -340,6 +410,16 @@ class HaanaMemory:
         self._embed_model  = os.environ.get("HAANA_EMBEDDING_MODEL", "bge-m3")
         self._embed_dims   = int(os.environ.get("HAANA_EMBEDDING_DIMS", "1024"))
 
+        # Extraction-Provider (kann Ollama, MiniMax, Anthropic, OpenAI etc. sein)
+        self._extract_url  = os.environ.get("HAANA_EXTRACT_URL", "").strip()
+        self._extract_key  = os.environ.get("HAANA_EXTRACT_KEY", "").strip()
+        self._extract_type = os.environ.get("HAANA_EXTRACT_PROVIDER_TYPE", "ollama").strip()
+
+        # Kontext-Anreicherung (löst Pronomen/Bezüge vor Extraktion auf)
+        self._context_enrichment = os.environ.get(
+            "HAANA_CONTEXT_ENRICHMENT", "false"
+        ).lower() in ("true", "1", "yes")
+
         # Lazy-loaded Mem0-Instanzen pro Scope (None = nicht verfügbar)
         self._memories: dict[str, object] = {}
 
@@ -374,6 +454,9 @@ class HaanaMemory:
                 memory_llm=self._memory_model,
                 embed_model=self._embed_model,
                 embed_dims=self._embed_dims,
+                extract_url=self._extract_url,
+                extract_key=self._extract_key,
+                extract_type=self._extract_type,
             )
             if config is None:
                 self._memories[scope] = None
@@ -608,6 +691,156 @@ class HaanaMemory:
 
     _CLASSIFY_MAX_RETRIES = 5
 
+    def _build_extraction_context(self, entry: _WindowEntry,
+                                   context_before: int = 3,
+                                   context_after: int = 2) -> str:
+        """
+        Baut Kontext-String mit umgebenden Nachrichten für die Extraktion.
+        Die Ziel-Nachricht wird mit >>> markiert.
+        Gibt leeren String zurück wenn kein Kontext verfügbar.
+        """
+        entries = self._window._entries
+        try:
+            idx = entries.index(entry)
+        except ValueError:
+            return ""
+
+        start = max(0, idx - context_before)
+        end = min(len(entries), idx + context_after + 1)
+
+        # Kein Kontext wenn nur die Ziel-Nachricht vorhanden
+        if start == idx and end == idx + 1:
+            return ""
+
+        lines = []
+        for i in range(start, end):
+            e = entries[i]
+            if i == idx:
+                lines.append(f"\n>>> AKTUELLE NACHRICHT:")
+                lines.append(f"[User]: {e.user}")
+                lines.append(f"[Assistant]: {e.assistant}")
+            else:
+                lines.append(f"[User]: {e.user}")
+                lines.append(f"[Assistant]: {e.assistant}")
+
+        return "\n".join(lines)
+
+    _ENRICH_PROMPT = (
+        "Schreibe die AKTUELLE NACHRICHT (markiert mit >>>) so um, dass sie "
+        "ohne Kontext verständlich ist. Löse alle Pronomen und Bezüge auf.\n"
+        "Gib NUR die umgeschriebene Nachricht zurück im Format:\n"
+        "User: <umgeschriebene User-Nachricht>\n"
+        "Assistant: <umgeschriebene Assistant-Antwort>\n\n"
+        "Regeln:\n"
+        "- Ersetze 'er/sie/es/das/die' durch konkrete Namen/Begriffe\n"
+        "- Behalte alle Fakten bei, füge keine neuen hinzu\n"
+        "- Kürze lange Antworten auf die faktisch relevanten Teile\n"
+        "- Wenn nichts aufzulösen ist, gib die Nachricht unverändert zurück\n"
+    )
+
+    def _call_extract_llm(self, prompt: str) -> Optional[str]:
+        """
+        Ruft das konfigurierte Extraction-LLM auf (Ollama oder API-Provider).
+        Gibt die Antwort als String zurück oder None bei Fehler.
+        """
+        import requests as req
+
+        try:
+            if self._extract_type == "ollama":
+                url = self._extract_url or self._ollama_url
+                if not url:
+                    return None
+                r = req.post(
+                    f"{url}/api/generate",
+                    json={"model": self._memory_model, "prompt": prompt, "stream": False},
+                    timeout=30,
+                )
+                if r.status_code == 200:
+                    return r.json().get("response", "").strip()
+            elif self._extract_type in ("anthropic", "minimax"):
+                url = self._extract_url or "https://api.anthropic.com"
+                r = req.post(
+                    f"{url}/v1/messages",
+                    headers={
+                        "x-api-key": self._extract_key,
+                        "Content-Type": "application/json",
+                        "anthropic-version": "2023-06-01",
+                    },
+                    json={
+                        "model": self._memory_model,
+                        "max_tokens": 1024,
+                        "messages": [{"role": "user", "content": prompt}],
+                    },
+                    timeout=60,
+                )
+                if r.status_code == 200:
+                    data = r.json()
+                    for block in data.get("content", []):
+                        if block.get("type") == "text":
+                            return block.get("text", "").strip()
+            elif self._extract_type in ("openai", "gemini"):
+                url = self._extract_url or "https://api.openai.com/v1"
+                r = req.post(
+                    f"{url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self._extract_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": self._memory_model,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "temperature": 0.1,
+                    },
+                    timeout=60,
+                )
+                if r.status_code == 200:
+                    return r.json()["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            logger.debug(f"[{self.instance}] _call_extract_llm Fehler: {e}")
+
+        return None
+
+    def _enrich_with_context(self, entry: _WindowEntry) -> tuple[str, str]:
+        """
+        Reichert eine Nachricht mit Kontext an: Löst Pronomen auf und
+        macht die Nachricht selbsterklärend.
+
+        Nur aktiv wenn self._context_enrichment = True.
+        Gibt (enriched_user, enriched_assistant) zurück.
+        Fallback: Original-Texte wenn kein Kontext oder LLM-Fehler.
+        """
+        if not self._context_enrichment:
+            return entry.user, entry.assistant
+
+        context = self._build_extraction_context(entry)
+        if not context:
+            return entry.user, entry.assistant
+
+        answer = self._call_extract_llm(f"{self._ENRICH_PROMPT}\n{context}")
+        if not answer:
+            return entry.user, entry.assistant
+
+        enriched_user = entry.user
+        enriched_assistant = entry.assistant
+
+        for line in answer.split("\n"):
+            line = line.strip()
+            if line.lower().startswith("user:"):
+                enriched_user = line[5:].strip()
+            elif line.lower().startswith("assistant:"):
+                enriched_assistant = line[10:].strip()
+
+        if not enriched_user:
+            enriched_user = entry.user
+        if not enriched_assistant:
+            enriched_assistant = entry.assistant
+
+        logger.debug(
+            f"[{self.instance}] Kontext-Anreicherung: "
+            f"'{entry.user[:40]}' → '{enriched_user[:40]}'"
+        )
+        return enriched_user, enriched_assistant
+
     async def _extract_entry(self, entry: _WindowEntry):
         """
         Extrahiert einen Window-Eintrag async zu Qdrant.
@@ -636,9 +869,15 @@ class HaanaMemory:
                     )
                 return
 
+        # Optionale Kontext-Anreicherung
+        loop = asyncio.get_running_loop()
+        enriched_user, enriched_assistant = await loop.run_in_executor(
+            None, self._enrich_with_context, entry
+        )
+
         messages = [
-            {"role": "user",      "content": entry.user},
-            {"role": "assistant", "content": entry.assistant},
+            {"role": "user",      "content": enriched_user},
+            {"role": "assistant", "content": enriched_assistant},
         ]
         loop = asyncio.get_running_loop()
         try:

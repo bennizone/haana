@@ -198,18 +198,29 @@ class HaanaAgent:
     async def shutdown(self, timeout: float = 60.0):
         """
         Sauberes Shutdown:
-        1. ALLE Window-Einträge zu Qdrant extrahieren (nicht nur Overflow)
-        2. Window-Context final speichern (leer wenn alles extrahiert)
+        1. Laufende Extraktions-Tasks abwarten (nicht neue starten!)
+        2. Window-Context speichern (Einträge bleiben erhalten für nächsten Start)
         3. Subprocess schließen
+
+        Context-Preservation: Der Window wird NICHT geflusht, damit bei einem
+        Restart die Unterhaltung nahtlos weitergeht. Extraktion passiert nur
+        via normalen Overflow (max_messages / max_age_minutes).
         """
-        total = self.memory._window.size()
-        if total > 0:
-            print(f"  Extrahiere {total} Einträge zu Qdrant...", flush=True)
-        cancelled = await self.memory.flush_all(timeout=timeout)
-        if cancelled > 0:
-            logger.warning(
-                f"[{self.instance}] {cancelled} Extraktionen nach "
-                f"{timeout}s abgebrochen und im Context-File gespeichert."
+        pending = self.memory.pending_count()
+        if pending > 0:
+            print(f"  Warte auf {pending} laufende Extraktionen...", flush=True)
+            cancelled = await self.memory.flush_pending(timeout=timeout)
+            if cancelled > 0:
+                logger.warning(
+                    f"[{self.instance}] {cancelled} Extraktionen nach "
+                    f"{timeout}s abgebrochen und im Context-File gespeichert."
+                )
+
+        remaining = self.memory._window.size()
+        if remaining > 0:
+            logger.info(
+                f"[{self.instance}] Shutdown: {remaining} Einträge im Window "
+                "bleiben erhalten (Context-Preservation)"
             )
 
         self.memory.save_context(self._context_path)
