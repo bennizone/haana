@@ -599,7 +599,7 @@ function _renderEmbeddingProviderDropdowns(c, em) {
   _loadEmbeddingModels(c, selectedModel);
 }
 
-// Bekannte Embedding-Modell Dimensionen
+// Bekannte Embedding-Modell Dimensionen (Fallback wenn API keine liefert)
 const _EMBED_DIMS = {
   'bge-m3': 1024, 'bge-m3:latest': 1024,
   'nomic-embed-text': 768, 'nomic-embed-text:latest': 768,
@@ -607,6 +607,9 @@ const _EMBED_DIMS = {
   'bge-small-en-v1.5': 384, 'bge-small-en-v1.5:latest': 384,
   'mxbai-embed-large': 1024, 'mxbai-embed-large:latest': 1024,
   'snowflake-arctic-embed': 1024, 'snowflake-arctic-embed:latest': 1024,
+  'text-embedding-3-small': 1536, 'text-embedding-3-large': 3072,
+  'text-embedding-ada-002': 1536,
+  'models/text-embedding-004': 768,
 };
 
 async function _loadEmbeddingModels(c, selectedModel) {
@@ -624,29 +627,20 @@ async function _loadEmbeddingModels(c, selectedModel) {
 
   if (statusEl) statusEl.textContent = t('config_memory.loading_models');
   try {
-    const r = await fetch('/api/fetch-models', {
+    const r = await fetch('/api/fetch-embedding-models', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ type: prov.type, url: prov.url, key: prov.key }),
     });
     const d = await r.json();
     const models = d.models || [];
 
-    // Embedding-Modelle filtern: bei Ollama enthalten Namen oft "embed"
-    // Aber alle anzeigen, Embedding-Modelle zuerst
-    const isEmbed = m => /embed|bge|minilm|nomic/i.test(m);
-    const sorted = [...models].sort((a, b) => {
-      const ae = isEmbed(a), be = isEmbed(b);
-      if (ae && !be) return -1;
-      if (!ae && be) return 1;
-      return a.localeCompare(b);
-    });
-
-    const embedCount = sorted.filter(isEmbed).length;
-    modelEl.innerHTML = sorted.map(m => {
-      const dims = _EMBED_DIMS[m] || _EMBED_DIMS[m.split(':')[0]];
-      const label = dims ? `${m} (${dims} dims)` : m;
-      const sel = m === selectedModel ? ' selected' : '';
-      return `<option value="${escAttr(m)}"${sel}>${escHtml(label)}</option>`;
+    const embedCount = models.filter(m => m.is_embed !== false).length;
+    modelEl.innerHTML = models.map(m => {
+      const id = m.id || m;
+      const dims = m.dims || _EMBED_DIMS[id] || _EMBED_DIMS[id.split(':')[0]] || 0;
+      const label = dims ? `${id} (${dims} dims)` : id;
+      const sel = id === selectedModel ? ' selected' : '';
+      return `<option value="${escAttr(id)}"${sel}>${escHtml(label)}</option>`;
     }).join('');
 
     // Falls gespeichertes Modell nicht in der Liste: als erste Option hinzufuegen

@@ -1648,6 +1648,85 @@ async def fetch_models(request: Request):
         return {"models": [], "error": str(e)[:200]}
 
 
+@app.post("/api/fetch-embedding-models")
+async def fetch_embedding_models(request: Request):
+    """
+    Gibt Embedding-Modelle für einen Provider zurück.
+    Body: {"type": "ollama"|"openai"|"gemini", "url": "...", "key": "..."}
+    Returns: {"models": [{"id": "model-id", "dims": 768}, ...]}
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Ungültiges JSON")
+
+    type_ = (body.get("type") or "").strip()
+    url   = (body.get("url")  or "").strip()
+    key   = (body.get("key")  or "").strip()
+
+    # Bekannte Embedding-Modelle mit Dimensionen
+    _OPENAI_EMBEDDINGS = [
+        {"id": "text-embedding-3-small", "dims": 1536},
+        {"id": "text-embedding-3-large", "dims": 3072},
+        {"id": "text-embedding-ada-002", "dims": 1536},
+    ]
+    _GEMINI_EMBEDDINGS = [
+        {"id": "models/text-embedding-004", "dims": 768},
+    ]
+    _OLLAMA_EMBED_PATTERN = re.compile(r"embed|bge|minilm|nomic|mxbai|snowflake|arctic", re.I)
+    _OLLAMA_DIMS = {
+        "bge-m3": 1024, "nomic-embed-text": 768, "all-minilm": 384,
+        "bge-small-en-v1.5": 384, "mxbai-embed-large": 1024,
+        "snowflake-arctic-embed": 1024,
+    }
+
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            if type_ == "ollama":
+                target = url or "http://localhost:11434"
+                r = await client.get(f"{target}/api/tags")
+                all_models = [m["name"] for m in r.json().get("models", [])]
+                # Embedding-Modelle priorisieren, Rest auch anbieten
+                embed_models = []
+                for m in all_models:
+                    base = m.split(":")[0]
+                    dims = _OLLAMA_DIMS.get(base, 0)
+                    is_embed = bool(_OLLAMA_EMBED_PATTERN.search(m))
+                    embed_models.append({"id": m, "dims": dims, "is_embed": is_embed})
+                # Embedding-Modelle zuerst
+                embed_models.sort(key=lambda x: (not x["is_embed"], x["id"]))
+                return {"models": embed_models}
+
+            elif type_ == "openai":
+                # Versuche dynamisch, Fallback auf bekannte Liste
+                target = url or "https://api.openai.com"
+                if key:
+                    try:
+                        headers = {"Authorization": f"Bearer {key}"}
+                        r = await client.get(f"{target}/v1/models", headers=headers)
+                        if r.status_code == 200:
+                            api_models = [m["id"] for m in r.json().get("data", [])
+                                          if "embed" in m["id"].lower()]
+                            if api_models:
+                                models = []
+                                for m in sorted(api_models):
+                                    known = next((e for e in _OPENAI_EMBEDDINGS if e["id"] == m), None)
+                                    models.append({"id": m, "dims": known["dims"] if known else 0})
+                                return {"models": models}
+                    except Exception:
+                        pass
+                return {"models": _OPENAI_EMBEDDINGS, "fallback": True}
+
+            elif type_ == "gemini":
+                return {"models": _GEMINI_EMBEDDINGS, "fallback": True}
+
+            else:
+                return {"models": []}
+    except Exception as e:
+        return {"models": [], "error": str(e)[:200]}
+
+
 # ── User-Management ───────────────────────────────────────────────────────────
 
 def _render_claude_md(template_name: str, display_name: str, user_id: str, ha_user: str = "") -> str:

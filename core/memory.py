@@ -120,6 +120,9 @@ def _build_mem0_config(collection_name: str, *,
                        memory_llm: str = "",
                        embed_model: str = "",
                        embed_dims: int = 0,
+                       embed_type: str = "ollama",
+                       embed_url: str = "",
+                       embed_key: str = "",
                        extract_url: str = "",
                        extract_key: str = "",
                        extract_type: str = "ollama") -> Optional[dict]:
@@ -128,10 +131,11 @@ def _build_mem0_config(collection_name: str, *,
     Gibt None zurück wenn kein LLM-Backend verfügbar ist.
     Parameter überschreiben Env-Vars (für InProcess-Modus mit mehreren Agents).
 
-    extract_type steuert den LLM-Provider für Mem0:
-      - "ollama": Lokales LLM via Ollama (default)
-      - "anthropic"/"minimax": Anthropic-kompatible API
-      - "openai"/"gemini": OpenAI-kompatible API
+    extract_type steuert den LLM-Provider für Mem0's Extraktion.
+    embed_type steuert den Embedding-Provider:
+      - "ollama": Lokales Embedding via Ollama (default)
+      - "openai": OpenAI-kompatible API (auch für Custom-Endpoints)
+      - "gemini": Google Gemini Embeddings
     """
     host, port = _get_qdrant_host_port(qdrant_url)
     ollama_url = ollama_url or os.environ.get("OLLAMA_URL", "").strip()
@@ -142,6 +146,9 @@ def _build_mem0_config(collection_name: str, *,
     memory_llm  = memory_llm  or os.environ.get("HAANA_MEMORY_MODEL", "ministral-3-32k:3b")
     embed_model = embed_model or os.environ.get("HAANA_EMBEDDING_MODEL",  "bge-m3")
     embed_dims  = embed_dims  or int(os.environ.get("HAANA_EMBEDDING_DIMS", "1024"))
+    embed_type  = embed_type  or os.environ.get("HAANA_EMBED_PROVIDER_TYPE", "ollama").strip()
+    embed_url   = embed_url   or os.environ.get("HAANA_EMBED_URL", "").strip()
+    embed_key   = embed_key   or os.environ.get("HAANA_EMBED_KEY", "").strip()
 
     # LLM-Konfiguration je nach Provider-Typ
     if extract_type == "ollama":
@@ -197,25 +204,57 @@ def _build_mem0_config(collection_name: str, *,
         logger.warning(f"[{collection_name}] Unbekannter extract_type: {extract_type}")
         return None
 
-    # Embedder bleibt immer Ollama (Embeddings laufen lokal)
-    if not ollama_url:
-        logger.warning(
-            f"[{collection_name}] OLLAMA_URL nicht gesetzt. "
-            "Embeddings erfordern Ollama. Memory deaktiviert."
-        )
-        return None
-
-    config = {
-        "custom_fact_extraction_prompt": CUSTOM_FACT_EXTRACTION_PROMPT,
-        "llm": llm_config,
-        "embedder": {
+    # Embedder-Konfiguration je nach Provider-Typ
+    if embed_type == "ollama":
+        if not ollama_url:
+            logger.warning(
+                f"[{collection_name}] OLLAMA_URL nicht gesetzt. "
+                "Embeddings erfordern Ollama. Memory deaktiviert."
+            )
+            return None
+        embedder_config = {
             "provider": "ollama",
             "config": {
                 "model": embed_model,
                 "ollama_base_url": ollama_url,
                 "embedding_dims": embed_dims,
             },
-        },
+        }
+        embed_label = f"Ollama/{embed_model} @ {ollama_url}"
+    elif embed_type == "openai":
+        if not embed_key:
+            logger.warning(f"[{collection_name}] Kein API-Key für OpenAI Embeddings. Memory deaktiviert.")
+            return None
+        embed_cfg = {
+            "model": embed_model or "text-embedding-3-small",
+            "api_key": embed_key,
+            "embedding_dims": embed_dims,
+        }
+        if embed_url:
+            embed_cfg["openai_base_url"] = embed_url
+        embedder_config = {"provider": "openai", "config": embed_cfg}
+        embed_label = f"OpenAI/{embed_model} @ {embed_url or 'api.openai.com'}"
+    elif embed_type == "gemini":
+        if not embed_key:
+            logger.warning(f"[{collection_name}] Kein API-Key für Gemini Embeddings. Memory deaktiviert.")
+            return None
+        embedder_config = {
+            "provider": "gemini",
+            "config": {
+                "model": embed_model or "models/text-embedding-004",
+                "api_key": embed_key,
+                "embedding_dims": embed_dims,
+            },
+        }
+        embed_label = f"Gemini/{embed_model}"
+    else:
+        logger.warning(f"[{collection_name}] Unbekannter embed_type: {embed_type}")
+        return None
+
+    config = {
+        "custom_fact_extraction_prompt": CUSTOM_FACT_EXTRACTION_PROMPT,
+        "llm": llm_config,
+        "embedder": embedder_config,
         "vector_store": {
             "provider": "qdrant",
             "config": {
@@ -230,7 +269,7 @@ def _build_mem0_config(collection_name: str, *,
     logger.debug(
         f"[{collection_name}] Mem0 config: "
         f"LLM={llm_label}, "
-        f"Embedder={embed_model} (dims={embed_dims}), Qdrant={host}:{port}"
+        f"Embedder={embed_label} (dims={embed_dims}), Qdrant={host}:{port}"
     )
     return config
 
@@ -411,6 +450,9 @@ class HaanaMemory:
         self._memory_model = os.environ.get("HAANA_MEMORY_MODEL", "ministral-3-32k:3b")
         self._embed_model  = os.environ.get("HAANA_EMBEDDING_MODEL", "bge-m3")
         self._embed_dims   = int(os.environ.get("HAANA_EMBEDDING_DIMS", "1024"))
+        self._embed_type   = os.environ.get("HAANA_EMBED_PROVIDER_TYPE", "ollama").strip()
+        self._embed_url    = os.environ.get("HAANA_EMBED_URL", "").strip()
+        self._embed_key    = os.environ.get("HAANA_EMBED_KEY", "").strip()
 
         # Extraction-Provider (kann Ollama, MiniMax, Anthropic, OpenAI etc. sein)
         self._extract_url  = os.environ.get("HAANA_EXTRACT_URL", "").strip()
@@ -456,6 +498,9 @@ class HaanaMemory:
                 memory_llm=self._memory_model,
                 embed_model=self._embed_model,
                 embed_dims=self._embed_dims,
+                embed_type=self._embed_type,
+                embed_url=self._embed_url,
+                embed_key=self._embed_key,
                 extract_url=self._extract_url,
                 extract_key=self._extract_key,
                 extract_type=self._extract_type,

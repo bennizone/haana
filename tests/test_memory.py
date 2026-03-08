@@ -284,3 +284,62 @@ def test_window_persists_through_shutdown_restart(tmp_path):
     assert w2._entries[2].user == "msg3"
     # Keine pending Extraktionen (alles innerhalb der Limits)
     assert len(pending) == 0
+
+
+# ── Embedding-Provider in _build_mem0_config ─────────────────────────────────
+
+def test_build_mem0_config_embed_ollama():
+    cfg = m._build_mem0_config(
+        "test_scope", qdrant_url="http://localhost:6333",
+        ollama_url="http://localhost:11434", memory_llm="test",
+        embed_model="bge-m3", embed_dims=1024, embed_type="ollama",
+    )
+    assert cfg is not None
+    assert cfg["embedder"]["provider"] == "ollama"
+    assert cfg["embedder"]["config"]["model"] == "bge-m3"
+    assert cfg["embedder"]["config"]["ollama_base_url"] == "http://localhost:11434"
+
+
+def test_build_mem0_config_embed_openai():
+    cfg = m._build_mem0_config(
+        "test_scope", qdrant_url="http://localhost:6333",
+        ollama_url="http://localhost:11434", memory_llm="test",
+        embed_model="text-embedding-3-small", embed_dims=1536,
+        embed_type="openai", embed_key="sk-test123",
+    )
+    assert cfg is not None
+    assert cfg["embedder"]["provider"] == "openai"
+    assert cfg["embedder"]["config"]["model"] == "text-embedding-3-small"
+    assert cfg["embedder"]["config"]["api_key"] == "sk-test123"
+    assert cfg["embedder"]["config"]["embedding_dims"] == 1536
+
+
+def test_build_mem0_config_embed_openai_custom_url():
+    cfg = m._build_mem0_config(
+        "test_scope", qdrant_url="http://localhost:6333",
+        ollama_url="http://localhost:11434", memory_llm="test",
+        embed_model="text-embedding-3-small", embed_dims=1536,
+        embed_type="openai", embed_key="sk-test", embed_url="https://custom.api.com",
+    )
+    assert cfg["embedder"]["config"]["openai_base_url"] == "https://custom.api.com"
+
+
+def test_build_mem0_config_embed_gemini():
+    cfg = m._build_mem0_config(
+        "test_scope", qdrant_url="http://localhost:6333",
+        ollama_url="http://localhost:11434", memory_llm="test",
+        embed_model="models/text-embedding-004", embed_dims=768,
+        embed_type="gemini", embed_key="AIza-test",
+    )
+    assert cfg is not None
+    assert cfg["embedder"]["provider"] == "gemini"
+    assert cfg["embedder"]["config"]["api_key"] == "AIza-test"
+
+
+def test_build_mem0_config_embed_openai_no_key_returns_none():
+    cfg = m._build_mem0_config(
+        "test_scope", qdrant_url="http://localhost:6333",
+        ollama_url="http://localhost:11434", memory_llm="test",
+        embed_type="openai", embed_key="",
+    )
+    assert cfg is None

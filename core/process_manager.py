@@ -82,6 +82,20 @@ def _build_agent_env(user: dict, cfg: dict, resolve_llm_fn, find_ollama_url_fn) 
         extract_key = e_prov.get("key", "")
     # Ollama: URL kommt aus OLLAMA_URL
 
+    # Embedding-Provider bestimmen
+    embed_provider_id = emb.get("provider_id", "")
+    embed_type = "ollama"
+    embed_url = ""
+    embed_key = ""
+    if embed_provider_id:
+        for prov in cfg.get("providers", []):
+            if prov.get("id") == embed_provider_id:
+                embed_type = prov.get("type", "ollama")
+                if embed_type in ("openai", "gemini"):
+                    embed_url = prov.get("url", "")
+                    embed_key = prov.get("key", "")
+                break
+
     mem_cfg = cfg.get("memory", {})
 
     env = {
@@ -105,6 +119,10 @@ def _build_agent_env(user: dict, cfg: dict, resolve_llm_fn, find_ollama_url_fn) 
         "HAANA_EXTRACT_KEY":           extract_key,
         "HAANA_EXTRACT_PROVIDER_TYPE": extract_type,
         "HAANA_CONTEXT_ENRICHMENT":    str(mem_cfg.get("context_enrichment", False)).lower(),
+        # Embedding-Provider (kann sich von Ollama unterscheiden)
+        "HAANA_EMBED_PROVIDER_TYPE":   embed_type,
+        "HAANA_EMBED_URL":             embed_url,
+        "HAANA_EMBED_KEY":             embed_key,
     }
 
     # HA MCP-Server URL
