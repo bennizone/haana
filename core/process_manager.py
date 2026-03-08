@@ -122,7 +122,10 @@ def _build_agent_env(user: dict, cfg: dict, resolve_llm_fn, find_ollama_url_fn) 
         "HAANA_EXTRACT_PROVIDER_TYPE": extract_type,
         "HAANA_EXTRACT_OAUTH_DIR":     extract_oauth_dir,
         "HAANA_EXTRACT_RPM":           extract_rpm,
+        "HAANA_EXTRACT_THINK":         str(e_llm.get("think", "")).lower(),
         "HAANA_CONTEXT_ENRICHMENT":    str(mem_cfg.get("context_enrichment", False)).lower(),
+        "HAANA_CONTEXT_BEFORE":        str(mem_cfg.get("context_before", 3)),
+        "HAANA_CONTEXT_AFTER":         str(mem_cfg.get("context_after", 2)),
         # Embedding-Provider (kann sich von Ollama unterscheiden)
         "HAANA_EMBED_PROVIDER_TYPE":   embed_type,
         "HAANA_EMBED_URL":             embed_url,

@@ -23,6 +23,8 @@ function renderConfig(c) {
   _setVal('mem-window-size',    m.window_size    ?? 20);
   _setVal('mem-window-minutes', m.window_minutes ?? 60);
   _setVal('mem-min-messages',   m.min_messages   ?? 5);
+  _setVal('mem-context-before', m.context_before ?? 3);
+  _setVal('mem-context-after',  m.context_after  ?? 2);
 
   // Context-Enrichment Toggle
   const ctxEl = document.getElementById('mem-context-enrichment');
@@ -858,6 +860,8 @@ async function saveConfig() {
       extraction_llm:          document.getElementById('mem-extraction-llm')?.value || '',
       extraction_llm_fallback: document.getElementById('mem-extraction-llm-fallback')?.value || '',
       context_enrichment:      document.getElementById('mem-context-enrichment')?.checked ?? false,
+      context_before: parseInt(document.getElementById('mem-context-before')?.value || '3'),
+      context_after:  parseInt(document.getElementById('mem-context-after')?.value || '2'),
       window_size:    parseInt(document.getElementById('mem-window-size').value),
       window_minutes: parseInt(document.getElementById('mem-window-minutes').value),
       min_messages:   parseInt(document.getElementById('mem-min-messages').value),
@@ -1167,6 +1171,7 @@ async function checkResumeInfo() {
         html += `<div style="margin-bottom:4px;">
           <strong>${escHtml(inst)}</strong>: ${t('config_memory.rebuild_resume_info', {processed: d.processed, total: d.total_entries})}
           <button class="btn btn-sm btn-primary" style="margin-left:8px;" onclick="resumeRebuild('${escAttr(inst)}')">${t('config_memory.rebuild_resume')}</button>
+          <button class="btn btn-sm btn-danger" style="margin-left:4px;" onclick="discardRebuildProgress('${escAttr(inst)}')">${t('config_memory.rebuild_discard')}</button>
         </div>`;
       }
     } catch(e) { /* ignore */ }
@@ -1176,6 +1181,16 @@ async function checkResumeInfo() {
     resumeDiv.style.display = '';
   } else {
     resumeDiv.style.display = 'none';
+  }
+}
+
+async function discardRebuildProgress(inst) {
+  try {
+    await fetch(`/api/rebuild-progress/${inst}`, { method: 'DELETE' });
+    toast(t('config_memory.rebuild_discarded', {instance: inst}), 'info');
+    checkResumeInfo();
+  } catch(e) {
+    toast(e.message, 'err');
   }
 }
 

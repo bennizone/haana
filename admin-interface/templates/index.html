@@ -214,6 +214,22 @@
             </p>
           </div>
         </div>
+
+        <!-- Kontext-Fenster für Extraktion -->
+        <div class="form-row" style="margin-top:12px;">
+          <div class="form-group">
+            <label data-i18n="config_memory.context_before">Kontext davor</label>
+            <input type="number" id="mem-context-before" min="0" max="20" value="3">
+          </div>
+          <div class="form-group">
+            <label data-i18n="config_memory.context_after">Kontext danach</label>
+            <input type="number" id="mem-context-after" min="0" max="20" value="2">
+          </div>
+        </div>
+        <p class="hint" data-i18n="config_memory.context_window_hint">
+          Anzahl Nachrichten vor und nach der aktuellen Nachricht, die bei der Extraktion mitgegeben werden.
+          Mehr Kontext hilft bei Korrekturen und Bezügen, kostet aber mehr Tokens.
+        </p>
       </div>
     </div>
 

@@ -46,7 +46,7 @@ _WRITE_SCOPES: dict[str, set[str]] = {
     "alice":       {"alice_memory", "household_memory"},
     "bob":        {"bob_memory", "household_memory"},
     "ha-assist":   set(),
-    "ha-advanced": set(),
+    "ha-advanced": {"household_memory"},
 }
 
 # Leseberechtigungen pro Instanz
@@ -617,6 +617,12 @@ class HaanaMemory:
                     f"Claude CLI nicht gefunden. Memory-Extraktion deaktiviert."
                 )
 
+        # Ollama Thinking-Modus: "true"/"false"/"" (leer = nicht setzen)
+        _think_raw = os.environ.get("HAANA_EXTRACT_THINK", "").strip().lower()
+        self._extract_think: Optional[bool] = (
+            True if _think_raw == "true" else False if _think_raw == "false" else None
+        )
+
         # Rate-Limiter für Extraction-LLM (0 = kein Limit)
         extract_rpm = int(os.environ.get("HAANA_EXTRACT_RPM", "0"))
         self._extract_limiter = _get_llm_limiter(extract_rpm)
@@ -625,6 +631,10 @@ class HaanaMemory:
         self._context_enrichment = os.environ.get(
             "HAANA_CONTEXT_ENRICHMENT", "false"
         ).lower() in ("true", "1", "yes")
+
+        # Kontext-Fenster für Extraktion (Nachrichten vor/nach der aktuellen)
+        self._context_before = int(os.environ.get("HAANA_CONTEXT_BEFORE", "3"))
+        self._context_after = int(os.environ.get("HAANA_CONTEXT_AFTER", "2"))
 
         # Lazy-loaded Mem0-Instanzen pro Scope (None = nicht verfügbar)
         self._memories: dict[str, object] = {}
@@ -651,7 +661,8 @@ class HaanaMemory:
             f"write={sorted(self.write_scopes)} | "
             f"read={sorted(self.read_scopes)} | "
             f"window={self._window.max_messages}msg / "
-            f"{self._window.max_age_minutes}min / min=5"
+            f"{self._window.max_age_minutes}min / min=5 | "
+            f"context={self._context_before}+{self._context_after}"
         )
 
     def _check_collection_dims(self, scope: str, expected_dims: int):
@@ -718,6 +729,18 @@ class HaanaMemory:
                         _url = self._extract_url.rstrip("/") + "/"
                         _c._base_url = _hx.URL(_url)
                         logger.info(f"[{scope}] Anthropic base_url → {self._extract_url}")
+                # Ollama think-Modus: client.chat() um think-Parameter erweitern
+                if self._extract_think is not None and self._extract_type == "ollama":
+                    _think_val = self._extract_think
+                    _orig_chat = mem.llm.client.chat
+                    _think_num_predict = 8192 if _think_val else None
+                    def _chat_with_think(**kw):
+                        kw["think"] = _think_val
+                        if _think_val and _think_num_predict:
+                            kw.setdefault("options", {})["num_predict"] = _think_num_predict
+                        return _orig_chat(**kw)
+                    mem.llm.client.chat = _chat_with_think
+                    logger.info(f"[{scope}] Ollama think={_think_val}")
                 # Monkeypatch: LLM-Antworten sanitizen (manche LLMs geben Dicts statt Strings)
                 # + Rate-Limit-Retry (429 → Backoff bis zu 3 Versuche)
                 _orig_generate = mem.llm.generate_response
@@ -1234,7 +1257,11 @@ class HaanaMemory:
         if not self._context_enrichment:
             return entry.user, entry.assistant
 
-        context = self._build_extraction_context(entry)
+        context = self._build_extraction_context(
+            entry,
+            context_before=self._context_before,
+            context_after=self._context_after,
+        )
         if not context:
             return entry.user, entry.assistant
 
@@ -1336,7 +1363,7 @@ class HaanaMemory:
 
         Non-blocking: kehrt sofort zurück. Mem0-Write (LLM-Inferenz + Embedding)
         läuft als asyncio.Task im Hintergrund, ohne den Event-Loop zu blockieren.
-        ha-assist / ha-advanced (keine write_scopes) → no-op.
+        ha-assist (keine write_scopes) → no-op.
         """
         if not self.write_scopes:
             return

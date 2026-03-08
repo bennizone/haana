@@ -204,6 +204,8 @@ DEFAULT_CONFIG = {
         "extraction_llm":          "ollama-extract",
         "extraction_llm_fallback": "",
         "context_enrichment":      False,
+        "context_before":          3,
+        "context_after":           2,
         "window_size":    int(os.environ.get("HAANA_WINDOW_SIZE",    "20")),
         "window_minutes": int(os.environ.get("HAANA_WINDOW_MINUTES", "60")),
         "min_messages":   5,
@@ -803,8 +805,16 @@ async def memory_stats():
     except Exception:
         pass
 
+    # Templates ohne write_scopes brauchen keinen Rebuild
+    _READ_ONLY_TEMPLATES = {"ha-assist"}
+
     result = []
     for inst in get_all_instances():
+        # Read-only Instanzen (kein eigener Memory) aus Rebuild-Liste ausschließen
+        user = next((u for u in cfg.get("users", []) if u["id"] == inst), None)
+        if user and user.get("claude_md_template", "") in _READ_ONLY_TEMPLATES:
+            continue
+
         # Log-Zeilen zählen
         log_entries = 0
         log_days = 0
@@ -818,15 +828,13 @@ async def memory_stats():
                 except Exception:
                     pass
 
-        # Qdrant-Vektoren: primärer Scope ist {uid}_memory, außer System-Instanzen
+        # Qdrant-Vektoren: primärer Scope ist {uid}_memory
         scopes: dict[str, int] = {}
-        user = next((u for u in cfg.get("users", []) if u["id"] == inst), None)
         if user:
             tpl = user.get("claude_md_template", "")
-            if tpl in ("ha-assist", "ha-advanced"):
-                # Nur lesen – household + alle user-scopes
-                for scope in ("household_memory",):
-                    scopes[scope] = coll_vectors.get(scope, 0)
+            if tpl == "ha-advanced":
+                # ha-advanced schreibt nur household_memory
+                scopes["household_memory"] = coll_vectors.get("household_memory", 0)
             else:
                 for scope in (f"{inst}_memory", "household_memory"):
                     scopes[scope] = coll_vectors.get(scope, 0)
@@ -1533,6 +1541,15 @@ async def cancel_rebuild(instance: str):
         state["status"] = "cancelled"
         return {"ok": True}
     return {"ok": False, "error": "Kein laufender Rebuild"}
+
+
+@app.delete("/api/rebuild-progress/{instance}")
+async def discard_rebuild_progress(instance: str):
+    """Verwirft gespeicherten Rebuild-Fortschritt (ohne laufenden Rebuild zu beeinflussen)."""
+    if instance not in get_all_instances():
+        raise HTTPException(404)
+    _clear_rebuild_progress(instance)
+    return {"ok": True}
 
 
 @app.get("/api/rebuild-resume-info/{instance}")
