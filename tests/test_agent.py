@@ -391,3 +391,37 @@ def test_context_path_default():
     """_context_path falls back to 'data' when HAANA_DATA_DIR not set."""
     agent = _make_agent()
     assert "context" in str(agent._context_path)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Tests: Voice Memory-Extraktion
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def test_should_extract_memory_webchat_always():
+    """Webchat extrahiert immer."""
+    from core.agent import _should_extract_memory
+    assert _should_extract_memory("Wie wird das Wetter?", "webchat") is True
+    assert _should_extract_memory("Licht an", "repl") is True
+    assert _should_extract_memory("Hallo", "whatsapp") is True
+
+
+def test_should_extract_memory_voice_skips_normal():
+    """ha_voice überspringt normale Nachrichten."""
+    from core.agent import _should_extract_memory
+    assert _should_extract_memory("Wie wird das Wetter?", "ha_voice") is False
+    assert _should_extract_memory("Schalte das Licht an", "ha_voice") is False
+    assert _should_extract_memory("Temperatur im Wohnzimmer", "ha_voice") is False
+
+
+def test_should_extract_memory_voice_explicit_save():
+    """ha_voice extrahiert bei expliziten Speicher-Befehlen."""
+    from core.agent import _should_extract_memory
+    assert _should_extract_memory("Merke dir, dass wir abends warmes Licht mögen", "ha_voice") is True
+    assert _should_extract_memory("Merk dir bitte das WLAN-Passwort", "ha_voice") is True
+    assert _should_extract_memory("Vergiss nicht, dass Bob Laktose nicht verträgt", "ha_voice") is True
+    assert _should_extract_memory("Speichere: Müll wird dienstags abgeholt", "ha_voice") is True
+    assert _should_extract_memory("Erinner dich daran, dass der Schlüssel unter der Matte liegt", "ha_voice") is True
+    assert _should_extract_memory("Remember that we like 21 degrees", "ha_voice") is True
+    assert _should_extract_memory("Denk dran, morgen kommt der Handwerker", "ha_voice") is True
+    assert _should_extract_memory("Notiere: Pizza bestellen am Freitag", "ha_voice") is True

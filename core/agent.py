@@ -37,6 +37,26 @@ import core.logger as haana_log
 
 logger = logging.getLogger(__name__)
 
+# Trigger-Wörter für explizite Memory-Speicherung bei Voice
+_MEMORY_TRIGGERS = (
+    "merk dir", "merke dir", "merken",
+    "vergiss nicht", "speicher", "speichere",
+    "erinner dich", "remember", "denk dran",
+    "notier", "notiere",
+)
+
+
+def _should_extract_memory(user_message: str, channel: str) -> bool:
+    """Prüft ob Memory-Extraktion stattfinden soll.
+
+    ha_voice: Nur bei expliziten 'merke dir'-Befehlen.
+    Alle anderen Channels: Immer extrahieren.
+    """
+    if channel != "ha_voice":
+        return True
+    msg_lower = user_message.lower()
+    return any(trigger in msg_lower for trigger in _MEMORY_TRIGGERS)
+
 
 class HaanaAgent:
     def __init__(self, instance_name: str):
@@ -346,7 +366,8 @@ class HaanaAgent:
             )
 
         # Memory: Konversation async im Hintergrund speichern (non-blocking)
-        if response_text:
+        # ha_voice: Nur bei expliziten "merke dir"-Befehlen extrahieren
+        if response_text and _should_extract_memory(user_message, channel):
             await self.memory.add_conversation_async(user_message, response_text)
 
         # Memory-Ergebnisse als Liste (für Log-Anzeige im UI)
