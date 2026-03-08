@@ -109,7 +109,11 @@
     "models_label": "Modelle",
     "connected": "Verbunden",
     "connected_no_models": "Verbunden, aber keine Modelle gefunden",
-    "no_url_configured": "Keine URL konfiguriert"
+    "no_url_configured": "Keine URL konfiguriert",
+    "rpm": "Rate Limit (RPM)",
+    "rpm_hint": "0 = kein Limit",
+    "rpm_presets": "Presets…",
+    "rpm_unlimited": "Unbegrenzt (0)"
   },
   "config_provider": {
     "title": "Provider-Konfiguration",
@@ -147,7 +151,9 @@
     "server_url_required": "Server-URL (Pflichtfeld)",
     "type_immutable": "Typ kann nach Erstellung nicht geändert werden",
     "oauth_status": "OAuth-Status",
-    "url_hint_openai": "leer = api.openai.com, oder Azure-URL"
+    "url_hint_openai": "leer = api.openai.com, oder Azure-URL",
+    "oauth_api_key_hint": "optional – für Memory-Extraktion",
+    "oauth_api_key_placeholder": "sk-ant-api03-... (OAuth reicht nicht für Messages API)"
   },
   "config_memory": {
     "window_title": "Sliding Window",
@@ -208,6 +214,11 @@
     "embedding_models_found": "Embedding-Modelle gefunden",
     "models_available": "Modelle verfügbar",
     "models_load_error": "Modelle konnten nicht geladen werden",
+    "config_not_loaded": "Config nicht geladen",
+    "no_provider_selected": "Kein Provider ausgewählt",
+    "provider_not_found": "Provider \"{id}\" nicht gefunden",
+    "no_models_found": "Keine Modelle gefunden",
+    "models_fetch_error": "Fehler: {msg}",
     "embedding_fetch_models": "Modelle laden",
     "embedding_test": "Test",
     "embedding_testing": "Teste Embedding…",

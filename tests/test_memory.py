@@ -128,6 +128,15 @@ def _make_memory(write_scopes, instance="test"):
     mem._memory_model = "ministral-3-32k:3b"
     mem._embed_model = "bge-m3"
     mem._embed_dims = 1024
+    mem._extract_url = ""
+    mem._extract_key = ""
+    mem._extract_type = "ollama"
+    mem._extract_oauth_dir = ""
+    mem._use_cli_extraction = False
+    mem._extract_limiter = m._NOOP_LIMITER
+    mem._context_enrichment = False
+    mem._consecutive_write_errors = 0
+    mem._rate_limit_warned = False
     return mem
 
 

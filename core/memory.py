@@ -169,12 +169,16 @@ def _build_mem0_config(collection_name: str, *,
         }
         llm_label = f"Ollama/{memory_llm} @ {ollama_url}"
     elif extract_type in ("anthropic", "minimax"):
-        if not extract_key:
+        # OAuth: Kein API-Key, aber CLI-Extraction möglich → Dummy-Key für Mem0 Init
+        use_cli = not extract_key and os.environ.get("HAANA_EXTRACT_OAUTH_DIR", "").strip()
+        if not extract_key and not use_cli:
             logger.warning(
                 f"[{collection_name}] Kein API-Key für {extract_type}. "
                 "Memory für diesen Scope deaktiviert."
             )
             return None
+        if use_cli:
+            extract_key = "cli-oauth-placeholder"
         llm_cfg = {
             "model": memory_llm,
             "api_key": extract_key,
@@ -455,6 +459,96 @@ def _load_scopes(instance_name: str) -> tuple[set[str], set[str]]:
     return write, read
 
 
+class _RateLimiter:
+    """Einfacher Token-Bucket Rate-Limiter (Thread-safe)."""
+
+    def __init__(self, max_per_minute: int):
+        import threading
+        self._interval = 60.0 / max_per_minute if max_per_minute > 0 else 0.0
+        self._rpm = max_per_minute
+        self._lock = threading.Lock()
+        self._next_allowed = 0.0
+
+    def wait(self):
+        """Blockiert bis der nächste Request erlaubt ist."""
+        if self._interval <= 0:
+            return
+        with self._lock:
+            now = time.monotonic()
+            if now < self._next_allowed:
+                delay = self._next_allowed - now
+                time.sleep(delay)
+            self._next_allowed = max(time.monotonic(), self._next_allowed) + self._interval
+
+
+class _NoopLimiter:
+    """Dummy-Limiter der nichts tut (für Provider ohne Rate-Limit)."""
+    def wait(self):
+        pass
+
+
+# Shared Rate-Limiters Registry (key = "provider_type:rpm")
+_limiter_registry: dict[str, _RateLimiter] = {}
+_NOOP_LIMITER = _NoopLimiter()
+
+# Standard-Embedding-Limiter (Gemini Free Tier: 100/min)
+_gemini_embed_limiter = _RateLimiter(max_per_minute=90)
+
+
+def _get_llm_limiter(rpm: int) -> object:
+    """Holt oder erstellt einen shared Rate-Limiter für die gegebene RPM."""
+    if rpm <= 0:
+        return _NOOP_LIMITER
+    key = str(rpm)
+    if key not in _limiter_registry:
+        _limiter_registry[key] = _RateLimiter(max_per_minute=rpm)
+        logger.info(f"Rate-Limiter erstellt: {rpm} RPM")
+    return _limiter_registry[key]
+
+
+
+def _find_claude_cli() -> Optional[str]:
+    """Findet den Pfad zur Claude CLI Binary."""
+    import shutil
+    # Bundled im SDK
+    sdk_path = Path("/usr/local/lib/python3.13/site-packages/claude_agent_sdk/_bundled/claude")
+    if sdk_path.is_file():
+        return str(sdk_path)
+    # Im PATH
+    found = shutil.which("claude")
+    return found
+
+
+def _call_claude_cli(prompt: str, model: str, timeout: int = 60) -> Optional[str]:
+    """Ruft die Claude CLI auf (nutzt OAuth-Credentials automatisch).
+
+    Gibt die Antwort als String zurück oder None bei Fehler.
+    """
+    cli = _find_claude_cli()
+    if not cli:
+        logger.debug("Claude CLI nicht gefunden")
+        return None
+    import subprocess
+    try:
+        result = subprocess.run(
+            [cli, "-p", "--model", model],
+            input=prompt,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env={**os.environ, "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"},
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+        if result.stderr:
+            logger.debug(f"Claude CLI stderr: {result.stderr[:200]}")
+    except subprocess.TimeoutExpired:
+        logger.warning(f"Claude CLI Timeout ({timeout}s)")
+    except Exception as e:
+        logger.debug(f"Claude CLI Fehler: {e}")
+    return None
+
+
 class HaanaMemory:
     def __init__(self, instance_name: str):
         self.instance = instance_name
@@ -474,6 +568,27 @@ class HaanaMemory:
         self._extract_url  = os.environ.get("HAANA_EXTRACT_URL", "").strip()
         self._extract_key  = os.environ.get("HAANA_EXTRACT_KEY", "").strip()
         self._extract_type = os.environ.get("HAANA_EXTRACT_PROVIDER_TYPE", "ollama").strip()
+
+        # Anthropic OAuth: Messages API akzeptiert keine OAuth-Tokens,
+        # aber die Claude CLI nutzt OAuth automatisch → CLI als Fallback.
+        self._extract_oauth_dir = os.environ.get("HAANA_EXTRACT_OAUTH_DIR", "").strip()
+        self._use_cli_extraction = False
+        if self._extract_type == "anthropic" and not self._extract_key:
+            if self._extract_oauth_dir and _find_claude_cli():
+                self._use_cli_extraction = True
+                logger.info(
+                    f"[{instance_name}] Extraction-LLM nutzt Claude CLI (OAuth) "
+                    f"mit Modell {self._memory_model}"
+                )
+            elif self._extract_oauth_dir:
+                logger.warning(
+                    f"[{instance_name}] Anthropic-Extraction: OAuth vorhanden aber "
+                    f"Claude CLI nicht gefunden. Memory-Extraktion deaktiviert."
+                )
+
+        # Rate-Limiter für Extraction-LLM (0 = kein Limit)
+        extract_rpm = int(os.environ.get("HAANA_EXTRACT_RPM", "0"))
+        self._extract_limiter = _get_llm_limiter(extract_rpm)
 
         # Kontext-Anreicherung (löst Pronomen/Bezüge vor Extraktion auf)
         self._context_enrichment = os.environ.get(
@@ -495,6 +610,10 @@ class HaanaMemory:
 
         # Anzahl Memory-Treffer aus letztem search()-Aufruf (für Logging)
         self._last_search_hits: int = 0
+
+        # Rate-Limit-Tracking: aufeinanderfolgende Fehler zählen
+        self._consecutive_write_errors: int = 0
+        self._rate_limit_warned: bool = False
 
         logger.info(
             f"[{instance_name}] Memory init | "
@@ -560,10 +679,49 @@ class HaanaMemory:
                 from mem0 import Memory
                 mem = Memory.from_config(config)
                 # Monkeypatch: LLM-Antworten sanitizen (manche LLMs geben Dicts statt Strings)
+                # + Rate-Limit-Retry (429 → Backoff bis zu 3 Versuche)
                 _orig_generate = mem.llm.generate_response
+                _inst = self.instance
+                _limiter = self._extract_limiter
+                _cli_mode = self._use_cli_extraction
+                _cli_model = self._memory_model
                 def _sanitized_generate(*args, **kwargs):
                     import json as _json
-                    resp = _orig_generate(*args, **kwargs)
+                    _limiter.wait()
+                    # CLI-Extraction: Claude CLI statt SDK aufrufen
+                    if _cli_mode:
+                        prompt_text = ""
+                        if args:
+                            prompt_text = str(args[0])
+                        elif "messages" in kwargs:
+                            # Mem0 übergibt messages als Liste
+                            for m in kwargs["messages"]:
+                                if hasattr(m, "content"):
+                                    prompt_text += m.content + "\n"
+                                elif isinstance(m, dict):
+                                    prompt_text += m.get("content", "") + "\n"
+                        resp = _call_claude_cli(prompt_text.strip(), _cli_model, timeout=90)
+                        if resp is None:
+                            raise RuntimeError("Claude CLI returned no response")
+                        return resp
+                    _max_retries = 3
+                    for _attempt in range(_max_retries):
+                        try:
+                            resp = _orig_generate(*args, **kwargs)
+                            break
+                        except Exception as _rate_err:
+                            _err_str = str(_rate_err)
+                            if "429" in _err_str or "RESOURCE_EXHAUSTED" in _err_str:
+                                _wait = min(15 * (2 ** _attempt), 60)
+                                logger.warning(
+                                    f"[{_inst}] Mem0 LLM Rate-Limit (429), "
+                                    f"Retry {_attempt + 1}/{_max_retries} in {_wait}s"
+                                )
+                                time.sleep(_wait)
+                                if _attempt == _max_retries - 1:
+                                    raise
+                            else:
+                                raise
                     try:
                         from mem0.utils.helper import remove_code_blocks
                         cleaned = remove_code_blocks(resp)
@@ -604,6 +762,13 @@ class HaanaMemory:
                         pass
                     return resp
                 mem.llm.generate_response = _sanitized_generate
+                # Gemini Embedding Rate-Limiter (100/min Free Tier)
+                if self._embed_type == "gemini":
+                    _orig_embed = mem.embedding_model.embed
+                    def _rate_limited_embed(*args, **kwargs):
+                        _gemini_embed_limiter.wait()
+                        return _orig_embed(*args, **kwargs)
+                    mem.embedding_model.embed = _rate_limited_embed
                 self._memories[scope] = mem
                 logger.info(f"[{self.instance}] Memory-Instanz '{scope}' bereit.")
             except Exception as e:
@@ -794,8 +959,28 @@ class HaanaMemory:
                 content_preview=content_preview,
                 success=True,
             )
+            # Fehler-Zähler zurücksetzen bei Erfolg
+            self._consecutive_write_errors = 0
+            self._rate_limit_warned = False
             return True
         except Exception as e:
+            self._consecutive_write_errors += 1
+            is_rate_limit = "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e)
+            if is_rate_limit and not self._rate_limit_warned:
+                logger.error(
+                    f"[{self.instance}] ⚠ RATE LIMIT: Memory-Extraktion schlägt "
+                    f"wegen API-Rate-Limit fehl (429). Nachrichten bleiben im "
+                    f"Window und gehen nicht verloren. Bitte API-Plan prüfen oder "
+                    f"Extraction-LLM wechseln (z.B. Ollama lokal)."
+                )
+                self._rate_limit_warned = True
+            elif self._consecutive_write_errors >= 5 and not self._rate_limit_warned:
+                logger.error(
+                    f"[{self.instance}] ⚠ Memory-Extraktion fehlgeschlagen "
+                    f"({self._consecutive_write_errors}x in Folge). "
+                    f"Nachrichten bleiben im Window. Bitte Logs prüfen."
+                )
+                self._rate_limit_warned = True
             logger.error(
                 f"[{self.instance}] Memory-Write in '{scope}' fehlgeschlagen: {e}",
                 exc_info=True,
@@ -862,88 +1047,131 @@ class HaanaMemory:
         "- Wenn nichts aufzulösen ist, gib die Nachricht unverändert zurück\n"
     )
 
+    _RATE_LIMIT_MAX_RETRIES = 3
+
     def _call_extract_llm(self, prompt: str) -> Optional[str]:
         """
         Ruft das konfigurierte Extraction-LLM auf (Ollama oder API-Provider).
         Gibt die Antwort als String zurück oder None bei Fehler.
+        Bei 429 Rate-Limit: Retry mit Backoff (bis zu 3 Versuche).
+        Unterstützt OAuth-Token für Anthropic (wenn kein API-Key).
         """
         import requests as req
 
-        try:
-            if self._extract_type == "ollama":
-                url = self._extract_url or self._ollama_url
-                if not url:
-                    return None
-                r = req.post(
-                    f"{url}/api/generate",
-                    json={"model": self._memory_model, "prompt": prompt, "stream": False},
-                    timeout=30,
-                )
-                if r.status_code == 200:
-                    return r.json().get("response", "").strip()
-            elif self._extract_type in ("anthropic", "minimax"):
-                url = self._extract_url or "https://api.anthropic.com"
-                r = req.post(
-                    f"{url}/v1/messages",
-                    headers={
-                        "x-api-key": self._extract_key,
+        # CLI-Extraction für OAuth (kein Retry-Loop nötig, CLI macht eigenes Auth)
+        if self._use_cli_extraction:
+            self._extract_limiter.wait()
+            result = _call_claude_cli(prompt, self._memory_model)
+            if result is None:
+                logger.warning(f"[{self.instance}] Claude CLI Extraction fehlgeschlagen")
+            return result
+
+        for attempt in range(self._RATE_LIMIT_MAX_RETRIES):
+            try:
+                self._extract_limiter.wait()
+                r = None
+                if self._extract_type == "ollama":
+                    url = self._extract_url or self._ollama_url
+                    if not url:
+                        return None
+                    r = req.post(
+                        f"{url}/api/generate",
+                        json={"model": self._memory_model, "prompt": prompt, "stream": False},
+                        timeout=30,
+                    )
+                    if r.status_code == 200:
+                        return r.json().get("response", "").strip()
+                elif self._extract_type in ("anthropic", "minimax"):
+                    url = self._extract_url or "https://api.anthropic.com"
+                    if not self._extract_key:
+                        logger.warning(f"[{self.instance}] Kein API-Key für Anthropic Extraction")
+                        return None
+                    headers = {
                         "Content-Type": "application/json",
                         "anthropic-version": "2023-06-01",
-                    },
-                    json={
-                        "model": self._memory_model,
-                        "max_tokens": 1024,
-                        "messages": [{"role": "user", "content": prompt}],
-                    },
-                    timeout=60,
-                )
-                if r.status_code == 200:
-                    data = r.json()
-                    for block in data.get("content", []):
-                        if block.get("type") == "text":
-                            return block.get("text", "").strip()
-            elif self._extract_type == "openai":
-                url = self._extract_url or "https://api.openai.com/v1"
-                r = req.post(
-                    f"{url}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self._extract_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "model": self._memory_model,
-                        "messages": [{"role": "user", "content": prompt}],
-                        "temperature": 0.1,
-                    },
-                    timeout=60,
-                )
-                if r.status_code == 200:
-                    return r.json()["choices"][0]["message"]["content"].strip()
-            elif self._extract_type == "gemini":
-                api_url = (
-                    f"https://generativelanguage.googleapis.com/v1beta/"
-                    f"models/{self._memory_model}:generateContent"
-                    f"?key={self._extract_key}"
-                )
-                r = req.post(
-                    api_url,
-                    headers={"Content-Type": "application/json"},
-                    json={
-                        "contents": [{"parts": [{"text": prompt}]}],
-                        "generationConfig": {"temperature": 0.1},
-                    },
-                    timeout=60,
-                )
-                if r.status_code == 200:
-                    data = r.json()
-                    candidates = data.get("candidates", [])
-                    if candidates:
-                        parts = candidates[0].get("content", {}).get("parts", [])
-                        if parts:
-                            return parts[0].get("text", "").strip()
-        except Exception as e:
-            logger.debug(f"[{self.instance}] _call_extract_llm Fehler: {e}")
+                        "x-api-key": self._extract_key,
+                    }
+                    r = req.post(
+                        f"{url}/v1/messages",
+                        headers=headers,
+                        json={
+                            "model": self._memory_model,
+                            "max_tokens": 1024,
+                            "messages": [{"role": "user", "content": prompt}],
+                        },
+                        timeout=60,
+                    )
+                    if r.status_code == 200:
+                        data = r.json()
+                        for block in data.get("content", []):
+                            if block.get("type") == "text":
+                                return block.get("text", "").strip()
+                elif self._extract_type == "openai":
+                    url = self._extract_url or "https://api.openai.com/v1"
+                    r = req.post(
+                        f"{url}/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {self._extract_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": self._memory_model,
+                            "messages": [{"role": "user", "content": prompt}],
+                            "temperature": 0.1,
+                        },
+                        timeout=60,
+                    )
+                    if r.status_code == 200:
+                        return r.json()["choices"][0]["message"]["content"].strip()
+                elif self._extract_type == "gemini":
+                    api_url = (
+                        f"https://generativelanguage.googleapis.com/v1beta/"
+                        f"models/{self._memory_model}:generateContent"
+                        f"?key={self._extract_key}"
+                    )
+                    r = req.post(
+                        api_url,
+                        headers={"Content-Type": "application/json"},
+                        json={
+                            "contents": [{"parts": [{"text": prompt}]}],
+                            "generationConfig": {"temperature": 0.1},
+                        },
+                        timeout=60,
+                    )
+                    if r.status_code == 200:
+                        data = r.json()
+                        candidates = data.get("candidates", [])
+                        if candidates:
+                            parts = candidates[0].get("content", {}).get("parts", [])
+                            if parts:
+                                return parts[0].get("text", "").strip()
 
+                # Rate-Limit: Retry mit Backoff
+                if r is not None and r.status_code == 429:
+                    wait = min(15 * (2 ** attempt), 60)
+                    logger.warning(
+                        f"[{self.instance}] Extract-LLM Rate-Limit (429), "
+                        f"Retry {attempt + 1}/{self._RATE_LIMIT_MAX_RETRIES} in {wait}s"
+                    )
+                    time.sleep(wait)
+                    continue
+
+                # Anderer Fehler: loggen und abbrechen
+                if r is not None and r.status_code != 200:
+                    logger.warning(
+                        f"[{self.instance}] Extract-LLM HTTP {r.status_code}: "
+                        f"{r.text[:200]}"
+                    )
+                    return None
+
+            except Exception as e:
+                logger.debug(f"[{self.instance}] _call_extract_llm Fehler: {e}")
+                return None
+
+        logger.error(
+            f"[{self.instance}] Extract-LLM Rate-Limit nach "
+            f"{self._RATE_LIMIT_MAX_RETRIES} Retries nicht aufgelöst"
+        )
         return None
 
     def _enrich_with_context(self, entry: _WindowEntry) -> tuple[str, str]:

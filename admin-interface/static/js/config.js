@@ -187,6 +187,11 @@ function _renderProvBodyAnthropic(p, i) {
             <span id="prov-${i}-oauth-upload-result" class="form-hint" style="margin-left:12px;"></span>
           </div>
         </details>
+      </div>
+      <div class="form-group" style="margin-bottom:10px;">
+        <label>${t('config_provider.api_key')} <span style="font-size:11px;color:var(--muted);">(${t('config_provider.oauth_api_key_hint')})</span></label>
+        <input type="password" id="prov-${i}-key" value="${escAttr(p.key||'')}"
+          placeholder="${t('config_provider.oauth_api_key_placeholder')}">
       </div>`;
   }
   // API Key auth
@@ -472,6 +477,22 @@ function renderLlms(c) {
             <span id="llm-${i}-models-status" style="font-size:11px;color:var(--muted);align-self:center;"></span>
           </div>
         </div>
+        <div class="form-group" style="margin-bottom:10px;">
+          <label>${t('config_llm.rpm')}</label>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input type="number" id="llm-${i}-rpm" value="${l.rpm||0}" min="0" max="10000"
+              style="width:80px;" placeholder="0">
+            <span style="font-size:11px;color:var(--muted);">${t('config_llm.rpm_hint')}</span>
+            <select style="font-size:11px;width:auto;" onchange="if(this.value){document.getElementById('llm-${i}-rpm').value=this.value;this.selectedIndex=0;}">
+              <option value="">${t('config_llm.rpm_presets')}</option>
+              <option value="4">Gemini 2.5 Flash Free (5 RPM)</option>
+              <option value="14">Gemini 2.5 Flash-Lite Free (15 RPM)</option>
+              <option value="90">Gemini Embedding Free (100 RPM)</option>
+              <option value="20">MiniMax Free (100/5h ≈ 20 RPM)</option>
+              <option value="0">${t('config_llm.rpm_unlimited')}</option>
+            </select>
+          </div>
+        </div>
       </div>
     </div>
   `).join('') + `
@@ -632,20 +653,20 @@ async function fetchEmbeddingModels() {
   const st = document.getElementById('embed-model-status');
   const sel = document.getElementById('embed-model-select');
   if (!cfg) {
-    if (st) { st.textContent = '\u26a0 Config nicht geladen'; st.style.color = 'var(--yellow)'; }
+    if (st) { st.textContent = '\u26a0 ' + t('config_memory.config_not_loaded'); st.style.color = 'var(--yellow)'; }
     return;
   }
   const provId = document.getElementById('embed-provider')?.value;
   if (!provId) {
-    if (st) { st.textContent = '\u26a0 Kein Provider ausgewählt'; st.style.color = 'var(--yellow)'; }
+    if (st) { st.textContent = '\u26a0 ' + t('config_memory.no_provider_selected'); st.style.color = 'var(--yellow)'; }
     return;
   }
   const prov = _getProviderById(provId);
   if (!prov || !prov.type) {
-    if (st) { st.textContent = '\u26a0 Provider "' + provId + '" nicht gefunden'; st.style.color = 'var(--yellow)'; }
+    if (st) { st.textContent = '\u26a0 ' + t('config_memory.provider_not_found', {id: provId}); st.style.color = 'var(--yellow)'; }
     return;
   }
-  if (st) { st.textContent = '\u2026 Lade Modelle...'; st.style.color = 'var(--muted)'; }
+  if (st) { st.textContent = '\u2026 ' + t('config_memory.loading_models'); st.style.color = 'var(--muted)'; }
   try {
     const body = { type: prov.type, url: prov.url || '', key: prov.key || '' };
     const r = await fetch('/api/fetch-embedding-models', {
@@ -655,7 +676,7 @@ async function fetchEmbeddingModels() {
     const d = await r.json();
     const models = d.models || [];
     if (!models.length) {
-      if (st) { st.textContent = d.error ? '\u26a0 ' + d.error.substring(0, 60) : '\u26a0 Keine Modelle gefunden'; st.style.color = 'var(--yellow)'; }
+      if (st) { st.textContent = d.error ? '\u26a0 ' + d.error.substring(0, 60) : '\u26a0 ' + t('config_memory.no_models_found'); st.style.color = 'var(--yellow)'; }
       if (sel) sel.style.display = 'none';
       return;
     }
@@ -675,12 +696,12 @@ async function fetchEmbeddingModels() {
     }
     if (st) {
       st.textContent = embedCount > 0
-        ? '\u2713 ' + embedCount + ' Embedding-Modelle'
-        : '\u2713 ' + models.length + ' Modelle';
+        ? '\u2713 ' + embedCount + ' ' + t('config_memory.embedding_models_found')
+        : '\u2713 ' + models.length + ' ' + t('config_memory.models_available');
       st.style.color = d.fallback ? 'var(--yellow)' : 'var(--green)';
     }
   } catch(e) {
-    if (st) { st.textContent = '\u2717 Fehler: ' + e.message.substring(0, 40); st.style.color = 'var(--red)'; }
+    if (st) { st.textContent = '\u2717 ' + t('config_memory.models_fetch_error', {msg: e.message.substring(0, 40)}); st.style.color = 'var(--red)'; }
     if (sel) sel.style.display = 'none';
   }
 }
@@ -822,6 +843,7 @@ async function saveConfig() {
     name:        document.getElementById(`llm-${i}-name`)?.value     ?? l.name,
     provider_id: document.getElementById(`llm-${i}-provider`)?.value ?? l.provider_id,
     model:       document.getElementById(`llm-${i}-model`)?.value    ?? l.model,
+    rpm:         parseInt(document.getElementById(`llm-${i}-rpm`)?.value) || 0,
   }));
 
   const retLlm   = parseInt(document.getElementById('ret-llm-calls').value)  || null;

@@ -72,14 +72,16 @@ def _build_agent_env(user: dict, cfg: dict, resolve_llm_fn, find_ollama_url_fn) 
 
     # Extraction-Provider bestimmen (kann sich vom Primary-Provider unterscheiden)
     extract_type = e_prov.get("type", "ollama")
-    extract_url = ""
-    extract_key = ""
-    if extract_type in ("anthropic", "minimax"):
-        extract_url = e_prov.get("url", "")
-        extract_key = e_prov.get("key", "")
-    elif extract_type in ("openai", "gemini"):
-        extract_url = e_prov.get("url", "")
-        extract_key = e_prov.get("key", "")
+    extract_url = e_prov.get("url", "")
+    extract_key = e_prov.get("key", "")
+    extract_oauth_dir = ""
+    # Anthropic OAuth: API-Key hat Vorrang (Messages API braucht Key, nicht OAuth)
+    # Wenn auch Key vorhanden → Key verwenden. Sonst OAuth-Dir als Fallback-Info.
+    if extract_type == "anthropic" and not extract_key:
+        if e_prov.get("auth_method") == "oauth" and e_prov.get("oauth_dir"):
+            extract_oauth_dir = e_prov["oauth_dir"]
+    # Extraction-LLM RPM (aus LLM-Config, 0 = kein Limit)
+    extract_rpm = str(e_llm.get("rpm", 0))
     # Ollama: URL kommt aus OLLAMA_URL
 
     # Embedding-Provider bestimmen
@@ -118,6 +120,8 @@ def _build_agent_env(user: dict, cfg: dict, resolve_llm_fn, find_ollama_url_fn) 
         "HAANA_EXTRACT_URL":           extract_url,
         "HAANA_EXTRACT_KEY":           extract_key,
         "HAANA_EXTRACT_PROVIDER_TYPE": extract_type,
+        "HAANA_EXTRACT_OAUTH_DIR":     extract_oauth_dir,
+        "HAANA_EXTRACT_RPM":           extract_rpm,
         "HAANA_CONTEXT_ENRICHMENT":    str(mem_cfg.get("context_enrichment", False)).lower(),
         # Embedding-Provider (kann sich von Ollama unterscheiden)
         "HAANA_EMBED_PROVIDER_TYPE":   embed_type,

@@ -425,6 +425,8 @@ def test_build_env_extraction_llm():
     user = _make_user()  # extraction_llm leer → fällt auf global zurück
     env = _build_env(user, cfg)
     assert env["HAANA_MEMORY_MODEL"] == "ministral-3-32k:3b"
+    assert env["HAANA_EXTRACT_OAUTH_DIR"] == ""
+    assert env["HAANA_EXTRACT_RPM"] == "0"
 
 
 def test_build_env_extraction_always_global():
@@ -434,6 +436,36 @@ def test_build_env_extraction_always_global():
     env = _build_env(user, cfg)
     # Global ist "ollama-extract" (ministral-3-32k:3b), nicht claude-primary
     assert env["HAANA_MEMORY_MODEL"] == "ministral-3-32k:3b"
+
+
+def test_build_env_extraction_rpm():
+    """RPM-Limit wird aus LLM-Config uebernommen."""
+    cfg = _make_cfg()
+    for llm in cfg["llms"]:
+        if llm["id"] == "ollama-extract":
+            llm["rpm"] = 42
+    user = _make_user()
+    env = _build_env(user, cfg)
+    assert env["HAANA_EXTRACT_RPM"] == "42"
+
+
+def test_build_env_extraction_oauth():
+    """Anthropic-OAuth-Dir wird fuer Extraction weitergegeben wenn kein API-Key."""
+    cfg = _make_cfg()
+    cfg["providers"].append({
+        "id": "anth-oauth", "name": "Anthropic OAuth", "type": "anthropic",
+        "url": "", "key": "", "auth_method": "oauth", "oauth_dir": "/data/claude-auth/test",
+    })
+    cfg["llms"].append({
+        "id": "haiku-oauth", "name": "Haiku OAuth", "provider_id": "anth-oauth",
+        "model": "claude-haiku-4-5-20251001",
+    })
+    cfg["memory"]["extraction_llm"] = "haiku-oauth"
+    user = _make_user()
+    env = _build_env(user, cfg)
+    assert env["HAANA_EXTRACT_PROVIDER_TYPE"] == "anthropic"
+    assert env["HAANA_EXTRACT_KEY"] == ""
+    assert env["HAANA_EXTRACT_OAUTH_DIR"] == "/data/claude-auth/test"
 
 
 def test_build_env_minimax_provider():
