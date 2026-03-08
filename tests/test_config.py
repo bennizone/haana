@@ -713,3 +713,62 @@ def test_docker_agent_manager_status_no_client():
     )
     assert dam.agent_status("test") == "unknown"
     assert dam.agent_url("test") == "http://haana-instanz-test-1:8001"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Tests: InProcessAgentManager
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_inprocess_agent_manager_status_absent():
+    """InProcessAgentManager gibt 'absent' fuer unbekannte Instanzen."""
+    from core.process_manager import InProcessAgentManager
+    main_app = mock.MagicMock()
+    ipm = InProcessAgentManager(
+        main_app=main_app,
+        resolve_llm_fn=lambda *a: ({}, {}),
+        find_ollama_url_fn=lambda c: "",
+        inst_dir=Path("/tmp"), data_root=Path("/tmp"),
+    )
+    assert ipm.agent_status("test") == "absent"
+    assert ipm.agent_url("test") == ""
+    assert ipm.list_agents() == {}
+
+
+def test_inprocess_agent_manager_url_format():
+    """InProcessAgentManager gibt localhost-URL mit /agent/ Prefix."""
+    from core.process_manager import InProcessAgentManager
+    main_app = mock.MagicMock()
+    ipm = InProcessAgentManager(
+        main_app=main_app,
+        resolve_llm_fn=lambda *a: ({}, {}),
+        find_ollama_url_fn=lambda c: "",
+        inst_dir=Path("/tmp"), data_root=Path("/tmp"),
+    )
+    # Simuliere dass ein Agent aktiv ist
+    ipm._agents["alice"] = mock.MagicMock()
+    assert ipm.agent_url("alice") == "http://localhost:8080/agent/alice"
+    assert ipm.agent_status("alice") == "running"
+    assert "alice" in ipm.list_agents()
+
+
+def test_create_agent_manager_standalone():
+    """Factory erstellt DockerAgentManager im standalone Modus."""
+    from core.process_manager import create_agent_manager, DockerAgentManager
+    mgr = create_agent_manager(
+        "standalone", docker_client=None,
+        resolve_llm_fn=lambda *a: ({}, {}),
+        find_ollama_url_fn=lambda c: "",
+    )
+    assert isinstance(mgr, DockerAgentManager)
+
+
+def test_create_agent_manager_addon():
+    """Factory erstellt InProcessAgentManager im addon Modus."""
+    from core.process_manager import create_agent_manager, InProcessAgentManager
+    main_app = mock.MagicMock()
+    mgr = create_agent_manager(
+        "addon", main_app=main_app,
+        resolve_llm_fn=lambda *a: ({}, {}),
+        find_ollama_url_fn=lambda c: "",
+    )
+    assert isinstance(mgr, InProcessAgentManager)

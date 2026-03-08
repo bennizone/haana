@@ -91,9 +91,18 @@ async function loadStatus() {
       </div>
     `;
 
-    // Rebuild-Banner
+    // Rebuild-Banner (leer oder Dimensions-Mismatch)
     const banner = document.getElementById('rebuild-banner');
-    if (banner) banner.classList.toggle('active', !!qdrant.rebuild_suggested);
+    if (banner) {
+      const needsRebuild = !!qdrant.rebuild_suggested || !!qdrant.dims_mismatch;
+      banner.classList.toggle('active', needsRebuild);
+      const bannerText = banner.querySelector('.rebuild-banner-text');
+      if (bannerText && qdrant.dims_mismatch) {
+        bannerText.textContent = t('status.dims_mismatch');
+      } else if (bannerText) {
+        bannerText.textContent = t('status.rebuild_banner');
+      }
+    }
 
     const allOk = qdrant.ok;
     document.getElementById('header-dot').style.background = allOk ? 'var(--green)' : 'var(--red)';

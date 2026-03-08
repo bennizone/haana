@@ -316,11 +316,10 @@ def test_build_options_empty_mcp_when_none():
 
 
 def test_build_options_removes_claudecode_env():
-    """_build_options() entfernt CLAUDECODE aus os.environ."""
-    agent = _make_agent()
-    os.environ["CLAUDECODE"] = "1"
-    agent._build_options()
-    assert "CLAUDECODE" not in os.environ
+    """_build_options() entfernt CLAUDECODE aus dem Subprocess-Env."""
+    agent = _make_agent({"CLAUDECODE": "1"})
+    opts = agent._build_options()
+    assert "CLAUDECODE" not in opts.env
 
 
 def test_build_options_model_passed():
@@ -359,3 +358,36 @@ def test_allow_tools_extends_list():
     assert len(agent._allowed_tools) == initial_count + 2
     assert "CustomTool1" in agent._allowed_tools
     assert "CustomTool2" in agent._allowed_tools
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Tests: Env-Isolation (InProcess-Modus)
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def test_env_snapshot_captured_at_init():
+    """Agent captures env at init, not at runtime."""
+    agent = _make_agent({"HAANA_MODEL": "captured-model"})
+    # After init, changing os.environ should not affect the agent
+    assert agent._env.get("HAANA_MODEL") == "captured-model"
+    assert agent.model == "captured-model"
+
+
+def test_build_options_uses_captured_env():
+    """_build_options() uses the captured env snapshot, not current os.environ."""
+    agent = _make_agent({"MY_CUSTOM_VAR": "from-init"})
+    # Verify the captured env is used
+    opts = agent._build_options()
+    assert opts.env.get("MY_CUSTOM_VAR") == "from-init"
+
+
+def test_context_path_uses_data_dir():
+    """_context_path respects HAANA_DATA_DIR from env."""
+    agent = _make_agent({"HAANA_DATA_DIR": "/data"})
+    assert str(agent._context_path).startswith("/data/context/")
+
+
+def test_context_path_default():
+    """_context_path falls back to 'data' when HAANA_DATA_DIR not set."""
+    agent = _make_agent()
+    assert "context" in str(agent._context_path)

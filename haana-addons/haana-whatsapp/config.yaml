@@ -12,7 +12,7 @@ ports:
 ports_description:
   3001/tcp: "WhatsApp Bridge API"
 options:
-  haana_url: "http://homeassistant.local:8080"
+  haana_url: "http://haana:8080"
 schema:
   haana_url: "url"
 startup: "application"

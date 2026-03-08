@@ -19,6 +19,12 @@ mkdir -p /media/haana/logs/memory-ops
 mkdir -p /media/haana/logs/tool-calls
 mkdir -p /media/haana/logs/llm-calls
 
+# Templates aus Image kopieren (nur wenn nicht vorhanden)
+if [ ! -d /data/instanzen/templates ]; then
+    cp -r /app/instanzen/templates /data/instanzen/templates
+    bashio::log.info "Templates nach /data/instanzen/templates kopiert"
+fi
+
 # Env-Vars aus HA Add-on Options
 export HAANA_MODE="addon"
 export HAANA_DATA_DIR="/data"

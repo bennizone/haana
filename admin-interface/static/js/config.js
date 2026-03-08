@@ -37,7 +37,6 @@ function renderConfig(c) {
   // Embedding
   const em = c.embedding || {};
   try { _renderEmbeddingProviderDropdowns(c, em); } catch(e) { console.error('renderEmbedding error:', e); }
-  _setVal('embed-model', em.model || 'bge-m3');
   _setVal('embed-dims',  em.dims  ?? 1024);
 
   // Log Retention
@@ -588,6 +587,84 @@ function _renderEmbeddingProviderDropdowns(c, em) {
       `<option value="${escAttr(p.id)}" ${p.id === em.fallback_provider_id ? 'selected' : ''}>${escHtml(p.name)} (${escHtml(p.type)})</option>`
     ).join('');
   }
+
+  const selectedModel = em.model || 'bge-m3';
+  // Bei Provider-Wechsel Modelle neu laden
+  embedEl.addEventListener('change', () => _loadEmbeddingModels(c, selectedModel));
+  // Initial Modelle laden
+  _loadEmbeddingModels(c, selectedModel);
+}
+
+// Bekannte Embedding-Modell Dimensionen
+const _EMBED_DIMS = {
+  'bge-m3': 1024, 'bge-m3:latest': 1024,
+  'nomic-embed-text': 768, 'nomic-embed-text:latest': 768,
+  'all-minilm': 384, 'all-minilm:latest': 384,
+  'bge-small-en-v1.5': 384, 'bge-small-en-v1.5:latest': 384,
+  'mxbai-embed-large': 1024, 'mxbai-embed-large:latest': 1024,
+  'snowflake-arctic-embed': 1024, 'snowflake-arctic-embed:latest': 1024,
+};
+
+async function _loadEmbeddingModels(c, selectedModel) {
+  const provId = document.getElementById('embed-provider')?.value;
+  const modelEl = document.getElementById('embed-model');
+  const statusEl = document.getElementById('embed-model-status');
+  if (!modelEl) return;
+
+  const prov = (c.providers || []).find(p => p.id === provId);
+  if (!prov) {
+    modelEl.innerHTML = '<option value="">–</option>';
+    if (statusEl) statusEl.textContent = '';
+    return;
+  }
+
+  if (statusEl) statusEl.textContent = t('config_memory.loading_models');
+  try {
+    const r = await fetch('/api/fetch-models', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ type: prov.type, url: prov.url, key: prov.key }),
+    });
+    const d = await r.json();
+    const models = d.models || [];
+
+    // Embedding-Modelle filtern: bei Ollama enthalten Namen oft "embed"
+    // Aber alle anzeigen, Embedding-Modelle zuerst
+    const isEmbed = m => /embed|bge|minilm|nomic/i.test(m);
+    const sorted = [...models].sort((a, b) => {
+      const ae = isEmbed(a), be = isEmbed(b);
+      if (ae && !be) return -1;
+      if (!ae && be) return 1;
+      return a.localeCompare(b);
+    });
+
+    const embedCount = sorted.filter(isEmbed).length;
+    modelEl.innerHTML = sorted.map(m => {
+      const dims = _EMBED_DIMS[m] || _EMBED_DIMS[m.split(':')[0]];
+      const label = dims ? `${m} (${dims} dims)` : m;
+      const sel = m === selectedModel ? ' selected' : '';
+      return `<option value="${escAttr(m)}"${sel}>${escHtml(label)}</option>`;
+    }).join('');
+
+    // Falls gespeichertes Modell nicht in der Liste: als erste Option hinzufuegen
+    if (selectedModel && ![...modelEl.options].some(o => o.value === selectedModel)) {
+      const dims = _EMBED_DIMS[selectedModel] || _EMBED_DIMS[selectedModel.split(':')[0]];
+      const label = dims ? `${selectedModel} (${dims} dims)` : selectedModel;
+      modelEl.insertAdjacentHTML('afterbegin',
+        `<option value="${escAttr(selectedModel)}" selected>${escHtml(label)} *</option>`);
+    }
+
+    if (statusEl) {
+      statusEl.textContent = embedCount > 0
+        ? embedCount + ' ' + t('config_memory.embedding_models_found')
+        : models.length + ' ' + t('config_memory.models_available');
+    }
+    updateEmbedDims();
+  } catch(e) {
+    modelEl.innerHTML = selectedModel
+      ? `<option value="${escAttr(selectedModel)}" selected>${escHtml(selectedModel)}</option>`
+      : '<option value="">–</option>';
+    if (statusEl) statusEl.textContent = t('config_memory.models_load_error');
+  }
 }
 
 // ── Restart Detection ───────────────────────────────────────────────────────
@@ -690,7 +767,7 @@ async function saveConfig() {
     },
     embedding: {
       provider_id:          document.getElementById('embed-provider')?.value || '',
-      model:                document.getElementById('embed-model').value,
+      model:                document.getElementById('embed-model')?.value || 'bge-m3',
       dims:                 parseInt(document.getElementById('embed-dims').value) || 1024,
       fallback_provider_id: document.getElementById('embed-fallback-provider')?.value || '',
     },
@@ -949,14 +1026,10 @@ function statusLabel(status, error) {
 function updateEmbedDims() {
   const sel = document.getElementById('embed-model');
   const dims = document.getElementById('embed-dims');
-  const customRow = document.getElementById('embed-custom-row');
-  const presets = { 'bge-m3': 1024, 'nomic-embed-text': 768, 'bge-small-en-v1.5': 384 };
-  if (sel.value === '__custom__') {
-    customRow.style.display = '';
-  } else {
-    customRow.style.display = 'none';
-    if (presets[sel.value]) dims.value = presets[sel.value];
-  }
+  if (!sel || !dims) return;
+  const modelName = sel.value;
+  const knownDims = _EMBED_DIMS[modelName] || _EMBED_DIMS[modelName.split(':')[0]];
+  if (knownDims) dims.value = knownDims;
 }
 
 // ── Verbindungstest ────────────────────────────────────────────────────────

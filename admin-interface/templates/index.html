@@ -212,16 +212,14 @@
             <select id="embed-provider"><!-- JS: nur Ollama-Provider --></select>
           </div>
           <div class="form-group">
-            <label>Modell</label>
+            <label data-i18n="config_memory.embedding_model">Modell</label>
             <select id="embed-model" onchange="updateEmbedDims()">
-              <option value="bge-m3">bge-m3 (1024 dims) – empfohlen</option>
-              <option value="nomic-embed-text">nomic-embed-text (768 dims)</option>
-              <option value="bge-small-en-v1.5">bge-small-en-v1.5 (384 dims)</option>
-              <option value="__custom__">Manuell eingeben…</option>
+              <option value="">–</option>
             </select>
+            <small id="embed-model-status" style="color:var(--muted);margin-top:4px;display:block;"></small>
           </div>
           <div class="form-group">
-            <label>Dimensions</label>
+            <label data-i18n="config_memory.embedding_dims">Dimensions</label>
             <input type="number" id="embed-dims" value="1024" min="64" max="4096">
           </div>
         </div>
@@ -231,12 +229,8 @@
             <select id="embed-fallback-provider"><!-- JS --></select>
           </div>
         </div>
-        <div id="embed-custom-row" class="form-group" style="display:none;margin-top:4px;">
-          <label>Modell-Name (manuell)</label>
-          <input type="text" id="embed-model-custom" placeholder="z.B. mxbai-embed-large">
-        </div>
-        <p class="form-warning">
-          Beim Wechsel des Embedding-Modells müssen alle Qdrant-Collections neu aufgebaut werden
+        <p class="form-warning" data-i18n="config_memory.embedding_warning">
+          Beim Wechsel des Embedding-Modells muessen alle Qdrant-Collections neu aufgebaut werden
           (andere Dimensionen sind nicht kompatibel).
         </p>
       </div>

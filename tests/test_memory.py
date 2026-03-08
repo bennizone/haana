@@ -123,6 +123,11 @@ def _make_memory(write_scopes, instance="test"):
     mem.instance = instance
     mem.write_scopes = set(write_scopes)
     mem.read_scopes = set(write_scopes)
+    mem._qdrant_url = ""
+    mem._ollama_url = ""
+    mem._memory_model = "ministral-3-32k:3b"
+    mem._embed_model = "bge-m3"
+    mem._embed_dims = 1024
     return mem
 
 
@@ -155,3 +160,32 @@ def test_resolve_scope_regex_not_in_write_scopes():
     # household_memory nicht in write_scopes → kein Match
     # Nur ein write_scope → eindeutig
     assert result == "test_memory"
+
+
+# ── Env-Isolation Tests ──────────────────────────────────────────────────────
+
+def test_memory_captures_env_at_init():
+    """HaanaMemory speichert Env-Vars bei Konstruktion."""
+    import os
+    old = os.environ.get("OLLAMA_URL")
+    try:
+        os.environ["OLLAMA_URL"] = "http://test-ollama:11434"
+        os.environ["QDRANT_URL"] = "http://test-qdrant:6333"
+        mem = m.HaanaMemory("test-env")
+        assert mem._ollama_url == "http://test-ollama:11434"
+        assert mem._qdrant_url == "http://test-qdrant:6333"
+    finally:
+        if old is None:
+            os.environ.pop("OLLAMA_URL", None)
+        else:
+            os.environ["OLLAMA_URL"] = old
+        os.environ.pop("QDRANT_URL", None)
+
+
+def test_classify_scope_uses_captured_ollama_url():
+    """_classify_scope_via_llm nutzt die bei Init gespeicherte URL."""
+    mem = _make_memory(["test_memory", "household_memory"])
+    # _ollama_url ist leer → sollte sofort None zurueckgeben
+    assert mem._ollama_url == ""
+    result = mem._classify_scope_via_llm("test text")
+    assert result is None

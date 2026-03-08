@@ -7,6 +7,8 @@ bashio::log.info "Starting WhatsApp Bridge..."
 bashio::log.info "HAANA URL: ${HAANA_URL}"
 
 export HAANA_ADMIN_URL="${HAANA_URL}"
+export SESSION_DIR="/data/session"
+mkdir -p /data/session
 
 cd /app/whatsapp-bridge
 exec node index.js

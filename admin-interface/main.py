@@ -130,6 +130,27 @@ async def startup_event():
         resolve_llm_fn=_resolve_llm,
         find_ollama_url_fn=_find_ollama_url,
     )
+    # Add-on Modus: Agents beim Start automatisch starten (kein Docker-SDK)
+    if HAANA_MODE == "addon":
+        asyncio.create_task(_autostart_agents())
+
+async def _autostart_agents():
+    """Startet alle konfigurierten User-Agents im Add-on-Modus."""
+    import logging as _log
+    _logger = _log.getLogger(__name__)
+    cfg = load_config()
+    for user in cfg.get("users", []):
+        uid = user.get("id", "")
+        if not uid:
+            continue
+        try:
+            result = await _agent_manager.start_agent(user, cfg)
+            if result.get("ok"):
+                _logger.info(f"[Autostart] Agent '{uid}' gestartet")
+            else:
+                _logger.warning(f"[Autostart] Agent '{uid}': {result.get('error', 'unbekannt')}")
+        except Exception as e:
+            _logger.error(f"[Autostart] Agent '{uid}' fehlgeschlagen: {e}")
 
 # ── Pfade ────────────────────────────────────────────────────────────────────
 
@@ -667,11 +688,18 @@ async def get_status():
             coll_names = [c["name"] for c in colls]
             # Prüfe ob Collections leer sind (für Rebuild-Empfehlung)
             total_vectors = 0
+            configured_dims = cfg.get("embedding", {}).get("dims", 1024)
+            dims_mismatch = False
             for cname in coll_names:
                 try:
                     cr = await client.get(f"{qdrant_url}/collections/{cname}")
                     res = cr.json().get("result", {})
                     total_vectors += res.get("points_count", 0) or res.get("vectors_count", 0) or 0
+                    # Dimensions-Check: Collection-Dimension vs. konfigurierte
+                    coll_dim = (res.get("config", {}).get("params", {})
+                                .get("vectors", {}).get("size", 0))
+                    if coll_dim and coll_dim != configured_dims:
+                        dims_mismatch = True
                 except Exception:
                     pass
             # Konversations-Logs vorhanden?
@@ -681,6 +709,8 @@ async def get_status():
                 "ok": True,
                 "collections": coll_names,
                 "rebuild_suggested": has_logs and total_vectors == 0,
+                "dims_mismatch": dims_mismatch,
+                "configured_dims": configured_dims,
             }
         except Exception as e:
             status["qdrant"] = {"ok": False, "error": str(e)}
@@ -1167,9 +1197,15 @@ async def whatsapp_config_endpoint():
         if not phone or user.get("system"):
             continue
         jid = phone if "@" in phone else f"{phone}@s.whatsapp.net"
-        container = user.get("container_name", f"haana-instanz-{user['id']}-1")
-        port      = user.get("api_port", 8001)
-        target = {"agent_url": f"http://{container}:{port}", "user_id": user["id"]}
+        uid = user["id"]
+        if HAANA_MODE == "addon":
+            # Add-on: Agents laufen als Sub-App im selben Prozess
+            agent_url = f"http://localhost:8080/agent/{uid}"
+        else:
+            container = user.get("container_name", f"haana-instanz-{uid}-1")
+            port      = user.get("api_port", 8001)
+            agent_url = f"http://{container}:{port}"
+        target = {"agent_url": agent_url, "user_id": uid}
         routes.append({"jid": jid, **target})
         # Optionale LID als zweite Route registrieren
         lid = user.get("whatsapp_lid", "").strip()

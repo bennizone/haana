@@ -189,7 +189,11 @@
     "log_entries": "Log-Einträge",
     "days": "Tage",
     "empty_warning": "leer",
-    "error_label": "Fehler"
+    "error_label": "Fehler",
+    "loading_models": "Lade Modelle…",
+    "embedding_models_found": "Embedding-Modelle gefunden",
+    "models_available": "Modelle verfügbar",
+    "models_load_error": "Modelle konnten nicht geladen werden"
   },
   "config_services": {
     "ha_title": "Home Assistant",
@@ -387,7 +391,8 @@
     "days_last": "Tag(e), zuletzt",
     "agent_instances": "Agent-Instanzen",
     "action_failed": "fehlgeschlagen",
-    "delete_label": "Löschen"
+    "delete_label": "Löschen",
+    "dims_mismatch": "Embedding-Dimensionen stimmen nicht überein – Collections müssen neu aufgebaut werden (Memory-Tab)."
   },
   "whatsapp": {
     "connected": "Verbunden",

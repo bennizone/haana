@@ -6,6 +6,13 @@ LLM_MODEL="$(bashio::config 'llm_model')"
 
 bashio::log.info "Starting Ollama (CPU-only)..."
 
+# Modelle persistent in /data speichern (HA Backup)
+export OLLAMA_MODELS="/data/models"
+mkdir -p /data/models
+
+# Auf allen Interfaces lauschen (damit HAANA-Container zugreifen kann)
+export OLLAMA_HOST="0.0.0.0"
+
 # Ollama im Hintergrund starten
 ollama serve &
 OLLAMA_PID=$!

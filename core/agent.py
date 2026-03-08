@@ -41,17 +41,21 @@ logger = logging.getLogger(__name__)
 class HaanaAgent:
     def __init__(self, instance_name: str):
         self.instance = instance_name
+
+        # Env-Snapshot für Subprocess (InProcess-Modus: env wird nach __init__ restored)
+        self._env = dict(os.environ)
+
         # Modellname für Logging; CLI-Model wird nur gesetzt wenn kein
         # Drittanbieter-Provider aktiv ist (OPENAI_MODEL/ANTHROPIC_MODEL in env)
-        self.model: Optional[str] = os.environ.get("HAANA_MODEL") or None
+        self.model: Optional[str] = self._env.get("HAANA_MODEL") or None
         # Drittanbieter: model=None → CLI nutzt OPENAI_MODEL / ANTHROPIC_MODEL aus env
         self._cli_model: Optional[str] = self.model
-        if os.environ.get("OPENAI_MODEL") or os.environ.get("ANTHROPIC_MODEL"):
+        if self._env.get("OPENAI_MODEL") or self._env.get("ANTHROPIC_MODEL"):
             self._cli_model = None
         self.session_id: Optional[str] = None
 
         # OAuth: Credentials aus Data-Volume symlinken
-        oauth_dir = os.environ.get("HAANA_OAUTH_DIR")
+        oauth_dir = self._env.get("HAANA_OAUTH_DIR")
         if oauth_dir:
             src = Path(oauth_dir) / ".credentials.json"
             dst = Path.home() / ".claude" / ".credentials.json"
@@ -86,16 +90,17 @@ class HaanaAgent:
         self.memory = HaanaMemory(instance_name)
 
         # Pfad für Window-Persistenz
-        self._context_path = Path("data") / "context" / f"{instance_name}.json"
+        data_dir = self._env.get("HAANA_DATA_DIR", "data")
+        self._context_path = Path(data_dir) / "context" / f"{instance_name}.json"
 
         # MCP-Server für Custom Tools (Phase 2+: HA, Trilium, Kalender, ...)
         self._mcp_servers: dict = {}
 
         # Home Assistant MCP – automatisch einbinden wenn konfiguriert
-        ha_mcp_url = os.environ.get("HA_MCP_URL")
+        ha_mcp_url = self._env.get("HA_MCP_URL")
         if ha_mcp_url:
-            ha_mcp_type = os.environ.get("HA_MCP_TYPE", "extended")
-            ha_token = os.environ.get("HA_TOKEN", "")
+            ha_mcp_type = self._env.get("HA_MCP_TYPE", "extended")
+            ha_token = self._env.get("HA_TOKEN", "")
             if ha_mcp_type == "builtin":
                 # Built-in HA MCP Server (SSE transport, Bearer auth)
                 self._mcp_servers["home-assistant"] = McpSSEServerConfig(
@@ -140,8 +145,8 @@ class HaanaAgent:
     def _build_options(self) -> ClaudeAgentOptions:
         """Erstellt ClaudeAgentOptions. CLAUDECODE wird entfernt damit der
         Subprocess-Agent in einer Claude Code Session starten kann."""
-        os.environ.pop("CLAUDECODE", None)
-        subprocess_env = dict(os.environ)
+        subprocess_env = dict(self._env)
+        subprocess_env.pop("CLAUDECODE", None)
         return ClaudeAgentOptions(
             cwd=self.cwd,
             model=self._cli_model,

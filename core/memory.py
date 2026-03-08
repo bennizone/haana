@@ -58,9 +58,9 @@ _READ_SCOPES: dict[str, set[str]] = {
 }
 
 
-def _get_qdrant_host_port() -> tuple[str, int]:
+def _get_qdrant_host_port(qdrant_url: str = "") -> tuple[str, int]:
     """Parst QDRANT_URL in (host, port)."""
-    url = os.environ.get("QDRANT_URL", "http://qdrant:6333")
+    url = qdrant_url or os.environ.get("QDRANT_URL", "http://qdrant:6333")
     url = url.replace("https://", "").replace("http://", "")
     host, _, port_str = url.partition(":")
     port = int(port_str) if port_str else 6333
@@ -100,13 +100,19 @@ Erkenne die Sprache des Users und schreibe die Fakten in derselben Sprache.\
 """
 
 
-def _build_mem0_config(collection_name: str) -> Optional[dict]:
+def _build_mem0_config(collection_name: str, *,
+                       qdrant_url: str = "",
+                       ollama_url: str = "",
+                       memory_llm: str = "",
+                       embed_model: str = "",
+                       embed_dims: int = 0) -> Optional[dict]:
     """
     Erstellt vollständige Mem0-Konfiguration für einen Scope.
     Gibt None zurück wenn kein LLM-Backend verfügbar ist.
+    Parameter überschreiben Env-Vars (für InProcess-Modus mit mehreren Agents).
     """
-    host, port = _get_qdrant_host_port()
-    ollama_url = os.environ.get("OLLAMA_URL", "").strip()
+    host, port = _get_qdrant_host_port(qdrant_url)
+    ollama_url = ollama_url or os.environ.get("OLLAMA_URL", "").strip()
 
     if not ollama_url:
         logger.warning(
@@ -116,9 +122,9 @@ def _build_mem0_config(collection_name: str) -> Optional[dict]:
         )
         return None
 
-    memory_llm    = os.environ.get("HAANA_MEMORY_MODEL", "ministral-3-32k:3b")
-    embed_model   = os.environ.get("HAANA_EMBEDDING_MODEL",  "bge-m3")
-    embed_dims    = int(os.environ.get("HAANA_EMBEDDING_DIMS", "1024"))
+    memory_llm  = memory_llm  or os.environ.get("HAANA_MEMORY_MODEL", "ministral-3-32k:3b")
+    embed_model = embed_model or os.environ.get("HAANA_EMBEDDING_MODEL",  "bge-m3")
+    embed_dims  = embed_dims  or int(os.environ.get("HAANA_EMBEDDING_DIMS", "1024"))
 
     config = {
         "custom_fact_extraction_prompt": CUSTOM_FACT_EXTRACTION_PROMPT,
@@ -327,6 +333,13 @@ class HaanaMemory:
         self.instance = instance_name
         self.write_scopes, self.read_scopes = _load_scopes(instance_name)
 
+        # Env-Snapshot für Runtime-Zugriffe (InProcess: env wird nach __init__ restored)
+        self._qdrant_url   = os.environ.get("QDRANT_URL", "http://qdrant:6333")
+        self._ollama_url   = os.environ.get("OLLAMA_URL", "").strip()
+        self._memory_model = os.environ.get("HAANA_MEMORY_MODEL", "ministral-3-32k:3b")
+        self._embed_model  = os.environ.get("HAANA_EMBEDDING_MODEL", "bge-m3")
+        self._embed_dims   = int(os.environ.get("HAANA_EMBEDDING_DIMS", "1024"))
+
         # Lazy-loaded Mem0-Instanzen pro Scope (None = nicht verfügbar)
         self._memories: dict[str, object] = {}
 
@@ -354,7 +367,14 @@ class HaanaMemory:
     def _get_memory(self, scope: str):
         """Lazy-load einer Mem0 Memory-Instanz für einen Scope."""
         if scope not in self._memories:
-            config = _build_mem0_config(scope)
+            config = _build_mem0_config(
+                scope,
+                qdrant_url=self._qdrant_url,
+                ollama_url=self._ollama_url,
+                memory_llm=self._memory_model,
+                embed_model=self._embed_model,
+                embed_dims=self._embed_dims,
+            )
             if config is None:
                 self._memories[scope] = None
                 return None
@@ -416,11 +436,11 @@ class HaanaMemory:
         Fragt das Ollama-LLM ob die Information persönlich oder haushaltsbezogen ist.
         Gibt den passenden Scope zurück oder None bei Fehler.
         """
-        ollama_url = os.environ.get("OLLAMA_URL", "").strip()
+        ollama_url = self._ollama_url
         if not ollama_url:
             return None
 
-        model = os.environ.get("HAANA_MEMORY_MODEL", "ministral-3-32k:3b")
+        model = self._memory_model
         personal_scope = next(
             (s for s in self.write_scopes if s != "household_memory"),
             None,

@@ -189,7 +189,11 @@
     "log_entries": "log entries",
     "days": "days",
     "empty_warning": "empty",
-    "error_label": "Error"
+    "error_label": "Error",
+    "loading_models": "Loading models…",
+    "embedding_models_found": "embedding models found",
+    "models_available": "models available",
+    "models_load_error": "Failed to load models"
   },
   "config_services": {
     "ha_title": "Home Assistant",
@@ -387,7 +391,8 @@
     "days_last": "day(s), last",
     "agent_instances": "Agent Instances",
     "action_failed": "failed",
-    "delete_label": "Delete"
+    "delete_label": "Delete",
+    "dims_mismatch": "Embedding dimensions mismatch – collections need to be rebuilt (Memory tab)."
   },
   "whatsapp": {
     "connected": "Connected",

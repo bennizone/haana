@@ -360,6 +360,7 @@ class InProcessAgentManager:
             from core.api import create_api
 
             agent = HaanaAgent(uid)
+            await agent.startup()
             api = create_api(agent)
 
             self._agents[uid] = agent
@@ -405,8 +406,11 @@ class InProcessAgentManager:
         return {"ok": True}
 
     async def restart_agent(self, instance: str) -> dict:
-        # Für Restart brauchen wir user + cfg
-        return {"ok": False, "error": "restart_agent benötigt user+cfg, nutze start_agent stattdessen"}
+        # In-Process: restart erfordert user+cfg, Aufrufer muss start_agent nutzen
+        if instance in self._agents:
+            await self.stop_agent(instance)
+            return {"ok": True, "restarted": False, "detail": "Agent gestoppt. start_agent mit user+cfg nötig."}
+        return {"ok": False, "error": f"Agent '{instance}' nicht aktiv"}
 
     def agent_status(self, instance: str) -> str:
         if instance in self._agents:
@@ -415,7 +419,7 @@ class InProcessAgentManager:
 
     def agent_url(self, instance: str) -> str:
         if instance in self._agents:
-            return f"/agent/{instance}"
+            return f"http://localhost:8080/agent/{instance}"
         return ""
 
     def list_agents(self) -> dict[str, str]:
