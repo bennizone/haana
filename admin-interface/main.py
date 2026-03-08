@@ -852,9 +852,15 @@ async def memory_stats():
 
 @app.post("/api/instances/{instance}/restart")
 async def restart_instance(instance: str):
-    """Agent-Instanz neu starten."""
+    """Agent-Instanz neu starten (mit aktueller Config)."""
     if instance not in get_all_instances():
         raise HTTPException(404)
+    # Container komplett neu erstellen damit Env-Vars aktualisiert werden
+    cfg = load_config()
+    for user in cfg.get("users", []):
+        if user["id"] == instance:
+            return await _agent_manager.start_agent(user, cfg)
+    # Fallback: einfacher Restart für statische Instanzen
     return await _agent_manager.restart_agent(instance)
 
 
@@ -1671,6 +1677,7 @@ async def fetch_embedding_models(request: Request):
         {"id": "text-embedding-ada-002", "dims": 1536},
     ]
     _GEMINI_EMBEDDINGS = [
+        {"id": "models/gemini-embedding-001", "dims": 3072},
         {"id": "models/text-embedding-004", "dims": 768},
     ]
     _OLLAMA_EMBED_PATTERN = re.compile(r"embed|bge|minilm|nomic|mxbai|snowflake|arctic", re.I)
@@ -1725,6 +1732,71 @@ async def fetch_embedding_models(request: Request):
                 return {"models": []}
     except Exception as e:
         return {"models": [], "error": str(e)[:200]}
+
+
+@app.post("/api/test-embedding")
+async def test_embedding(request: Request):
+    """Testet ein Embedding-Modell mit einem kurzen Text und gibt Dimensions zurück."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Ungültiges JSON")
+
+    type_ = (body.get("type") or "").strip()
+    url   = (body.get("url")  or "").strip()
+    key   = (body.get("key")  or "").strip()
+    model = (body.get("model") or "").strip()
+
+    if not model:
+        return {"ok": False, "error": "Kein Modell angegeben"}
+
+    import httpx
+    start = time.time()
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            if type_ == "ollama":
+                target = url or "http://localhost:11434"
+                r = await client.post(f"{target}/api/embed", json={"model": model, "input": "Test embedding"})
+                if r.status_code != 200:
+                    return {"ok": False, "error": f"Ollama Fehler: {r.status_code} {r.text[:100]}"}
+                data = r.json()
+                embeddings = data.get("embeddings", [[]])
+                dims = len(embeddings[0]) if embeddings and embeddings[0] else 0
+
+            elif type_ == "openai":
+                target = url or "https://api.openai.com"
+                r = await client.post(
+                    f"{target}/v1/embeddings",
+                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                    json={"model": model, "input": "Test embedding"},
+                )
+                if r.status_code != 200:
+                    return {"ok": False, "error": f"OpenAI Fehler: {r.status_code} {r.text[:100]}"}
+                data = r.json()
+                emb = data.get("data", [{}])[0].get("embedding", [])
+                dims = len(emb)
+
+            elif type_ == "gemini":
+                # Google AI Embedding API
+                api_url = f"https://generativelanguage.googleapis.com/v1beta/{model}:embedContent?key={key}"
+                r = await client.post(api_url, json={
+                    "model": model,
+                    "content": {"parts": [{"text": "Test embedding"}]},
+                })
+                if r.status_code != 200:
+                    return {"ok": False, "error": f"Gemini Fehler: {r.status_code} {r.text[:100]}"}
+                data = r.json()
+                emb = data.get("embedding", {}).get("values", [])
+                dims = len(emb)
+
+            else:
+                return {"ok": False, "error": f"Unbekannter Provider-Typ: {type_}"}
+
+            elapsed = int((time.time() - start) * 1000)
+            return {"ok": True, "dims": dims, "time_ms": elapsed}
+
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
 
 
 # ── User-Management ───────────────────────────────────────────────────────────

@@ -488,6 +488,33 @@ class HaanaMemory:
             f"{self._window.max_age_minutes}min / min=5"
         )
 
+    def _check_collection_dims(self, scope: str, expected_dims: int):
+        """Prüft ob eine Qdrant-Collection die erwarteten Dimensionen hat.
+
+        Falls Mismatch: Collection löschen, damit Mem0 sie mit korrekten Dims neu erstellt.
+        """
+        try:
+            import httpx
+            resp = httpx.get(f"{self._qdrant_url}/collections/{scope}", timeout=5.0)
+            if resp.status_code != 200:
+                return  # Collection existiert nicht → wird von Mem0 neu erstellt
+            data = resp.json()
+            vectors_cfg = data.get("result", {}).get("config", {}).get("params", {}).get("vectors", {})
+            current_dims = vectors_cfg.get("size", 0)
+            if current_dims and current_dims != expected_dims:
+                logger.warning(
+                    f"[{self.instance}] Embedding-Dimensions-Mismatch in '{scope}': "
+                    f"Collection hat {current_dims}d, erwartet {expected_dims}d. "
+                    f"Collection wird gelöscht und neu erstellt."
+                )
+                del_resp = httpx.delete(f"{self._qdrant_url}/collections/{scope}", timeout=10.0)
+                if del_resp.status_code == 200:
+                    logger.info(f"[{self.instance}] Collection '{scope}' gelöscht (Rebuild nötig).")
+                else:
+                    logger.error(f"[{self.instance}] Collection '{scope}' löschen fehlgeschlagen: {del_resp.text}")
+        except Exception as e:
+            logger.debug(f"[{self.instance}] Collection-Dims-Check fehlgeschlagen: {e}")
+
     def _get_memory(self, scope: str):
         """Lazy-load einer Mem0 Memory-Instanz für einen Scope."""
         if scope not in self._memories:
@@ -510,6 +537,10 @@ class HaanaMemory:
                 return None
 
             try:
+                # Dimensions-Mismatch erkennen: Falls Collection existiert aber
+                # andere Dimensionen hat (z.B. nach Embedding-Wechsel), löschen & neu anlegen.
+                self._check_collection_dims(scope, self._embed_dims)
+
                 from mem0 import Memory
                 mem = Memory.from_config(config)
                 # Monkeypatch: LLM-Antworten sanitizen (manche LLMs geben Dicts statt Strings)

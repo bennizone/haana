@@ -592,11 +592,10 @@ function _renderEmbeddingProviderDropdowns(c, em) {
     ).join('');
   }
 
-  const selectedModel = em.model || 'bge-m3';
-  // Bei Provider-Wechsel Modelle neu laden
-  embedEl.addEventListener('change', () => _loadEmbeddingModels(c, selectedModel));
-  // Initial Modelle laden
-  _loadEmbeddingModels(c, selectedModel);
+  // Modell-Feld setzen
+  const modelEl = document.getElementById('embed-model');
+  if (modelEl) modelEl.value = em.model || 'bge-m3';
+  updateEmbedDims();
 }
 
 // Bekannte Embedding-Modell Dimensionen (Fallback wenn API keine liefert)
@@ -610,58 +609,129 @@ const _EMBED_DIMS = {
   'text-embedding-3-small': 1536, 'text-embedding-3-large': 3072,
   'text-embedding-ada-002': 1536,
   'models/text-embedding-004': 768,
+  'models/gemini-embedding-001': 3072,
 };
 
-async function _loadEmbeddingModels(c, selectedModel) {
-  const provId = document.getElementById('embed-provider')?.value;
-  const modelEl = document.getElementById('embed-model');
-  const statusEl = document.getElementById('embed-model-status');
-  if (!modelEl) return;
+function _getProviderById(provId) {
+  // Provider aus cfg lesen (wird bei Save aktualisiert)
+  // Dann aktuelle DOM-Werte drüberlegen falls vorhanden
+  const providers = cfg?.providers || [];
+  const idx = providers.findIndex(p => p.id === provId);
+  if (idx < 0) return null;
+  const p = providers[idx];
+  return {
+    id:   provId,
+    type: p.type || '',
+    url:  document.getElementById(`prov-${idx}-url`)?.value  || p.url || '',
+    key:  document.getElementById(`prov-${idx}-key`)?.value  || p.key || '',
+    name: document.getElementById(`prov-${idx}-name`)?.value || p.name || '',
+  };
+}
 
-  const prov = (c.providers || []).find(p => p.id === provId);
-  if (!prov) {
-    modelEl.innerHTML = '<option value="">–</option>';
-    if (statusEl) statusEl.textContent = '';
+async function fetchEmbeddingModels() {
+  const st = document.getElementById('embed-model-status');
+  const sel = document.getElementById('embed-model-select');
+  if (!cfg) {
+    if (st) { st.textContent = '\u26a0 Config nicht geladen'; st.style.color = 'var(--yellow)'; }
     return;
   }
-
-  if (statusEl) statusEl.textContent = t('config_memory.loading_models');
+  const provId = document.getElementById('embed-provider')?.value;
+  if (!provId) {
+    if (st) { st.textContent = '\u26a0 Kein Provider ausgewählt'; st.style.color = 'var(--yellow)'; }
+    return;
+  }
+  const prov = _getProviderById(provId);
+  if (!prov || !prov.type) {
+    if (st) { st.textContent = '\u26a0 Provider "' + provId + '" nicht gefunden'; st.style.color = 'var(--yellow)'; }
+    return;
+  }
+  if (st) { st.textContent = '\u2026 Lade Modelle...'; st.style.color = 'var(--muted)'; }
   try {
+    const body = { type: prov.type, url: prov.url || '', key: prov.key || '' };
     const r = await fetch('/api/fetch-embedding-models', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ type: prov.type, url: prov.url, key: prov.key }),
+      body: JSON.stringify(body),
     });
     const d = await r.json();
     const models = d.models || [];
-
+    if (!models.length) {
+      if (st) { st.textContent = d.error ? '\u26a0 ' + d.error.substring(0, 60) : '\u26a0 Keine Modelle gefunden'; st.style.color = 'var(--yellow)'; }
+      if (sel) sel.style.display = 'none';
+      return;
+    }
     const embedCount = models.filter(m => m.is_embed !== false).length;
-    modelEl.innerHTML = models.map(m => {
-      const id = m.id || m;
-      const dims = m.dims || _EMBED_DIMS[id] || _EMBED_DIMS[id.split(':')[0]] || 0;
-      const label = dims ? `${id} (${dims} dims)` : id;
-      const sel = id === selectedModel ? ' selected' : '';
-      return `<option value="${escAttr(id)}"${sel}>${escHtml(label)}</option>`;
-    }).join('');
-
-    // Falls gespeichertes Modell nicht in der Liste: als erste Option hinzufuegen
-    if (selectedModel && ![...modelEl.options].some(o => o.value === selectedModel)) {
-      const dims = _EMBED_DIMS[selectedModel] || _EMBED_DIMS[selectedModel.split(':')[0]];
-      const label = dims ? `${selectedModel} (${dims} dims)` : selectedModel;
-      modelEl.insertAdjacentHTML('afterbegin',
-        `<option value="${escAttr(selectedModel)}" selected>${escHtml(label)} *</option>`);
+    const currentModel = document.getElementById('embed-model')?.value || '';
+    if (sel) {
+      sel.innerHTML = '<option value="">-- ' + t('config_memory.embedding_select_model') + ' --</option>' +
+        models.map(m => {
+          const id = m.id || m;
+          const dims = m.dims || _EMBED_DIMS[id] || _EMBED_DIMS[id.split(':')[0]] || 0;
+          const label = dims ? `${id} (${dims} dims)` : id;
+          const selected = id === currentModel ? ' selected' : '';
+          return `<option value="${escAttr(id)}" data-dims="${dims}"${selected}>${escHtml(label)}</option>`;
+        }).join('');
+      sel.style.display = '';
+      sel.size = Math.min(models.length + 1, 8);
     }
-
-    if (statusEl) {
-      statusEl.textContent = embedCount > 0
-        ? embedCount + ' ' + t('config_memory.embedding_models_found')
-        : models.length + ' ' + t('config_memory.models_available');
+    if (st) {
+      st.textContent = embedCount > 0
+        ? '\u2713 ' + embedCount + ' Embedding-Modelle'
+        : '\u2713 ' + models.length + ' Modelle';
+      st.style.color = d.fallback ? 'var(--yellow)' : 'var(--green)';
     }
-    updateEmbedDims();
   } catch(e) {
-    modelEl.innerHTML = selectedModel
-      ? `<option value="${escAttr(selectedModel)}" selected>${escHtml(selectedModel)}</option>`
-      : '<option value="">–</option>';
-    if (statusEl) statusEl.textContent = t('config_memory.models_load_error');
+    if (st) { st.textContent = '\u2717 Fehler: ' + e.message.substring(0, 40); st.style.color = 'var(--red)'; }
+    if (sel) sel.style.display = 'none';
+  }
+}
+
+function selectEmbedModel(selectEl) {
+  const val = selectEl.value;
+  if (!val) return;
+  const modelInput = document.getElementById('embed-model');
+  if (modelInput) modelInput.value = val;
+  // Dims aus data-Attribut oder _EMBED_DIMS
+  const opt = selectEl.selectedOptions[0];
+  const dims = parseInt(opt?.dataset?.dims) || _EMBED_DIMS[val] || _EMBED_DIMS[val.split(':')[0]] || 0;
+  if (dims) {
+    const dimsEl = document.getElementById('embed-dims');
+    if (dimsEl) dimsEl.value = dims;
+  }
+  updateEmbedDims();
+}
+
+async function testEmbedding() {
+  if (!cfg) return;
+  const provId = document.getElementById('embed-provider')?.value;
+  const prov = _getProviderById(provId);
+  const model = document.getElementById('embed-model')?.value || '';
+  const resultEl = document.getElementById('embed-test-result');
+  if (!prov || !model || !resultEl) return;
+
+  resultEl.style.display = '';
+  resultEl.style.background = 'var(--bg)';
+  resultEl.style.border = '1px solid var(--border)';
+  resultEl.textContent = '\u2026 ' + t('config_memory.embedding_testing');
+
+  try {
+    const r = await fetch('/api/test-embedding', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ type: prov.type, url: prov.url, key: prov.key, model }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      resultEl.style.border = '1px solid var(--green)';
+      resultEl.innerHTML = `\u2713 ${t('config_memory.embedding_test_ok')} – ${d.dims} dims, ${d.time_ms}ms`;
+      // Auto-Update Dims
+      const dimsEl = document.getElementById('embed-dims');
+      if (dimsEl && d.dims) dimsEl.value = d.dims;
+    } else {
+      resultEl.style.border = '1px solid var(--red)';
+      resultEl.textContent = '\u2717 ' + (d.error || t('common.error'));
+    }
+  } catch(e) {
+    resultEl.style.border = '1px solid var(--red)';
+    resultEl.textContent = '\u2717 ' + e.message;
   }
 }
 
@@ -697,10 +767,16 @@ function _detectRestartChanges(oldCfg, newCfg) {
     }
   }
 
-  // Provider-Änderungen prüfen (key/url/type betreffen Container)
+  // Provider-Änderungen prüfen (nur wenn Provider von einem LLM/Embedding verwendet wird)
   const oldProvs = oldCfg.providers || [];
   const newProvs = newCfg.providers || [];
+  const usedProvIds = new Set([
+    ...(newCfg.llms || []).map(l => l.provider_id),
+    newCfg.embedding?.provider_id,
+    newCfg.embedding?.fallback_provider_id,
+  ].filter(Boolean));
   for (const np of newProvs) {
+    if (!usedProvIds.has(np.id)) continue; // Unbenutzte Provider ignorieren
     const op = oldProvs.find(p => p.id === np.id);
     if (!op) { changes.push(`Provider: ${np.name} (neu)`); continue; }
     for (const f of ['key', 'url', 'type']) {
@@ -802,11 +878,32 @@ async function saveConfig() {
     const r = await fetch('/api/config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(newCfg) });
     if (r.ok) {
       const restartChanges = _detectRestartChanges(cfg, newCfg);
+
+      // Embedding-Änderung erkennen (erfordert Qdrant-Rebuild)
+      const oldEmb = cfg.embedding || {};
+      const newEmb = newCfg.embedding || {};
+      const embeddingChanged = oldEmb.model !== newEmb.model
+        || oldEmb.provider_id !== newEmb.provider_id
+        || String(oldEmb.dims) !== String(newEmb.dims);
+
       cfg = newCfg;
+      // Embedding-Provider-Dropdowns mit aktualisierten Providern neu rendern
+      try { _renderEmbeddingProviderDropdowns(cfg, cfg.embedding || {}); } catch(e) { /* ignore */ }
       toast(t('config.config_saved'), 'ok');
       if (statusEl) { statusEl.style.color = 'var(--green)'; statusEl.textContent = '\u2713 ' + t('config.saved'); setTimeout(() => { statusEl.textContent = ''; }, 3000); }
 
-      if (restartChanges.length > 0) {
+      if (embeddingChanged) {
+        Modal.show({
+          title: t('config_memory.embedding_changed_title'),
+          body: `<p class="modal-message">${escHtml(t('config_memory.embedding_changed_body')).replace(/\n/g, '<br>')}</p>`,
+          confirmText: t('config_memory.embedding_changed_rebuild'),
+          onConfirm: () => {
+            scrollToRebuild();
+            rebuildSelectAll();
+          },
+          onCancel: () => { toast(t('config_memory.embedding_changed_later'), 'warn'); },
+        });
+      } else if (restartChanges.length > 0) {
         const changedList = restartChanges.join('\n  - ');
         Modal.show({
           title: t('config.restart_title'),

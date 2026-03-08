@@ -251,13 +251,21 @@ class DockerAgentManager:
         is_minimax = p_prov.get("type") == "minimax"
         is_oauth = p_prov.get("type") == "anthropic" and p_prov.get("auth_method") == "oauth"
 
+        # OAuth-Credentials finden: Primär-Provider oder irgendeinen Anthropic-OAuth-Provider
+        oauth_dir = None
         if is_oauth and p_prov.get("oauth_dir"):
-            # oauth_dir ist ein Container-interner Pfad (z.B. /data/claude-auth/anthropic-1).
-            # Da haana-data bereits unter /data gemountet wird, setzen wir eine Env-Var
-            # damit der Agent beim Start die Credentials symlinkt.
-            oauth_data_path = p_prov["oauth_dir"]  # e.g. /data/claude-auth/anthropic-1
-            env["HAANA_OAUTH_DIR"] = oauth_data_path
-        elif not is_minimax and p_prov.get("type") not in ("openai", "gemini"):
+            oauth_dir = p_prov["oauth_dir"]
+        elif p_prov.get("type") in ("gemini", "openai", "ollama"):
+            # Drittanbieter-Provider: Claude CLI braucht trotzdem Anthropic-Auth.
+            # Ersten Anthropic-OAuth-Provider mit Credentials suchen.
+            for prov in cfg.get("providers", []):
+                if prov.get("type") == "anthropic" and prov.get("auth_method") == "oauth" and prov.get("oauth_dir"):
+                    oauth_dir = prov["oauth_dir"]
+                    break
+
+        if oauth_dir:
+            env["HAANA_OAUTH_DIR"] = oauth_dir
+        elif not is_minimax and p_prov.get("type") not in ("openai", "gemini", "ollama"):
             volumes[host_claude_config] = {"bind": "/home/haana/.claude", "mode": "rw"}
             claude_json_host = Path("/root/.claude.json")
             try:

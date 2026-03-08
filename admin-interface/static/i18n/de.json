@@ -207,7 +207,16 @@
     "loading_models": "Lade Modelle…",
     "embedding_models_found": "Embedding-Modelle gefunden",
     "models_available": "Modelle verfügbar",
-    "models_load_error": "Modelle konnten nicht geladen werden"
+    "models_load_error": "Modelle konnten nicht geladen werden",
+    "embedding_fetch_models": "Modelle laden",
+    "embedding_test": "Test",
+    "embedding_testing": "Teste Embedding…",
+    "embedding_test_ok": "Embedding funktioniert",
+    "embedding_select_model": "Modell auswählen",
+    "embedding_changed_title": "Embedding-Modell geändert",
+    "embedding_changed_body": "Das Embedding-Modell wurde geändert.\nDie bestehenden Qdrant-Collections sind mit dem neuen Modell nicht kompatibel und müssen neu aufgebaut werden.\n\nOhne Rebuild funktioniert die Memory-Suche nicht korrekt.",
+    "embedding_changed_rebuild": "Zum Rebuild springen",
+    "embedding_changed_later": "Später"
   },
   "config_services": {
     "ha_title": "Home Assistant",

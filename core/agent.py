@@ -50,7 +50,7 @@ class HaanaAgent:
         self.model: Optional[str] = self._env.get("HAANA_MODEL") or None
         # Drittanbieter: model=None → CLI nutzt OPENAI_MODEL / ANTHROPIC_MODEL aus env
         self._cli_model: Optional[str] = self.model
-        if self._env.get("OPENAI_MODEL") or self._env.get("ANTHROPIC_MODEL"):
+        if self._env.get("OPENAI_MODEL") or self._env.get("ANTHROPIC_MODEL") or self._env.get("GEMINI_MODEL"):
             self._cli_model = None
         self.session_id: Optional[str] = None
 
