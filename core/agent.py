@@ -45,18 +45,24 @@ class HaanaAgent:
         # Env-Snapshot für Subprocess (InProcess-Modus: env wird nach __init__ restored)
         self._env = dict(os.environ)
 
-        # Modellname für Logging; CLI-Model wird nur gesetzt wenn kein
-        # Drittanbieter-Provider aktiv ist (OPENAI_MODEL/ANTHROPIC_MODEL in env)
+        # Modellname für Logging und CLI --model Parameter
         self.model: Optional[str] = self._env.get("HAANA_MODEL") or None
-        # Drittanbieter: model=None → CLI nutzt OPENAI_MODEL / ANTHROPIC_MODEL aus env
         self._cli_model: Optional[str] = self.model
-        if self._env.get("OPENAI_MODEL") or self._env.get("ANTHROPIC_MODEL") or self._env.get("GEMINI_MODEL"):
+        # Drittanbieter (nicht Ollama): model=None → CLI nutzt Env-Vars
+        # Ollama: _cli_model bleibt auf HAANA_MODEL (wie `claude --model <name>`)
+        # MiniMax: ANTHROPIC_MODEL gesetzt → model=None
+        if self._env.get("OPENAI_MODEL") or self._env.get("GEMINI_MODEL"):
+            self._cli_model = None
+        elif self._env.get("ANTHROPIC_MODEL"):
+            # MiniMax: CLI nutzt ANTHROPIC_MODEL aus env
             self._cli_model = None
         self.session_id: Optional[str] = None
 
-        # OAuth: Credentials aus Data-Volume symlinken
+        # OAuth: Credentials aus Data-Volume symlinken.
+        # Nicht bei Ollama/MiniMax — dort übernimmt ANTHROPIC_AUTH_TOKEN die Auth.
         oauth_dir = self._env.get("HAANA_OAUTH_DIR")
-        if oauth_dir:
+        _has_token_auth = bool(self._env.get("ANTHROPIC_AUTH_TOKEN"))
+        if oauth_dir and not _has_token_auth:
             src = Path(oauth_dir) / ".credentials.json"
             dst = Path.home() / ".claude" / ".credentials.json"
             if src.exists():
@@ -247,7 +253,7 @@ class HaanaAgent:
         if memory_context:
             parts.append(f"<relevante_erinnerungen>\n{memory_context}\n</relevante_erinnerungen>")
             logger.debug(f"[{self.instance}] Memory-Kontext: {len(memory_context)} Zeichen")
-        if channel == "whatsapp_voice":
+        if channel in ("whatsapp_voice", "ha_voice"):
             parts.append(
                 "<hinweis>Diese Nachricht kam als Sprachnachricht. "
                 "Deine Antwort wird per Text-to-Speech vorgelesen. "

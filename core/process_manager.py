@@ -45,6 +45,10 @@ class AgentManager(Protocol):
         """Alle bekannten Agents mit Status. {instance: status}."""
         ...
 
+    def get_agent(self, instance: str):
+        """Gibt das Agent-Objekt zurück (InProcess) oder None (Docker)."""
+        ...
+
     async def remove_agent(self, instance: str) -> dict:
         """Agent vollständig entfernen (Container/Prozess + Cleanup)."""
         ...
@@ -153,11 +157,12 @@ def _build_agent_env(user: dict, cfg: dict, resolve_llm_fn, find_ollama_url_fn) 
         env["ANTHROPIC_MODEL"] = p_llm.get("model", "MiniMax-M2.5")
         env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
     elif p_prov.get("type") == "ollama":
-        # Ollama: OpenAI-kompatiblen Endpoint nutzen (/v1/)
+        # Ollama: Anthropic-kompatiblen Endpoint nutzen (offizielle Ollama-Doku)
+        # https://docs.ollama.com/integrations/claude-code
         ollama_base = (p_prov.get("url") or ollama_url or "http://localhost:11434").rstrip("/")
-        env["OPENAI_BASE_URL"] = f"{ollama_base}/v1"
-        env["OPENAI_API_KEY"] = "ollama"  # Dummy – Ollama braucht keinen Key, CLI verlangt einen
-        env["OPENAI_MODEL"] = p_llm.get("model", "ministral-3-32k:3b")
+        env["ANTHROPIC_BASE_URL"] = ollama_base
+        env["ANTHROPIC_AUTH_TOKEN"] = "ollama"
+        env["ANTHROPIC_API_KEY"] = ""
     elif p_prov.get("type") == "openai":
         if p_prov.get("key"):
             env["OPENAI_API_KEY"] = p_prov["key"]
@@ -190,6 +195,7 @@ class DockerAgentManager:
         self._agent_image = agent_image
         self._resolve_llm = resolve_llm_fn
         self._find_ollama_url = find_ollama_url_fn
+        self._port_cache: dict[str, int] = {}  # instance -> api_port
 
     def _get_image(self, instance: str = "") -> str:
         """Agent-Image auto-detektieren. Bevorzugt Image mit passendem Namen."""
@@ -236,6 +242,7 @@ class DockerAgentManager:
 
         uid = user["id"]
         api_port = user["api_port"]
+        self._port_cache[uid] = api_port
         container_name = self._container_name(user)
 
         env = _build_agent_env(user, cfg, self._resolve_llm, self._find_ollama_url)
@@ -342,10 +349,12 @@ class DockerAgentManager:
 
     def agent_url(self, instance: str) -> str:
         container_name = self._container_name(instance)
-        # Versuche Port aus bekannten Instanzen
-        port_map = {"alice": 8001, "bob": 8002, "ha-assist": 8003, "ha-advanced": 8004}
-        port = port_map.get(instance, 8001)
+        port = self._port_cache.get(instance, 8001)
         return f"http://{container_name}:{port}"
+
+    def get_agent(self, instance: str):
+        """Gibt None zurück – im Docker-Modus kein direkter Agent-Zugriff."""
+        return None
 
     def list_agents(self) -> dict[str, str]:
         if not self._client:
@@ -473,6 +482,10 @@ class InProcessAgentManager:
         if instance in self._agents:
             return f"http://localhost:8080/agent/{instance}"
         return ""
+
+    def get_agent(self, instance: str):
+        """Gibt das HaanaAgent-Objekt zurück (InProcess-Modus)."""
+        return self._agents.get(instance)
 
     def list_agents(self) -> dict[str, str]:
         return {k: "running" for k in self._agents}

@@ -230,7 +230,7 @@ function _renderProvBodyOllama(p, i) {
       </div>
       <div class="form-group">
         <label>${t('config_provider.server_url')} <span style="color:var(--red);">*</span></label>
-        <input type="url" id="prov-${i}-url" value="${escAttr(p.url||'')}" required placeholder="http://10.83.1.110:11434">
+        <input type="url" id="prov-${i}-url" value="${escAttr(p.url||'')}" required placeholder="http://localhost:11434">
       </div>
     </div>
     <div style="display:flex;gap:10px;align-items:center;">

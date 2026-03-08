@@ -57,6 +57,7 @@ except Exception:
 from core.process_manager import (
     detect_mode, create_agent_manager, AgentManager,
 )
+from core.ollama_compat import create_ollama_router
 
 app = FastAPI(title="HAANA Admin", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -117,6 +118,7 @@ async def _cleanup_loop():
 HAANA_MODE = detect_mode()
 _agent_manager: Optional[AgentManager] = None
 
+
 @app.on_event("startup")
 async def startup_event():
     global _agent_manager
@@ -130,6 +132,14 @@ async def startup_event():
         resolve_llm_fn=_resolve_llm,
         find_ollama_url_fn=_find_ollama_url,
     )
+    # Ollama-kompatibler Router (Fake-Ollama für HA Voice Integration)
+    # Kein Agent-Stack — direkter LLM-Call mit Memory-Enrichment (via Qdrant+Ollama, kein mem0)
+    ollama_router = create_ollama_router(
+        get_config=load_config,
+        resolve_llm=_resolve_llm,
+        find_ollama_url=_find_ollama_url,
+    )
+    app.include_router(ollama_router)
     # Add-on Modus: Agents beim Start automatisch starten (kein Docker-SDK)
     if HAANA_MODE == "addon":
         asyncio.create_task(_autostart_agents())
@@ -193,7 +203,7 @@ DEFAULT_CONFIG = {
     "providers": [
         {"id": "anthropic-1", "name": "Anthropic (Primär)", "type": "anthropic", "auth_method": "api_key", "url": "", "key": ""},
         {"id": "ollama-home",  "name": "Ollama (Lokal)",     "type": "ollama",
-         "url": os.environ.get("OLLAMA_URL", "http://10.83.1.110:11434"), "key": ""},
+         "url": os.environ.get("OLLAMA_URL", "http://localhost:11434"), "key": ""},
     ],
     "llms": [
         {"id": "claude-primary",  "name": "Claude Sonnet",   "provider_id": "anthropic-1", "model": "claude-sonnet-4-6"},
@@ -280,6 +290,10 @@ DEFAULT_CONFIG = {
             "smtp_host": "", "smtp_port": 587, "smtp_user": "", "smtp_pass": "",
         },
     ],
+    "ollama_compat": {
+        "enabled": False,
+        "exposed_models": ["ha-assist", "ha-advanced"],
+    },
     "whatsapp": {
         "mode": "separate",
         "self_prefix": "!h ",
@@ -297,13 +311,25 @@ _SYSTEM_USER_IDS = set(_SYSTEM_USERS.keys())
 
 
 def _ensure_system_users(cfg: dict) -> None:
-    """Stellt sicher, dass die System-Instanzen immer in users vorhanden sind (max. 1×)."""
+    """Stellt sicher, dass die System-Instanzen immer in users vorhanden sind (max. 1×).
+
+    Vorhandene Einträge werden mit Defaults gemergt (User-Änderungen bleiben erhalten).
+    Fehlende Einträge werden aus DEFAULT_CONFIG eingefügt.
+    """
     users = cfg.setdefault("users", [])
-    # Duplikate/veraltete System-Einträge entfernen, dann wieder einfügen
+    existing = {u["id"]: u for u in users if u.get("id") in _SYSTEM_USER_IDS}
+
+    # Vorhandene System-User aus der Liste entfernen (werden unten wieder eingefügt)
     cfg["users"] = [u for u in users if u.get("id") not in _SYSTEM_USER_IDS]
-    # Am Ende anfügen (nach normalen Usern)
-    for sys_user in _SYSTEM_USERS.values():
-        cfg["users"].append(sys_user)
+
+    # System-User mergen: Default als Basis, vorhandene Werte überschreiben
+    for sys_id, default_user in _SYSTEM_USERS.items():
+        if sys_id in existing:
+            merged = {**default_user, **existing[sys_id]}
+            merged["system"] = True  # Schutz: system-Flag immer setzen
+            cfg["users"].append(merged)
+        else:
+            cfg["users"].append(dict(default_user))
 
 
 def _slugify(text: str) -> str:
@@ -529,8 +555,7 @@ def load_config() -> dict:
 
 def save_config(cfg: dict) -> None:
     CONF_FILE.parent.mkdir(parents=True, exist_ok=True)
-    # System-User nicht in Datei persistieren – werden immer aus Code injiziert
-    to_save = {**cfg, "users": [u for u in cfg.get("users", []) if u.get("id") not in _SYSTEM_USER_IDS]}
+    to_save = cfg
     CONF_FILE.write_text(json.dumps(to_save, ensure_ascii=False, indent=2), encoding="utf-8")
 
 

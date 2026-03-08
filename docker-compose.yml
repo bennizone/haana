@@ -61,37 +61,17 @@ services:
       qdrant:
         condition: service_healthy
 
+  # ha-assist + ha-advanced werden als System-User per AgentManager gestartet
+  # (nicht per docker-compose), damit sie die korrekten LLM-Env-Vars aus der Config bekommen.
+  # Image-Build: docker compose --profile agents build baut alice/bob — dasselbe Image.
+
   instanz-ha-assist:
-    profiles: [agents]
+    profiles: [build-only]
     build: .
-    env_file: .env
-    environment:
-      HAANA_INSTANCE: ha-assist
-      HAANA_LOG_DIR: /data/logs
-    volumes:
-      - ./instanzen/ha-assist/CLAUDE.md:/app/CLAUDE.md:ro
-      - ./skills:/app/skills:ro
-      - haana-data:/data
-    restart: unless-stopped
-    depends_on:
-      qdrant:
-        condition: service_healthy
 
   instanz-ha-advanced:
-    profiles: [agents]
+    profiles: [build-only]
     build: .
-    env_file: .env
-    environment:
-      HAANA_INSTANCE: ha-advanced
-      HAANA_LOG_DIR: /data/logs
-    volumes:
-      - ./instanzen/ha-advanced/CLAUDE.md:/app/CLAUDE.md:ro
-      - ./skills:/app/skills:ro
-      - haana-data:/data
-    restart: unless-stopped
-    depends_on:
-      qdrant:
-        condition: service_healthy
 
   # ── Admin-Interface (immer aktiv – kein Profil) ────────────────────────────
 
