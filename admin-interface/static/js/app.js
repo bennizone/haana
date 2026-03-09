@@ -20,6 +20,7 @@ function showTab(name, e) {
   if (name === 'config') { loadConfig(); loadMemoryStats(); }
   if (name === 'users')  loadUsers();
   if (name === 'status') loadStatus();
+  if (name === 'terminal') { initTerminal(); }
 }
 
 function showCfgTab(name) {

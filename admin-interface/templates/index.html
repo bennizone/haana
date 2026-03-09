@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HAANA Admin</title>
 <link rel="stylesheet" href="/static/css/admin.css?v=8">
+<link rel="stylesheet" href="/static/lib/xterm.css">
+<link rel="stylesheet" href="/static/css/terminal.css?v=1">
 </head>
 <body>
 
@@ -150,6 +152,7 @@
   <button class="tab-btn" onclick="showTab('config', event)" data-i18n="tabs.config">Config</button>
   <button class="tab-btn" onclick="showTab('users', event)" data-i18n="tabs.users">Users</button>
   <button class="tab-btn" onclick="showTab('status', event)" data-i18n="tabs.status">Status</button>
+  <button class="tab-btn" onclick="showTab('terminal', event)" data-i18n="terminal.tab">Entwicklung</button>
 </div>
 
 <!-- ══════════════════════════════════════════ CONVERSATIONS (Chat + Logs) -->
@@ -994,6 +997,23 @@
   </div>
 </div>
 
+<!-- ══════════════════════════════════════════ TERMINAL (Claude Code) -->
+<div id="panel-terminal" class="panel">
+  <div class="terminal-toolbar">
+    <label data-i18n="terminal.provider_label">Claude Code Provider</label>
+    <select id="term-provider-select"></select>
+    <button id="term-conn-btn" class="btn btn-primary btn-sm" onclick="termConnect()"
+            data-i18n="terminal.connect_btn">Verbinden</button>
+    <div class="terminal-status-dot disconnected" id="term-status-dot"></div>
+    <span id="term-status-text" style="font-size:12px;color:var(--muted);"></span>
+    <button class="btn btn-secondary btn-sm" onclick="termToggleFullscreen()"
+            style="margin-left:auto;" data-i18n="terminal.fullscreen">&#x26F6; Vollbild</button>
+  </div>
+  <div class="terminal-wrap">
+    <div id="terminal-xterm"></div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <!-- Log-Editor Modal -->
@@ -1027,7 +1047,7 @@
 <script src="/static/js/modal.js?v=3"></script>
 
 <!-- App-Kern (globaler State, Tabs, Init) -->
-<script src="/static/js/app.js?v=10"></script>
+<script src="/static/js/app.js?v=11"></script>
 
 <!-- Setup Wizard -->
 <script src="/static/js/wizard.js?v=3"></script>
@@ -1039,5 +1059,8 @@
 <script src="/static/js/status.js?v=3"></script>
 <script src="/static/js/logs.js?v=6"></script>
 <script src="/static/js/whatsapp.js?v=3"></script>
+<script src="/static/lib/xterm.min.js"></script>
+<script src="/static/lib/xterm-addon-fit.min.js"></script>
+<script src="/static/js/terminal.js?v=1"></script>
 </body>
 </html>

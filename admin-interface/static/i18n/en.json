@@ -671,6 +671,18 @@
     "provider_retest": "Test connection",
     "provider_retest_title": "Optional: re-test connection and reload models"
   },
+  "terminal": {
+    "tab": "Development",
+    "provider_label": "Claude Code Provider",
+    "connect_btn": "Connect",
+    "disconnect_btn": "Disconnect",
+    "reconnect_btn": "Reconnect",
+    "fullscreen": "Fullscreen",
+    "session_active": "Session active",
+    "no_session": "No session",
+    "hint_claude": "Tip: type 'claude' to start Claude Code",
+    "provider_none": "No provider selected"
+  },
   "status_hints": {
     "no_provider": "No LLM provider configured. Go to Config > Providers.",
     "no_users": "No users created yet. Create your first assistant.",

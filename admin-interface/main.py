@@ -46,13 +46,22 @@ from typing import Optional
 from urllib.parse import urlparse, parse_qs
 import glob as _glob
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 import auth as _auth
+
+import sys as _sys
+import os as _os
+_sys.path.insert(0, _os.path.dirname(__file__))
+from terminal import (
+    ws_terminal as _ws_terminal,
+    set_provider as _term_set_provider,
+    get_status as _term_status,
+)
 
 try:
     from dotenv import load_dotenv
@@ -80,7 +89,7 @@ templates = Jinja2Templates(directory="templates")
 # ── Auth-Middleware ───────────────────────────────────────────────────────────
 
 # Pfade die OHNE Authentifizierung zugänglich sind
-_AUTH_EXEMPT_PREFIXES = ("/static/", "/ws/")
+_AUTH_EXEMPT_PREFIXES = ("/static/", "/ws/")  # WICHTIG: WS-Endpoints müssen intern selbst auth prüfen!
 _AUTH_EXEMPT_EXACT = {"/", "/api/auth/login", "/api/auth/logout", "/api/auth/status", "/api/health", "/api/setup-status"}
 
 
@@ -3786,3 +3795,21 @@ async def check_rebuild_changed(instance: str, auto_rebuild: str = ""):
         "auto_rebuild": do_rebuild,
         "rebuild_started": rebuild_started,
     }
+
+
+# ── MS3: Claude Code Terminal ─────────────────────────────────────────────────
+
+@app.websocket("/ws/terminal")
+async def websocket_terminal(websocket: WebSocket):
+    await _ws_terminal(websocket, load_config, _auth.is_authenticated)
+
+
+@app.post("/api/terminal/set-provider")
+async def terminal_set_provider(request: Request):
+    body = await request.json()
+    return await _term_set_provider(body.get("provider_id", ""), load_config)
+
+
+@app.get("/api/terminal/status")
+async def terminal_status():
+    return await _term_status()
