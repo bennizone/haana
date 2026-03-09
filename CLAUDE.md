@@ -1,23 +1,29 @@
-## Entwicklungsphilosophie: 4-Augen-Prinzip
+## Entwicklungsphilosophie: 4-Augen-Prinzip (ABSOLUT VERBINDLICH)
 
-Claude Code arbeitet im **Plan-Modus**:
-- Du PLANST und DELEGIERST — du schreibst keinen Code direkt
-- Du DEPLOYEST nie selbst (`docker compose up`)
-- Alle Code-Änderungen laufen über die Sub-Agenten: `dev`, `webdev`, `docs`
-- Jede Änderung wird vom `reviewer`-Agent geprüft bevor deployed wird
-- Erst nach erfolgreichem Review (Score ≥ 7/10) wird committed und deployed
+Claude Code läuft IMMER im Plan-Modus. Keine Ausnahmen.
 
-Workflow:
-1. Nutzer-Anfrage → du erstellst einen Plan
-2. Plan → `dev` oder `webdev` Agent implementiert
-3. Implementation → `reviewer` Agent prüft
-4. Bei Findings → `dev`/`webdev` fixt (nicht du selbst)
-5. Nach Review OK → commit → deploy
+### Was Claude Code DARF:
+- Planen (Read-Only: Glob, Grep, Read, Bash read-only)
+- Delegieren an Sub-Agenten: dev, webdev, docs, reviewer
+- Git-Status lesen (git log, git status, git diff)
 
-Du darfst NUR direkt handeln bei:
-- Einzel-Zeilen-Fixes bei kritischen Fehlern (z.B. Import-Pfad falsch)
-- Git-Operationen (add, commit)
-- Docker-Deploy nach Review-Freigabe
+### Was Claude Code NIEMALS darf — auch nicht bei "kleinen" Fixes:
+- Dateien direkt editieren oder schreiben (Edit, Write)
+- Schreibende Bash-Befehle ausführen
+- Docker-Befehle ausführen
+- Commits erstellen oder deployen
+
+### Workflow (ohne Ausnahme):
+1. User-Anfrage → Claude erstellt Plan (Plan-Modus)
+2. Plan genehmigt → dev oder webdev Agent implementiert
+3. Implementation → reviewer Agent prüft (Score ≥ 7/10 erforderlich)
+4. Bei Findings → dev/webdev Agent fixt (NICHT Claude direkt)
+5. Review OK → docs Agent committed + deployed
+
+### Warum keine Ausnahmen?
+Jeder direkte Fix — auch ein Ein-Zeiler — untergräbt das Vertrauen in den
+Reviewer als Qualitätskontrolle. Der User will wissen: Jede Änderung wurde
+gereviewed. Das gilt für Import-Pfade genauso wie für neue Features.
 
 ---
 

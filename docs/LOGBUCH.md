@@ -5,6 +5,14 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ---
 
+## 2026-03-09 — CLAUDE.md verschärft: absolutes Verbot für direkte Edits
+
+**Änderungen:** `/opt/haana/CLAUDE.md` — Ausnahme-Klausel entfernt, strenge Trennung Plan/Delegation
+**Grund:** 4-Augen-Prinzip wurde durch direkte Hotfixes unterlaufen
+**Rollback:** `git revert HEAD`
+
+---
+
 ## 2026-03-09 — Admin-Auth, Wizard-Verbesserungen, Bugfixes
 
 **Aenderungen:**
