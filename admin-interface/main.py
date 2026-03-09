@@ -633,9 +633,14 @@ async def get_logs(category: str, limit: int = 100):
     return read_recent_logs(category, limit=limit)
 
 
+_SCOPE_RE = re.compile(r"^(all|system|conversations(:[a-zA-Z0-9_-]+)?)$")
+
+
 @app.get("/api/logs-download")
 async def download_logs(scope: str = "all"):
     """Erstellt ein ZIP mit Logs. scope: all | system | conversations | conversations:{instance}"""
+    if not _SCOPE_RE.match(scope):
+        raise HTTPException(400, "Ungültiger Scope (erlaubt: all, system, conversations, conversations:<id>)")
     import io
     import zipfile
 
@@ -680,6 +685,8 @@ async def delete_logs(request: Request):
         raise HTTPException(400, "Ungültiges JSON")
 
     scope = body.get("scope", "all")
+    if not _SCOPE_RE.match(scope):
+        raise HTTPException(400, "Ungültiger Scope")
     deleted = 0
 
     if scope in ("all", "system"):

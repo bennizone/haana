@@ -828,11 +828,42 @@ Schritt 7: Privacy
 - core/ Volume Mount: `admin-interface` Container mounted `core/` als Volume fuer InProcessAgentManager
 - Test-Suite: 94 Unit-Tests (49 test_config, 20 test_agent, 17 test_memory, 8 test_i18n)
 
+**Weitere erledigte Aufgaben (Session 2026-03-08, Abend) ✅:**
+- Multi-Provider Memory Extraction: Jeder konfigurierte LLM nutzbar (Ollama/Anthropic/MiniMax/OpenAI/Gemini)
+- Context Enrichment: Optionale Pronomen-Aufloesung via LLM vor Mem0 (`HAANA_CONTEXT_ENRICHMENT`)
+- Konfigurierbares Kontext-Fenster: `context_before` (default 3) / `context_after` (default 2)
+- Smart Memory Rebuild: Pre-Filtering (triviale Eintraege ueberspringen), Rate-Limiting, Pause/Resume
+- Persistenter Rebuild-Fortschritt (save/load in `LOG_ROOT/.rebuild-progress/`)
+- Verwerfen-Button fuer pausierten Rebuild (`DELETE /api/rebuild-progress/{instance}`)
+- Multi-Provider Embeddings: Ollama/OpenAI/Gemini, google-genai Dependency
+- Rate-Limiter pro LLM: Token-Bucket, shared Registry ueber Instanzen
+- OAuth-Extraction via Claude CLI Subprocess (kein API-Key noetig)
+- Ollama Thinking-Support: Monkeypatch auf `client.chat`, `num_predict=8192` bei think=true
+- MiniMax ThinkingBlock Workaround: `_call_anthropic_direct()` statt Mem0-interne Verarbeitung
+- Mem0 LLM-Antworten sanitizen (MiniMax Dict/String Kompatibilitaet)
+- Qualitaetsvergleich Extraction-Modelle durchgefuehrt (Haiku CLI und MiniMax M2.5 beste Ergebnisse)
+- Test-Suite: 187 Unit-Tests (59 config, 23 agent, 31 memory, 8 i18n, 64 ollama-compat, 2 integration)
+
+**Weitere erledigte Aufgaben (Session 2026-03-09) ✅:**
+- Universeller LLM-Proxy (Fake-Ollama-API): `core/ollama_compat.py` unterstuetzt ALLE Provider (Ollama, Anthropic, MiniMax, OpenAI, Gemini)
+- Tool-Calling: Bidirektionale Format-Translation Ollama↔Anthropic↔OpenAI
+- Memory-Enrichment: Lightweight Qdrant-Query (Ollama Embedding, kein mem0) beim ersten Turn
+- Agent-Routing: Alle User-Agents automatisch als Ollama-Modelle exponiert
+- Delegation: `[DELEGATE]`-Marker loest Weiterleitung an konfigurierten Agent aus (ha-assist → ha-advanced)
+- ha_voice Channel: TTS-freundlich, keine Emojis/Markdown, keine automatische Memory-Extraktion
+- ha_voice Memory: Nur explizite Befehle ("merke dir", "vergiss nicht") loesen Extraktion aus
+- ha_voice Instruktionen in alle CLAUDE.md Templates integriert
+- Log-Download (ZIP) und Loesch-Funktion im Admin-Interface (`/api/logs-download`, `/api/logs-delete`)
+- Sub-Agenten eingerichtet: Review (`validate.sh`), Webinterface, Test, Dokumentation
+- Initiale Dokumentation erstellt: `docs/LOGBOOK.md`, `docs/API.md`, `docs/CONFIG.md`, `docs/UI-HELP.md`
+- Test-Suite: 187 total (59 config, 23 agent, 31 memory, 8 i18n, 64 ollama-compat, 2 integration)
+
 **Noch offen:**
 - HA Add-on in Test-HA installieren und testen
 - Backup auf TrueNAS (SMB/CIFS) → optional, nachrangig
+- Fallback-LLM bei Auth-Fehler automatisch nutzen
 
-**Ergebnis:** Alice chattet per WhatsApp (Text + Sprache, bidirektional). Agent kennt ihn bereits (Phase 1 Memory). STT + TTS via Nabu Casa. Admin-Interface unter `http://10.83.1.11:8080` zugänglich, responsiv, vollständig mehrsprachig (388 Keys). Claude OAuth pro Provider ohne SSH möglich. 6 Provider-Typen mit typspezifischen Formularen. Provider/LLM-Trennung (`providers[]` + `llms[]`). HA Add-on Packaging vorbereitet (3 Add-ons, Dual-Mode Architektur). Env-Isolation fuer InProcess-Modus. Embedding-Mismatch-Detection. Ollama als Primary LLM nutzbar (OpenAI-kompatibler `/v1/` Endpoint). Chat-UI mit Model-Badge und aufklappbaren Memory/Tool-Details. 94 Unit-Tests.
+**Ergebnis:** Alice chattet per WhatsApp (Text + Sprache, bidirektional). Agent kennt ihn bereits (Phase 1 Memory). STT + TTS via Nabu Casa. Admin-Interface unter `http://10.83.1.11:8080` zugänglich, responsiv, vollständig mehrsprachig (437 Keys). Claude OAuth pro Provider ohne SSH möglich. 6 Provider-Typen mit typspezifischen Formularen. Provider/LLM-Trennung (`providers[]` + `llms[]`). HA Add-on Packaging vorbereitet (3 Add-ons, Dual-Mode Architektur). Env-Isolation fuer InProcess-Modus. Embedding-Mismatch-Detection. Ollama als Primary LLM nutzbar (OpenAI-kompatibler `/v1/` Endpoint). Chat-UI mit Model-Badge und aufklappbaren Memory/Tool-Details. Universeller LLM-Proxy (Fake-Ollama-API) mit Tool-Calling und Agent-Routing/Delegation. Multi-Provider Memory Extraction + Context Enrichment. Smart Rebuild mit Pre-Filtering und Pause/Resume. Log-Management (Download/Loesch-Funktion). 187 Unit-Tests. Dokumentation in `docs/`.
 
 ---
 
@@ -924,6 +955,7 @@ Schritt 7: Privacy
 - Setup-Wizard polieren, README für Community
 - GitHub Repo public
 - HA Add-on Paketierung: ✅ Grundstruktur fertig (3 Add-ons, S6 Services, Dual-Mode AgentManager, Env-Isolation, Autostart). Noch zu testen in HA.
+- Dokumentation: ✅ Initiale Docs erstellt (`docs/LOGBOOK.md`, `docs/API.md`, `docs/CONFIG.md`, `docs/UI-HELP.md`)
 
 ---
 
