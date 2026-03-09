@@ -349,7 +349,7 @@ header h1 span { color: var(--accent2); }
 .rebuild-banner-text { color: var(--yellow); font-size: 13px; }
 .rebuild-banner-actions { display: flex; gap: var(--sp-2); flex-shrink: 0; }
 
-/* ── Config Save Bar ── */
+/* ── Config Save Bar (legacy global – removed from UI but keep for compat) ── */
 .config-save-bar {
   position: sticky; top: 56px; z-index: 50;
   background: var(--surface); border-bottom: 1px solid var(--border);
@@ -358,6 +358,28 @@ header h1 span { color: var(--accent2); }
   -webkit-backdrop-filter: blur(8px);
 }
 .config-save-status { font-size: 12px; color: var(--muted); margin-left: var(--sp-1); }
+
+/* ── Per-Section Save Bar ── */
+.cfg-section-save-bar {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: var(--sp-4) 0 var(--sp-2) 0;
+  margin-top: var(--sp-2);
+  border-top: 1px solid var(--border);
+}
+.cfg-section-save-status {
+  font-size: 12px; color: var(--muted); margin-left: var(--sp-1);
+  min-width: 120px;
+}
+
+/* Save button flash animation */
+@keyframes saveBtnFlash {
+  0%   { box-shadow: 0 0 0 0 rgba(74,222,128,.6); }
+  60%  { box-shadow: 0 0 0 8px rgba(74,222,128,0); }
+  100% { box-shadow: 0 0 0 0 rgba(74,222,128,0); }
+}
+.cfg-save-btn-flash {
+  animation: saveBtnFlash .8s ease-out;
+}
 
 /* ── Limit Selector ── */
 .limit-selector {
@@ -917,6 +939,7 @@ header h1 span { color: var(--accent2); }
 
   .config-save-bar { padding: var(--sp-2) var(--sp-3); flex-wrap: wrap; top: 48px; }
   .cfg-tabs { padding: var(--sp-2) var(--sp-3) 0; }
+  .cfg-section-save-bar { flex-wrap: wrap; gap: var(--sp-2); }
 
   .conv-header { padding: var(--sp-3); gap: var(--sp-2); }
   .chat-box { padding: var(--sp-3); }

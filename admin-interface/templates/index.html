@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HAANA Admin</title>
-<link rel="stylesheet" href="/static/css/admin.css?v=6">
+<link rel="stylesheet" href="/static/css/admin.css?v=7">
 </head>
 <body>
 
@@ -158,13 +158,6 @@
 <!-- ═══════════════════════════════════════════════════════════════ CONFIG -->
 <div id="panel-config" class="panel" style="padding:0;">
 
-  <!-- Sticky save bar -->
-  <div class="config-save-bar">
-    <button class="btn btn-primary" onclick="saveConfig()">Konfiguration speichern</button>
-    <button class="btn btn-secondary" onclick="loadConfig()">↺ Zurücksetzen</button>
-    <span id="config-save-status" class="config-save-status"></span>
-  </div>
-
   <!-- Config Sub-Tabs -->
   <div class="cfg-tabs">
     <button class="cfg-tab-btn active" onclick="showCfgTab('providers')"  id="cfgtab-providers" data-i18n="config.sub_tabs.providers">Providers</button>
@@ -184,6 +177,15 @@
         <!-- Wird per JS befüllt -->
       </div>
     </div>
+    <div class="cfg-section-save-bar">
+      <button class="btn btn-primary" id="save-btn-providers" onclick="saveSectionProviders()">
+        <span data-i18n="config.section_save">Speichern</span>
+      </button>
+      <button class="btn btn-secondary" onclick="resetSectionProviders()">
+        <span data-i18n="config.section_reset">&#8635; Zurücksetzen</span>
+      </button>
+      <span id="save-status-providers" class="cfg-section-save-status"></span>
+    </div>
   </div>
 
   <!-- ── Sub-Tab: LLMs ── -->
@@ -193,6 +195,15 @@
       <div class="config-section-body" id="llm-list">
         <!-- Wird per JS befüllt -->
       </div>
+    </div>
+    <div class="cfg-section-save-bar">
+      <button class="btn btn-primary" id="save-btn-llms" onclick="saveSectionLlms()">
+        <span data-i18n="config.section_save">Speichern</span>
+      </button>
+      <button class="btn btn-secondary" onclick="resetSectionLlms()">
+        <span data-i18n="config.section_reset">&#8635; Zurücksetzen</span>
+      </button>
+      <span id="save-status-llms" class="cfg-section-save-status"></span>
     </div>
   </div>
 
@@ -346,6 +357,17 @@
         </div>
 
       </div>
+    </div>
+
+    <!-- Memory/Dream Save Bar -->
+    <div class="cfg-section-save-bar">
+      <button class="btn btn-primary" id="save-btn-memory" onclick="saveSectionMemory()">
+        <span data-i18n="config.section_save">Speichern</span>
+      </button>
+      <button class="btn btn-secondary" onclick="resetSectionMemory()">
+        <span data-i18n="config.section_reset">&#8635; Zurücksetzen</span>
+      </button>
+      <span id="save-status-memory" class="cfg-section-save-status"></span>
     </div>
 
     <!-- Memory Rebuild -->
@@ -584,6 +606,16 @@
       </div>
     </div>
 
+    <div class="cfg-section-save-bar">
+      <button class="btn btn-primary" id="save-btn-ha" onclick="saveSectionHa()">
+        <span data-i18n="config.section_save">Speichern</span>
+      </button>
+      <button class="btn btn-secondary" onclick="resetSectionHa()">
+        <span data-i18n="config.section_reset">&#8635; Zurücksetzen</span>
+      </button>
+      <span id="save-status-ha" class="cfg-section-save-status"></span>
+    </div>
+
   </div>
 
   <!-- ── Sub-Tab: WhatsApp ── -->
@@ -638,6 +670,16 @@
       </div>
     </div>
 
+    <div class="cfg-section-save-bar">
+      <button class="btn btn-primary" id="save-btn-whatsapp" onclick="saveSectionWhatsapp()">
+        <span data-i18n="config.section_save">Speichern</span>
+      </button>
+      <button class="btn btn-secondary" onclick="resetSectionWhatsapp()">
+        <span data-i18n="config.section_reset">&#8635; Zurücksetzen</span>
+      </button>
+      <span id="save-status-whatsapp" class="cfg-section-save-status"></span>
+    </div>
+
   </div>
 
   <!-- ── Sub-Tab: Infra ── -->
@@ -669,6 +711,16 @@
           <div class="planned-card-desc">Automatisches Backup der Qdrant-Collections auf TrueNAS (SMB).</div>
         </div>
       </div>
+    </div>
+
+    <div class="cfg-section-save-bar">
+      <button class="btn btn-primary" id="save-btn-infra" onclick="saveSectionInfra()">
+        <span data-i18n="config.section_save">Speichern</span>
+      </button>
+      <button class="btn btn-secondary" onclick="resetSectionInfra()">
+        <span data-i18n="config.section_reset">&#8635; Zurücksetzen</span>
+      </button>
+      <span id="save-status-infra" class="cfg-section-save-status"></span>
     </div>
 
   </div>
@@ -714,6 +766,16 @@
           <div class="planned-card-desc">Nächtliche Konsolidierung: Konversationen werden zu dauerhaften Erinnerungen verdichtet und verknüpft.</div>
         </div>
       </div>
+    </div>
+
+    <div class="cfg-section-save-bar">
+      <button class="btn btn-primary" id="save-btn-retention" onclick="saveSectionRetention()">
+        <span data-i18n="config.section_save">Speichern</span>
+      </button>
+      <button class="btn btn-secondary" onclick="resetSectionRetention()">
+        <span data-i18n="config.section_reset">&#8635; Zurücksetzen</span>
+      </button>
+      <span id="save-status-retention" class="cfg-section-save-status"></span>
     </div>
 
   </div>
@@ -836,7 +898,7 @@
 
 <!-- Feature-Module -->
 <script src="/static/js/chat.js?v=5"></script>
-<script src="/static/js/config.js?v=6"></script>
+<script src="/static/js/config.js?v=7"></script>
 <script src="/static/js/users.js?v=6"></script>
 <script src="/static/js/status.js?v=3"></script>
 <script src="/static/js/logs.js?v=6"></script>

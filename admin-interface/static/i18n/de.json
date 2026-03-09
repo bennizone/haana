@@ -121,6 +121,10 @@
     "restart_changes_warning": "Beim Neustart wird das Sliding Window ins Memory extrahiert. Der Konversationskontext geht verloren.",
     "config_saved": "Konfiguration gespeichert",
     "error_label": "Fehler",
+    "section_save": "Speichern",
+    "section_reset": "Zurücksetzen",
+    "section_saved": "Abschnitt gespeichert",
+    "section_reset_done": "Zurückgesetzt",
     "sub_tabs": {
       "llms": "LLMs",
       "providers": "Providers",

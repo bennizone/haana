@@ -121,6 +121,10 @@
     "restart_changes_warning": "On restart, the sliding window will be extracted to memory. The conversation context will be lost.",
     "config_saved": "Configuration saved",
     "error_label": "Error",
+    "section_save": "Save",
+    "section_reset": "Reset",
+    "section_saved": "Section saved",
+    "section_reset_done": "Reset",
     "sub_tabs": {
       "llms": "LLMs",
       "providers": "Providers",

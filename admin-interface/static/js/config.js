@@ -841,18 +841,74 @@ function _detectRestartChanges(oldCfg, newCfg) {
 }
 
 // ── Save Config ─────────────────────────────────────────────────────────────
-async function saveConfig() {
-  if (!cfg) return;
+// Legacy saveConfig() entfernt — per-section save functions werden verwendet
 
-  // Provider aus DOM lesen
+// ── Per-Section Save Helpers ─────────────────────────────────────────────────
+
+function _sectionSaveOk(statusId, btnId) {
+  const st = document.getElementById(statusId);
+  const btn = document.getElementById(btnId);
+  if (st) { st.textContent = '\u2713 ' + t('config.saved'); st.style.color = 'var(--green)'; }
+  if (btn) { btn.classList.add('cfg-save-btn-flash'); setTimeout(() => btn.classList.remove('cfg-save-btn-flash'), 1200); }
+  if (st) setTimeout(() => { st.textContent = ''; }, 3000);
+}
+
+function _sectionSaveErr(statusId, msg) {
+  const st = document.getElementById(statusId);
+  if (st) {
+    st.textContent = '\u2717 ' + msg; st.style.color = 'var(--red)';
+    setTimeout(() => { st.textContent = ''; }, 5000);
+  }
+}
+
+async function _patchConfig(payload) {
+  const r = await fetch('/api/config', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload),
+  });
+  return r;
+}
+
+// ── Providers Section ────────────────────────────────────────────────────────
+async function saveSectionProviders() {
+  if (!cfg) return;
   const providers = (cfg.providers || []).map((p, i) => ({
     ...p,
     name: document.getElementById(`prov-${i}-name`)?.value ?? p.name,
     url:  document.getElementById(`prov-${i}-url`)?.value  ?? p.url,
     key:  document.getElementById(`prov-${i}-key`)?.value  ?? p.key,
   }));
+  try {
+    const r = await _patchConfig({ ...cfg, providers });
+    if (r.ok) {
+      cfg.providers = providers;
+      _sectionSaveOk('save-status-providers', 'save-btn-providers');
+      toast(t('config.section_saved'), 'ok');
+    } else {
+      _sectionSaveErr('save-status-providers', t('config.save_error'));
+      toast(t('config.save_error'), 'err');
+    }
+  } catch(e) {
+    _sectionSaveErr('save-status-providers', e.message);
+    toast(e.message, 'err');
+  }
+}
 
-  // LLMs aus DOM lesen
+async function resetSectionProviders() {
+  try {
+    const r = await fetch('/api/config');
+    const fresh = await r.json();
+    cfg.providers = fresh.providers;
+    renderProviders(cfg);
+    const st = document.getElementById('save-status-providers');
+    if (st) { st.textContent = '\u21ba ' + t('config.section_reset_done'); st.style.color = 'var(--muted)'; setTimeout(() => { st.textContent = ''; }, 2000); }
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+// ── LLMs Section ─────────────────────────────────────────────────────────────
+async function saveSectionLlms() {
+  if (!cfg) return;
   const llms = (cfg.llms || []).map((l, i) => ({
     ...l,
     name:        document.getElementById(`llm-${i}-name`)?.value     ?? l.name,
@@ -860,94 +916,161 @@ async function saveConfig() {
     model:       document.getElementById(`llm-${i}-model`)?.value    ?? l.model,
     rpm:         parseInt(document.getElementById(`llm-${i}-rpm`)?.value) || 0,
   }));
-
-  const retLlm   = parseInt(document.getElementById('ret-llm-calls').value)  || null;
-  const retTool  = parseInt(document.getElementById('ret-tool-calls').value) || null;
-  const retMem   = parseInt(document.getElementById('ret-memory-ops').value) || null;
-
-  const newCfg = {
-    ...cfg,
-    providers,
-    llms,
-    memory: {
-      extraction_llm:          document.getElementById('mem-extraction-llm')?.value || '',
-      extraction_llm_fallback: document.getElementById('mem-extraction-llm-fallback')?.value || '',
-      context_enrichment:      document.getElementById('mem-context-enrichment')?.checked ?? false,
-      context_before: parseInt(document.getElementById('mem-context-before')?.value || '3'),
-      context_after:  parseInt(document.getElementById('mem-context-after')?.value || '2'),
-      window_size:    parseInt(document.getElementById('mem-window-size').value),
-      window_minutes: parseInt(document.getElementById('mem-window-minutes').value),
-      min_messages:   parseInt(document.getElementById('mem-min-messages').value),
-    },
-    dream: {
-      enabled:  document.getElementById('dream-enabled')?.checked ?? false,
-      schedule: document.getElementById('dream-schedule')?.value || '02:00',
-      llm:      document.getElementById('dream-llm')?.value || '',
-    },
-    embedding: {
-      provider_id:          document.getElementById('embed-provider')?.value || '',
-      model:                document.getElementById('embed-model')?.value || 'bge-m3',
-      dims:                 parseInt(document.getElementById('embed-dims').value) || 1024,
-      fallback_provider_id: document.getElementById('embed-fallback-provider')?.value || '',
-    },
-    log_retention: {
-      conversations: null,
-      'llm-calls':   retLlm  || 30,
-      'tool-calls':  retTool || 30,
-      'memory-ops':  retMem  || 30,
-    },
-    services: {
-      ha_url:          document.getElementById('svc-ha-url').value,
-      ha_token:        document.getElementById('svc-ha-token').value,
-      ha_mcp_enabled:  document.getElementById('svc-mcp-enabled')?.checked ?? false,
-      ha_mcp_type:     document.getElementById('svc-mcp-type')?.value || 'extended',
-      ha_mcp_url:      document.getElementById('svc-mcp-url')?.value || '',
-      ha_mcp_token:    document.getElementById('svc-mcp-token')?.value || '',
-      stt_entity:      document.getElementById('svc-stt-entity')?.value || '',
-      tts_entity:      document.getElementById('svc-tts-entity')?.value || '',
-      stt_language:    document.getElementById('svc-stt-language')?.value || 'de-DE',
-      tts_voice:       document.getElementById('svc-tts-voice')?.value || '',
-      tts_also_text:   document.getElementById('svc-tts-also-text')?.checked ?? false,
-      ha_auto_backup:  document.getElementById('svc-ha-auto-backup')?.checked ?? false,
-      qdrant_url:      document.getElementById('svc-qdrant-url').value,
-    },
-    whatsapp: {
-      mode:        document.getElementById('svc-wa-mode')?.value || 'separate',
-      self_prefix: document.getElementById('svc-wa-prefix')?.value || '!h ',
-    },
-  };
-
-  const statusEl = document.getElementById('config-save-status');
   try {
-    const r = await fetch('/api/config', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(newCfg) });
+    const r = await _patchConfig({ ...cfg, llms });
     if (r.ok) {
-      const restartChanges = _detectRestartChanges(cfg, newCfg);
+      cfg.llms = llms;
+      _sectionSaveOk('save-status-llms', 'save-btn-llms');
+      toast(t('config.section_saved'), 'ok');
+    } else {
+      _sectionSaveErr('save-status-llms', t('config.save_error'));
+      toast(t('config.save_error'), 'err');
+    }
+  } catch(e) {
+    _sectionSaveErr('save-status-llms', e.message);
+    toast(e.message, 'err');
+  }
+}
 
-      // Embedding-Änderung erkennen (erfordert Qdrant-Rebuild)
+async function resetSectionLlms() {
+  try {
+    const r = await fetch('/api/config');
+    const fresh = await r.json();
+    cfg.llms = fresh.llms;
+    renderLlms(cfg);
+    const st = document.getElementById('save-status-llms');
+    if (st) { st.textContent = '\u21ba ' + t('config.section_reset_done'); st.style.color = 'var(--muted)'; setTimeout(() => { st.textContent = ''; }, 2000); }
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+// ── Memory Section ────────────────────────────────────────────────────────────
+async function saveSectionMemory() {
+  if (!cfg) return;
+  const memory = {
+    ...(cfg.memory || {}),
+    extraction_llm:          document.getElementById('mem-extraction-llm')?.value || '',
+    extraction_llm_fallback: document.getElementById('mem-extraction-llm-fallback')?.value || '',
+    context_enrichment:      document.getElementById('mem-context-enrichment')?.checked ?? false,
+    context_before: parseInt(document.getElementById('mem-context-before')?.value || '3'),
+    context_after:  parseInt(document.getElementById('mem-context-after')?.value || '2'),
+    window_size:    parseInt(document.getElementById('mem-window-size')?.value || '20'),
+    window_minutes: parseInt(document.getElementById('mem-window-minutes')?.value || '60'),
+    min_messages:   parseInt(document.getElementById('mem-min-messages')?.value || '5'),
+  };
+  const embedding = {
+    ...(cfg.embedding || {}),
+    provider_id:          document.getElementById('embed-provider')?.value || '',
+    model:                document.getElementById('embed-model')?.value || 'bge-m3',
+    dims:                 parseInt(document.getElementById('embed-dims')?.value || '1024'),
+    fallback_provider_id: document.getElementById('embed-fallback-provider')?.value || '',
+  };
+  const dream = {
+    ...(cfg.dream || {}),
+    enabled:  document.getElementById('dream-enabled')?.checked ?? false,
+    schedule: document.getElementById('dream-schedule')?.value || '02:00',
+    llm:      document.getElementById('dream-llm')?.value || '',
+  };
+  try {
+    const newCfg = { ...cfg, memory, embedding, dream };
+    const r = await _patchConfig(newCfg);
+    if (r.ok) {
+      // Check for embedding model change
       const oldEmb = cfg.embedding || {};
-      const newEmb = newCfg.embedding || {};
-      const embeddingChanged = oldEmb.model !== newEmb.model
-        || oldEmb.provider_id !== newEmb.provider_id
-        || String(oldEmb.dims) !== String(newEmb.dims);
-
-      cfg = newCfg;
-      // Embedding-Provider-Dropdowns mit aktualisierten Providern neu rendern
-      try { _renderEmbeddingProviderDropdowns(cfg, cfg.embedding || {}); } catch(e) { /* ignore */ }
-      toast(t('config.config_saved'), 'ok');
-      if (statusEl) { statusEl.style.color = 'var(--green)'; statusEl.textContent = '\u2713 ' + t('config.saved'); setTimeout(() => { statusEl.textContent = ''; }, 3000); }
-
+      const embeddingChanged = oldEmb.model !== embedding.model
+        || oldEmb.provider_id !== embedding.provider_id
+        || String(oldEmb.dims) !== String(embedding.dims);
+      const restartChanges = _detectRestartChanges(cfg, newCfg);
+      cfg.memory = memory;
+      cfg.embedding = embedding;
+      cfg.dream = dream;
+      try { _renderEmbeddingProviderDropdowns(cfg, cfg.embedding); } catch(e) { /* ignore */ }
+      _sectionSaveOk('save-status-memory', 'save-btn-memory');
+      toast(t('config.section_saved'), 'ok');
+      if (restartChanges.length) {
+        toast(t('config.restart_hint') + ': ' + restartChanges.join(', '), 'warn');
+      }
       if (embeddingChanged) {
         Modal.show({
           title: t('config_memory.embedding_changed_title'),
           body: `<p class="modal-message">${escHtml(t('config_memory.embedding_changed_body')).replace(/\n/g, '<br>')}</p>`,
           confirmText: t('config_memory.embedding_changed_rebuild'),
-          onConfirm: () => {
-            scrollToRebuild();
-            rebuildSelectAll();
-          },
+          onConfirm: () => { scrollToRebuild(); rebuildSelectAll(); },
           onCancel: () => { toast(t('config_memory.embedding_changed_later'), 'warn'); },
         });
-      } else if (restartChanges.length > 0) {
+      }
+    } else {
+      _sectionSaveErr('save-status-memory', t('config.save_error'));
+      toast(t('config.save_error'), 'err');
+    }
+  } catch(e) {
+    _sectionSaveErr('save-status-memory', e.message);
+    toast(e.message, 'err');
+  }
+}
+
+async function resetSectionMemory() {
+  try {
+    const r = await fetch('/api/config');
+    const fresh = await r.json();
+    cfg.memory = fresh.memory;
+    cfg.embedding = fresh.embedding;
+    cfg.dream = fresh.dream;
+    // Re-render memory fields
+    const m = cfg.memory || {};
+    _setVal('mem-window-size',    m.window_size    ?? 20);
+    _setVal('mem-window-minutes', m.window_minutes ?? 60);
+    _setVal('mem-min-messages',   m.min_messages   ?? 5);
+    _setVal('mem-context-before', m.context_before ?? 3);
+    _setVal('mem-context-after',  m.context_after  ?? 2);
+    const ctxEl = document.getElementById('mem-context-enrichment');
+    if (ctxEl) ctxEl.checked = !!m.context_enrichment;
+    const memExtEl = document.getElementById('mem-extraction-llm');
+    if (memExtEl) memExtEl.innerHTML = _llmSelectOpts(m.extraction_llm || '');
+    const memExtFbEl = document.getElementById('mem-extraction-llm-fallback');
+    if (memExtFbEl) memExtFbEl.innerHTML = '<option value="">--</option>' + _llmSelectOpts(m.extraction_llm_fallback || '');
+    // Dream
+    const dr = cfg.dream || {};
+    const dreamEnabledEl = document.getElementById('dream-enabled');
+    if (dreamEnabledEl) dreamEnabledEl.checked = !!dr.enabled;
+    const dreamScheduleEl = document.getElementById('dream-schedule');
+    if (dreamScheduleEl) dreamScheduleEl.value = dr.schedule || '02:00';
+    const dreamLlmEl = document.getElementById('dream-llm');
+    if (dreamLlmEl) dreamLlmEl.innerHTML = '<option value="">(' + t('config_memory.dream_llm_default') + ')</option>' + _llmSelectOpts(dr.llm || '');
+    // Embedding
+    try { _renderEmbeddingProviderDropdowns(cfg, cfg.embedding || {}); } catch(e) { /* ignore */ }
+    _setVal('embed-dims', (cfg.embedding || {}).dims ?? 1024);
+    const st = document.getElementById('save-status-memory');
+    if (st) { st.textContent = '\u21ba ' + t('config.section_reset_done'); st.style.color = 'var(--muted)'; setTimeout(() => { st.textContent = ''; }, 2000); }
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+// ── Home Assistant Section ────────────────────────────────────────────────────
+async function saveSectionHa() {
+  if (!cfg) return;
+  const services = {
+    ...(cfg.services || {}),
+    ha_url:         document.getElementById('svc-ha-url')?.value || '',
+    ha_token:       document.getElementById('svc-ha-token')?.value || '',
+    ha_mcp_enabled: document.getElementById('svc-mcp-enabled')?.checked ?? false,
+    ha_mcp_type:    document.getElementById('svc-mcp-type')?.value || 'extended',
+    ha_mcp_url:     document.getElementById('svc-mcp-url')?.value || '',
+    ha_mcp_token:   document.getElementById('svc-mcp-token')?.value || '',
+    stt_entity:     document.getElementById('svc-stt-entity')?.value || '',
+    tts_entity:     document.getElementById('svc-tts-entity')?.value || '',
+    stt_language:   document.getElementById('svc-stt-language')?.value || 'de-DE',
+    tts_voice:      document.getElementById('svc-tts-voice')?.value || '',
+    tts_also_text:  document.getElementById('svc-tts-also-text')?.checked ?? false,
+    ha_auto_backup: document.getElementById('svc-ha-auto-backup')?.checked ?? false,
+  };
+  try {
+    const newCfg = { ...cfg, services };
+    const r = await _patchConfig(newCfg);
+    if (r.ok) {
+      const restartChanges = _detectRestartChanges(cfg, newCfg);
+      cfg.services = services;
+      _sectionSaveOk('save-status-ha', 'save-btn-ha');
+      toast(t('config.section_saved'), 'ok');
+      if (restartChanges.length > 0) {
         const changedList = restartChanges.join('\n  - ');
         Modal.show({
           title: t('config.restart_title'),
@@ -958,13 +1081,180 @@ async function saveConfig() {
         });
       }
     } else {
+      _sectionSaveErr('save-status-ha', t('config.save_error'));
       toast(t('config.save_error'), 'err');
-      if (statusEl) { statusEl.style.color = 'var(--red)'; statusEl.textContent = '\u2717 ' + t('config.error_label'); }
     }
   } catch(e) {
+    _sectionSaveErr('save-status-ha', e.message);
     toast(e.message, 'err');
-    if (statusEl) { statusEl.style.color = 'var(--red)'; statusEl.textContent = '\u2717 ' + e.message; }
   }
+}
+
+async function resetSectionHa() {
+  try {
+    const r = await fetch('/api/config');
+    const fresh = await r.json();
+    cfg.services = fresh.services;
+    const sv = cfg.services || {};
+    _setVal('svc-ha-url',   sv.ha_url   || '');
+    _setVal('svc-ha-token', sv.ha_token || '');
+    const mcpEnabled = !!sv.ha_mcp_enabled;
+    const mcpEl = document.getElementById('svc-mcp-enabled');
+    if (mcpEl) { mcpEl.checked = mcpEnabled; toggleMcpSection(mcpEnabled); }
+    const mcpType = document.getElementById('svc-mcp-type');
+    if (mcpType) { mcpType.value = sv.ha_mcp_type || 'extended'; updateMcpTypeHints(); }
+    const mcpUrl = document.getElementById('svc-mcp-url');
+    if (mcpUrl) mcpUrl.value = sv.ha_mcp_url || '';
+    const mcpTok = document.getElementById('svc-mcp-token');
+    if (mcpTok) mcpTok.value = sv.ha_mcp_token || '';
+    const sttEl = document.getElementById('svc-stt-entity');
+    if (sv.stt_entity && sttEl) {
+      if (![...sttEl.options].some(o => o.value === sv.stt_entity)) sttEl.add(new Option(sv.stt_entity, sv.stt_entity));
+      sttEl.value = sv.stt_entity;
+    }
+    const ttsEl = document.getElementById('svc-tts-entity');
+    if (sv.tts_entity && ttsEl) {
+      if (![...ttsEl.options].some(o => o.value === sv.tts_entity)) ttsEl.add(new Option(sv.tts_entity, sv.tts_entity));
+      ttsEl.value = sv.tts_entity;
+    }
+    const langEl = document.getElementById('svc-stt-language');
+    if (sv.stt_language && langEl) langEl.value = sv.stt_language;
+    const voiceEl = document.getElementById('svc-tts-voice');
+    if (voiceEl && sv.tts_voice) voiceEl.value = sv.tts_voice;
+    const alsoTextEl = document.getElementById('svc-tts-also-text');
+    if (alsoTextEl) alsoTextEl.checked = !!sv.tts_also_text;
+    const autoBackupEl = document.getElementById('svc-ha-auto-backup');
+    if (autoBackupEl) autoBackupEl.checked = !!sv.ha_auto_backup;
+    const st = document.getElementById('save-status-ha');
+    if (st) { st.textContent = '\u21ba ' + t('config.section_reset_done'); st.style.color = 'var(--muted)'; setTimeout(() => { st.textContent = ''; }, 2000); }
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+// ── WhatsApp Section ──────────────────────────────────────────────────────────
+async function saveSectionWhatsapp() {
+  if (!cfg) return;
+  const whatsapp = {
+    ...(cfg.whatsapp || {}),
+    mode:        document.getElementById('svc-wa-mode')?.value || 'separate',
+    self_prefix: document.getElementById('svc-wa-prefix')?.value || '!h ',
+  };
+  try {
+    const r = await _patchConfig({ ...cfg, whatsapp });
+    if (r.ok) {
+      cfg.whatsapp = whatsapp;
+      _sectionSaveOk('save-status-whatsapp', 'save-btn-whatsapp');
+      toast(t('config.section_saved'), 'ok');
+    } else {
+      _sectionSaveErr('save-status-whatsapp', t('config.save_error'));
+      toast(t('config.save_error'), 'err');
+    }
+  } catch(e) {
+    _sectionSaveErr('save-status-whatsapp', e.message);
+    toast(e.message, 'err');
+  }
+}
+
+async function resetSectionWhatsapp() {
+  try {
+    const r = await fetch('/api/config');
+    const fresh = await r.json();
+    cfg.whatsapp = fresh.whatsapp;
+    const wa = cfg.whatsapp || {};
+    const waMode = document.getElementById('svc-wa-mode');
+    if (waMode) waMode.value = wa.mode || 'separate';
+    const waPfx = document.getElementById('svc-wa-prefix');
+    if (waPfx) waPfx.value = wa.self_prefix || '!h ';
+    const waPfxGrp = document.getElementById('svc-wa-prefix-group');
+    if (waPfxGrp) waPfxGrp.style.display = (wa.mode === 'self') ? '' : 'none';
+    const st = document.getElementById('save-status-whatsapp');
+    if (st) { st.textContent = '\u21ba ' + t('config.section_reset_done'); st.style.color = 'var(--muted)'; setTimeout(() => { st.textContent = ''; }, 2000); }
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+// ── Infra Section ─────────────────────────────────────────────────────────────
+async function saveSectionInfra() {
+  if (!cfg) return;
+  const services = {
+    ...(cfg.services || {}),
+    qdrant_url: document.getElementById('svc-qdrant-url')?.value || '',
+  };
+  try {
+    const newCfg = { ...cfg, services };
+    const r = await _patchConfig(newCfg);
+    if (r.ok) {
+      const restartChanges = _detectRestartChanges(cfg, newCfg);
+      cfg.services = services;
+      _sectionSaveOk('save-status-infra', 'save-btn-infra');
+      toast(t('config.section_saved'), 'ok');
+      if (restartChanges.length > 0) {
+        const changedList = restartChanges.join('\n  - ');
+        Modal.show({
+          title: t('config.restart_title'),
+          body: `<p class="modal-message">${escHtml(t('config.restart_changes_intro') + '\n\n- ' + changedList + '\n\n' + t('config.restart_changes_warning')).replace(/\n/g, '<br>')}</p>`,
+          confirmText: t('config.restart_now'),
+          onConfirm: async () => { await restartAllAgents(); },
+          onCancel: () => { toast(t('config.restart_pending'), 'warn'); },
+        });
+      }
+    } else {
+      _sectionSaveErr('save-status-infra', t('config.save_error'));
+      toast(t('config.save_error'), 'err');
+    }
+  } catch(e) {
+    _sectionSaveErr('save-status-infra', e.message);
+    toast(e.message, 'err');
+  }
+}
+
+async function resetSectionInfra() {
+  try {
+    const r = await fetch('/api/config');
+    const fresh = await r.json();
+    cfg.services = { ...fresh.services };
+    _setVal('svc-qdrant-url', fresh.services?.qdrant_url || '');
+    const st = document.getElementById('save-status-infra');
+    if (st) { st.textContent = '\u21ba ' + t('config.section_reset_done'); st.style.color = 'var(--muted)'; setTimeout(() => { st.textContent = ''; }, 2000); }
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+// ── Retention Section ─────────────────────────────────────────────────────────
+async function saveSectionRetention() {
+  if (!cfg) return;
+  const log_retention = {
+    ...(cfg.log_retention || {}),
+    conversations: null,
+    'llm-calls':  parseInt(document.getElementById('ret-llm-calls')?.value)  || 30,
+    'tool-calls': parseInt(document.getElementById('ret-tool-calls')?.value) || 30,
+    'memory-ops': parseInt(document.getElementById('ret-memory-ops')?.value) || 30,
+  };
+  try {
+    const r = await _patchConfig({ ...cfg, log_retention });
+    if (r.ok) {
+      cfg.log_retention = log_retention;
+      _sectionSaveOk('save-status-retention', 'save-btn-retention');
+      toast(t('config.section_saved'), 'ok');
+    } else {
+      _sectionSaveErr('save-status-retention', t('config.save_error'));
+      toast(t('config.save_error'), 'err');
+    }
+  } catch(e) {
+    _sectionSaveErr('save-status-retention', e.message);
+    toast(e.message, 'err');
+  }
+}
+
+async function resetSectionRetention() {
+  try {
+    const r = await fetch('/api/config');
+    const fresh = await r.json();
+    cfg.log_retention = fresh.log_retention;
+    const lr = cfg.log_retention || {};
+    _setVal('ret-llm-calls',  lr['llm-calls']  ?? 30);
+    _setVal('ret-tool-calls', lr['tool-calls'] ?? 30);
+    _setVal('ret-memory-ops', lr['memory-ops'] ?? 30);
+    const st = document.getElementById('save-status-retention');
+    if (st) { st.textContent = '\u21ba ' + t('config.section_reset_done'); st.style.color = 'var(--muted)'; setTimeout(() => { st.textContent = ''; }, 2000); }
+  } catch(e) { toast(e.message, 'err'); }
 }
 
 async function restartAllAgents() {
