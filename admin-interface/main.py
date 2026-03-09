@@ -251,6 +251,7 @@ DEFAULT_CONFIG = {
     "users": [
         {
             "id": "alice", "display_name": "Alice", "role": "admin",
+            "language": "de",
             "primary_llm": "claude-primary", "fallback_llm": "claude-fallback",
 
             "ha_user": "alice", "whatsapp_phone": "",
@@ -262,6 +263,7 @@ DEFAULT_CONFIG = {
         },
         {
             "id": "bob", "display_name": "Bob", "role": "user",
+            "language": "de",
             "primary_llm": "claude-primary", "fallback_llm": "claude-fallback",
 
             "ha_user": "bob", "whatsapp_phone": "",
@@ -274,6 +276,7 @@ DEFAULT_CONFIG = {
         {
             "id": "ha-assist", "display_name": "HAANA Voice", "role": "voice",
             "system": True,
+            "language": "de",
             "primary_llm": "ollama-extract", "fallback_llm": "",
 
             "ha_user": "", "whatsapp_phone": "",
@@ -286,6 +289,7 @@ DEFAULT_CONFIG = {
         {
             "id": "ha-advanced", "display_name": "HAANA Advanced", "role": "voice-advanced",
             "system": True,
+            "language": "de",
             "primary_llm": "claude-primary", "fallback_llm": "",
 
             "ha_user": "", "whatsapp_phone": "",
@@ -336,6 +340,12 @@ def _ensure_system_users(cfg: dict) -> None:
             cfg["users"].append(merged)
         else:
             cfg["users"].append(dict(default_user))
+
+
+def _ensure_user_defaults(cfg: dict) -> None:
+    """Stellt sicher, dass alle User neu hinzugefügte Felder mit Defaults haben."""
+    for user in cfg.get("users", []):
+        user.setdefault("language", "de")
 
 
 def _slugify(text: str) -> str:
@@ -548,6 +558,7 @@ def load_config() -> dict:
             if _migrate_providers_v2(cfg):
                 save_config(cfg)
             _ensure_system_users(cfg)
+            _ensure_user_defaults(cfg)
             return cfg
         except Exception:
             pass
@@ -556,6 +567,7 @@ def load_config() -> dict:
     cfg["llms"] = list(DEFAULT_CONFIG["llms"])
     cfg["users"] = list(DEFAULT_CONFIG["users"])
     _ensure_system_users(cfg)
+    _ensure_user_defaults(cfg)
     return cfg
 
 
@@ -1937,7 +1949,25 @@ async def test_embedding(request: Request):
 
 # ── User-Management ───────────────────────────────────────────────────────────
 
-def _render_claude_md(template_name: str, display_name: str, user_id: str, ha_user: str = "") -> str:
+_LANGUAGE_NAMES: dict[str, str] = {
+    "de": "German",
+    "en": "English",
+    "tr": "Turkish",
+    "fr": "French",
+    "es": "Spanish",
+    "it": "Italian",
+    "pt": "Portuguese",
+    "nl": "Dutch",
+    "pl": "Polish",
+    "ru": "Russian",
+    "ja": "Japanese",
+    "zh": "Chinese",
+    "ko": "Korean",
+    "ar": "Arabic",
+}
+
+
+def _render_claude_md(template_name: str, display_name: str, user_id: str, ha_user: str = "", language: str = "de") -> str:
     """Generiert CLAUDE.md aus Template mit Platzhalter-Ersetzung."""
     tpl_path = TEMPLATES_DIR / f"{template_name}.md"
     if not tpl_path.exists():
@@ -1946,6 +1976,8 @@ def _render_claude_md(template_name: str, display_name: str, user_id: str, ha_us
     content = content.replace("{{DISPLAY_NAME}}", display_name)
     content = content.replace("{{USER_ID}}", user_id)
     content = content.replace("{{HA_USER}}", ha_user or user_id)
+    response_language = _LANGUAGE_NAMES.get(language, language)
+    content = content.replace("{{RESPONSE_LANGUAGE}}", response_language)
     return content
 
 
@@ -2007,6 +2039,7 @@ async def create_user(request: Request):
         "id":                  uid,
         "display_name":        body.get("display_name") or uid.capitalize(),
         "role":                body.get("role", "user"),
+        "language":            body.get("language", "de"),
         "primary_llm":         body.get("primary_llm", default_primary),
         "fallback_llm":        body.get("fallback_llm", ""),
         "ha_user":             body.get("ha_user", uid),
@@ -2023,7 +2056,8 @@ async def create_user(request: Request):
     claude_md_dir = INST_DIR / uid
     claude_md_dir.mkdir(parents=True, exist_ok=True)
     claude_md_content = _render_claude_md(
-        user["claude_md_template"], user["display_name"], uid, user["ha_user"]
+        user["claude_md_template"], user["display_name"], uid, user["ha_user"],
+        user.get("language", "de")
     )
     (claude_md_dir / "CLAUDE.md").write_text(claude_md_content, encoding="utf-8")
 
@@ -2054,16 +2088,17 @@ async def update_user(user_id: str, request: Request):
     if not user:
         raise HTTPException(404, f"User '{user_id}' nicht gefunden")
 
-    restart_fields = {"primary_llm", "fallback_llm", "ha_user", "role", "claude_md_template"}
+    restart_fields = {"primary_llm", "fallback_llm", "ha_user", "role", "claude_md_template", "language"}
     needs_restart = any(k in body and body[k] != user.get(k) for k in restart_fields)
 
     user.update({k: v for k, v in body.items() if k not in ("id", "api_port", "container_name")})
     save_config(cfg)
 
-    # CLAUDE.md neu generieren wenn Template oder Name geändert
-    if "display_name" in body or "claude_md_template" in body or "ha_user" in body:
+    # CLAUDE.md neu generieren wenn Template, Name oder Sprache geändert
+    if "display_name" in body or "claude_md_template" in body or "ha_user" in body or "language" in body:
         claude_md_content = _render_claude_md(
-            user["claude_md_template"], user["display_name"], user_id, user.get("ha_user", user_id)
+            user["claude_md_template"], user["display_name"], user_id,
+            user.get("ha_user", user_id), user.get("language", "de")
         )
         (INST_DIR / user_id / "CLAUDE.md").write_text(claude_md_content, encoding="utf-8")
 

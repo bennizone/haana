@@ -85,6 +85,18 @@ function renderUserCard(u) {
             ${_llmOpts(u.fallback_llm)}
           </select>
         </div>
+        <div class="form-group">
+          <label title="${t('users.language_help')}">${t('users.language')}</label>
+          <select id="uf-${escAttr(u.id)}-language">
+            <option value="de" ${(u.language||'de')==='de'?'selected':''}>Deutsch</option>
+            <option value="en" ${(u.language||'de')==='en'?'selected':''}>English</option>
+            <option value="tr" ${(u.language||'de')==='tr'?'selected':''}>Türkçe</option>
+            <option value="fr" ${(u.language||'de')==='fr'?'selected':''}>Français</option>
+            <option value="es" ${(u.language||'de')==='es'?'selected':''}>Español</option>
+            <option value="it" ${(u.language||'de')==='it'?'selected':''}>Italiano</option>
+          </select>
+          <span style="font-size:11px;color:var(--muted);">${t('users.language_help')}</span>
+        </div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
         <button class="btn btn-primary" onclick="saveUserEdit('${escAttr(u.id)}')">${t('common.save')}</button>
@@ -170,6 +182,7 @@ async function saveUserEdit(uid) {
     role:           document.getElementById(`uf-${uid}-role`)?.value,
     primary_llm:    document.getElementById(`uf-${uid}-primary-llm`)?.value || '',
     fallback_llm:   document.getElementById(`uf-${uid}-fallback-llm`)?.value || '',
+    language:       document.getElementById(`uf-${uid}-language`)?.value || 'de',
   };
   if (!isVoice) {
     body.ha_user        = document.getElementById(`uf-${uid}-ha`)?.value || '';
@@ -271,6 +284,7 @@ async function submitNewUser() {
     display_name: document.getElementById('nuf-display-name').value.trim() || uid,
     role:         document.getElementById('nuf-role').value,
     claude_md_template: document.getElementById('nuf-template').value,
+    language: document.getElementById('nuf-language').value,
   };
   st.textContent = '\u2026'; st.style.color = 'var(--muted)';
   try {

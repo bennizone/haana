@@ -165,6 +165,7 @@ User-Konfiguration. System-Instanzen (`ha-assist`, `ha-advanced`) sind geschuetz
 | `api_port` | int | auto | Agent-API Port (automatisch vergeben ab 8001) |
 | `container_name` | string | auto | Docker Container Name |
 | `claude_md_template` | string | nein | Template-Name: `admin`, `user`, `ha-assist`, `ha-advanced` |
+| `language` | string | nein | Antwortsprache des Agents. Default: `"de"`. Moegliche Werte: `de`, `en`, `tr`, `fr`, `es`, `it`. Wird als `{{RESPONSE_LANGUAGE}}` in CLAUDE.md eingesetzt. |
 | `caldav_url` | string | nein | CalDAV Server URL |
 | `caldav_user` | string | nein | CalDAV Benutzername |
 | `caldav_pass` | string | nein | CalDAV Passwort |

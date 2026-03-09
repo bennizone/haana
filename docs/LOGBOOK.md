@@ -4,6 +4,24 @@ Chronologische Dokumentation der wichtigsten Aenderungen am HAANA-Projekt.
 
 ---
 
+## 2026-03-09 — Sprach-Feature: users[].language, CLAUDE.md auf Englisch, Sprach-Dropdown
+
+**Aenderungen:**
+- `users[].language` Feld in Config-Struktur ergaenzt (String, Default `"de"`, Werte: `de/en/tr/fr/es/it`)
+- CLAUDE.md Templates auf Englisch umgestellt (Sprache des System-Prompts entkoppelt von UI-Sprache)
+- `{{RESPONSE_LANGUAGE}}` Platzhalter in CLAUDE.md Templates: wird beim Agent-Start mit dem konfigurierten Sprachcode ersetzt
+- Sprach-Dropdown im Users-Tab des Admin-Interface: Benutzersprache pro User waehlen
+- i18n-Key `users.language` und `users.language_hint` ergaenzt (de.json + en.json)
+
+**Entscheidungen:**
+- Sprache pro User statt global: Bob kann z.B. Englisch, Alice Deutsch bekommen — unabhaengig voneinander
+- CLAUDE.md auf Englisch: Claude-Modelle verarbeiten englische System-Prompts effizienter; `{{RESPONSE_LANGUAGE}}` steuert die Antwortsprache des Agents separat
+- Unterstuetzte Sprachen auf 6 beschraenkt (de/en/tr/fr/es/it): deckt alle aktuellen Haushaltsmitglieder ab; erweiterbar
+
+**Offene Punkte:**
+- `{{RESPONSE_LANGUAGE}}` Platzhalter noch nicht in allen CLAUDE.md-Varianten vorhanden (ggf. nachrüsten)
+- Sprach-Umschaltung benoetigt Agent-Neustart (kein Hot-Reload)
+
 ## 2026-03-09 — OAuth setup-token, Credential-Watcher, zentraler Token-Store
 
 **Aenderungen:**

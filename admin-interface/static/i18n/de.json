@@ -409,7 +409,9 @@
     "not_found": "Nicht gefunden",
     "template_loaded": "Template \"{tpl}\" geladen",
     "claude_md_saved": "CLAUDE.md für {uid} gespeichert",
-    "claude_md_saved_short": "Gespeichert"
+    "claude_md_saved_short": "Gespeichert",
+    "language": "Antwortsprache",
+    "language_help": "Sprache in der der Assistent antwortet"
   },
   "status": {
     "loading": "Status wird geladen...",

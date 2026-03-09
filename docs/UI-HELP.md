@@ -314,6 +314,12 @@ Hilfe-Texte fuer alle UI-Bereiche des Admin-Interface.
 - **en:** "International phone number without + and spaces (e.g. 491234567890). Used for message routing."
 - **i18n-key:** `users.wa_phone`, `users.wa_phone_hint`
 
+#### Sprach-Dropdown
+- **de:** "Antwortsprache des Agents fuer diesen User. Bestimmt in welcher Sprache der Agent antwortet, unabhaengig von der UI-Sprache. Aenderung erfordert Neustart des Agents."
+- **en:** "Response language of the agent for this user. Determines the language the agent replies in, independent of the UI language. Changing requires an agent restart."
+- **i18n-key:** `users.language`, `users.language_hint`
+- **Optionen:** `de` (Deutsch), `en` (English), `tr` (Tuerkce), `fr` (Francais), `es` (Espanol), `it` (Italiano)
+
 #### Primaeres LLM
 - **de:** "Haupt-LLM fuer diesen User. Bestimmt welches Modell fuer Chat-Antworten verwendet wird."
 - **en:** "Primary LLM for this user. Determines which model is used for chat responses."
