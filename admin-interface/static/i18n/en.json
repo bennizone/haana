@@ -129,8 +129,7 @@
       "whatsapp": "WhatsApp",
       "infra": "Infra",
       "logs": "Logs",
-      "retention": "Retention",
-      "claude_md": "CLAUDE.md"
+      "retention": "Retention"
     }
   },
   "config_llm": {
@@ -392,14 +391,6 @@
     "dream_process": "Dream Process",
     "dream_process_desc": "Nightly consolidation: conversations are condensed into lasting memories and linked."
   },
-  "config_claude_md": {
-    "title": "CLAUDE.md Editor",
-    "save": "Save",
-    "saved": "Saved – active immediately",
-    "save_error": "Error saving",
-    "loaded": "{instance}/CLAUDE.md loaded",
-    "saved_toast": "CLAUDE.md saved"
-  },
   "config_planned": {
     "ha_subs": "HA Subscriptions",
     "ha_subs_desc": "Real-time subscriptions to HA events (doorbell, motion sensors, …). The agent is proactively notified.",
@@ -457,6 +448,9 @@
     "template_loaded": "Template \"{tpl}\" loaded",
     "claude_md_saved": "CLAUDE.md for {uid} saved",
     "claude_md_saved_short": "Saved",
+    "claude_md_preview": "CLAUDE.md Preview",
+    "claude_md_expand": "Edit",
+    "claude_md_collapse": "Close",
     "language": "Response language",
     "language_help": "Language the assistant responds in"
   },

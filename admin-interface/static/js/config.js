@@ -986,41 +986,6 @@ async function restartAllAgents() {
   }
 }
 
-// ── CLAUDE.md Editor ───────────────────────────────────────────────────────
-function selectClaudeMd(inst) {
-  currentMdInst = inst;
-  document.querySelectorAll('[id^="mdbtn-"]').forEach(b => b.classList.remove('active'));
-  document.getElementById('mdbtn-' + inst)?.classList.add('active');
-  loadClaudeMd(inst);
-}
-
-async function loadClaudeMd(inst) {
-  const ed = document.getElementById('claude-md-editor');
-  const st = document.getElementById('claude-md-status');
-  st.textContent = t('common.loading');
-  try {
-    const r = await fetch(`/api/claude-md/${inst}`);
-    if (!r.ok) throw new Error(await r.text());
-    const data = await r.json();
-    ed.value = data.content;
-    st.textContent = t('config_claude_md.loaded', {instance: inst});
-  } catch(e) { st.textContent = '\u274c ' + e.message; }
-}
-
-async function saveClaudeMd() {
-  const content = document.getElementById('claude-md-editor').value;
-  const st = document.getElementById('claude-md-status');
-  try {
-    const r = await fetch(`/api/claude-md/${currentMdInst}`, {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ content }),
-    });
-    if (r.ok) { st.textContent = '\u2713 ' + t('config_claude_md.saved'); toast(t('config_claude_md.saved_toast'), 'ok'); }
-    else       { st.textContent = '\u274c ' + t('config_claude_md.save_error'); toast(t('common.error'), 'err'); }
-  } catch(e) { toast(e.message, 'err'); }
-}
-
 // ── Memory Rebuild ─────────────────────────────────────────────────────────
 let _rebuildSSE = null;
 let _memStats   = [];

@@ -1,11 +1,10 @@
 // app.js – Tab-Wechsel, Init, globaler State, SSE-Reconnect
-// Globals: currentInstance, currentViewMode, currentMdInst, sse, cfg
+// Globals: currentInstance, currentViewMode, sse, cfg
 // INSTANCES is set in index.html from Jinja2
 
 let currentInstance = '__all__';     // unified instance (chat + logs)
 let currentViewMode = 'live';        // 'live' | 'archiv'
 let currentLogCat   = 'memory-ops';  // kept for legacy compat
-let currentMdInst   = INSTANCES[0];
 let sse             = null;
 let cfg             = null;
 
@@ -154,7 +153,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     initConversationsView();
     loadStatus();
-    loadClaudeMd(currentMdInst);
     refreshWaStatus();
   });
 });

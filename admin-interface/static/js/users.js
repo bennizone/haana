@@ -105,21 +105,32 @@ function renderUserCard(u) {
       </div>
       <!-- CLAUDE.md Inline-Editor -->
       <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
           <span style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">CLAUDE.md</span>
-          <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;"
-            onclick="toggleUserClaudeMd('${escAttr(u.id)}')">\u270e ${t('users.edit_claude_md')}</button>
-          <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;"
-            onclick="loadDefaultClaudeMd('${escAttr(u.id)}')">\u21ba ${t('users.load_role_default')}</button>
-          <span id="uf-${escAttr(u.id)}-md-status" style="font-size:11px;color:var(--muted);"></span>
+          <span id="uf-${escAttr(u.id)}-md-status" style="font-size:11px;color:var(--muted);flex:1;min-width:0;"></span>
         </div>
+        <!-- Preview (always visible when card is expanded, shows first lines) -->
+        <div id="uf-${escAttr(u.id)}-md-preview-wrap"
+             style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;cursor:pointer;margin-bottom:8px;"
+             onclick="openUserClaudeMdEditor('${escAttr(u.id)}')"
+             title="${t('users.claude_md_preview')}">
+          <pre id="uf-${escAttr(u.id)}-md-preview"
+               style="margin:0;font-family:var(--mono);font-size:11px;color:var(--muted);max-height:80px;overflow:hidden;white-space:pre-wrap;word-break:break-word;">${t('common.loading')}</pre>
+        </div>
+        <!-- Full editor (toggled) -->
         <div id="uf-${escAttr(u.id)}-md-editor" style="display:none;">
           <textarea id="uf-${escAttr(u.id)}-md-content" spellcheck="false"
-            style="width:100%;min-height:260px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:10px;font-family:var(--mono);font-size:12px;resize:vertical;"></textarea>
-          <div style="display:flex;gap:8px;margin-top:8px;">
+            style="width:100%;min-height:260px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:10px;font-family:var(--mono);font-size:12px;resize:vertical;box-sizing:border-box;"></textarea>
+          <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
             <button class="btn btn-primary" onclick="saveUserClaudeMd('${escAttr(u.id)}')">${t('users.save_claude_md')}</button>
-            <button class="btn btn-secondary" onclick="document.getElementById('uf-${escAttr(u.id)}-md-editor').style.display='none'">${t('common.close')}</button>
+            <button class="btn btn-secondary" onclick="loadDefaultClaudeMd('${escAttr(u.id)}')">\u21ba ${t('users.load_role_default')}</button>
+            <button class="btn btn-secondary" onclick="closeUserClaudeMdEditor('${escAttr(u.id)}')">${t('users.claude_md_collapse')}</button>
           </div>
+        </div>
+        <!-- Edit button (visible when editor is closed) -->
+        <div id="uf-${escAttr(u.id)}-md-edit-btn-wrap">
+          <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;"
+            onclick="openUserClaudeMdEditor('${escAttr(u.id)}')">\u270e ${t('users.claude_md_expand')}</button>
         </div>
       </div>
     </div>
@@ -149,7 +160,69 @@ function toggleUserExpand(uid) {
   const open = el.style.display !== 'none';
   el.style.display = open ? 'none' : 'block';
   if (btn) btn.textContent = open ? '\u270e ' + t('users.edit') : '\u25b2 ' + t('users.close_edit');
-  if (!open) loadHaUsersForCard(uid);
+  if (!open) {
+    loadHaUsersForCard(uid);
+    loadUserClaudeMdPreview(uid);
+  }
+}
+
+async function loadUserClaudeMdPreview(uid) {
+  const preview = document.getElementById(`uf-${uid}-md-preview`);
+  const status  = document.getElementById(`uf-${uid}-md-status`);
+  if (!preview) return;
+  try {
+    const r = await fetch(`/api/claude-md/${uid}`);
+    if (r.ok) {
+      const d = await r.json();
+      const content = d.content || '';
+      // Store full content for the editor
+      const contentEl = document.getElementById(`uf-${uid}-md-content`);
+      if (contentEl) contentEl.value = content;
+      // Show first 5 lines in preview
+      const lines = content.split('\n').slice(0, 5);
+      const hasMore = content.split('\n').length > 5;
+      preview.textContent = lines.join('\n') + (hasMore ? '\n\u2026' : '');
+    } else {
+      preview.textContent = t('users.not_found');
+    }
+  } catch(e) {
+    preview.textContent = '\u2717 ' + e.message;
+    if (status) { status.textContent = e.message; status.style.color = 'var(--red)'; }
+  }
+}
+
+function openUserClaudeMdEditor(uid) {
+  const editor     = document.getElementById(`uf-${uid}-md-editor`);
+  const previewWrap = document.getElementById(`uf-${uid}-md-preview-wrap`);
+  const editBtnWrap = document.getElementById(`uf-${uid}-md-edit-btn-wrap`);
+  if (!editor) return;
+  // If content not yet loaded, fetch first
+  const contentEl = document.getElementById(`uf-${uid}-md-content`);
+  if (contentEl && !contentEl.value) {
+    fetch(`/api/claude-md/${uid}`).then(r => r.ok ? r.json() : {content:''}).then(d => {
+      contentEl.value = d.content || '';
+    }).catch(() => {});
+  }
+  editor.style.display      = 'block';
+  if (previewWrap) previewWrap.style.display = 'none';
+  if (editBtnWrap) editBtnWrap.style.display = 'none';
+}
+
+function closeUserClaudeMdEditor(uid) {
+  const editor     = document.getElementById(`uf-${uid}-md-editor`);
+  const previewWrap = document.getElementById(`uf-${uid}-md-preview-wrap`);
+  const editBtnWrap = document.getElementById(`uf-${uid}-md-edit-btn-wrap`);
+  if (editor) editor.style.display = 'none';
+  if (previewWrap) previewWrap.style.display = '';
+  if (editBtnWrap) editBtnWrap.style.display = '';
+  // Refresh preview with latest content from textarea
+  const contentEl = document.getElementById(`uf-${uid}-md-content`);
+  const preview   = document.getElementById(`uf-${uid}-md-preview`);
+  if (contentEl && preview) {
+    const lines = contentEl.value.split('\n').slice(0, 5);
+    const hasMore = contentEl.value.split('\n').length > 5;
+    preview.textContent = lines.join('\n') + (hasMore ? '\n\u2026' : '');
+  }
 }
 
 async function loadHaUsersForCard(uid) {
@@ -216,21 +289,12 @@ async function saveUserEdit(uid) {
 
 async function toggleUserClaudeMd(uid) {
   const editor = document.getElementById(`uf-${uid}-md-editor`);
-  const status = document.getElementById(`uf-${uid}-md-status`);
   if (!editor) return;
-  if (editor.style.display !== 'none') { editor.style.display = 'none'; return; }
-  try {
-    const r = await fetch(`/api/claude-md/${uid}`);
-    if (r.ok) {
-      const d = await r.json();
-      document.getElementById(`uf-${uid}-md-content`).value = d.content || '';
-      editor.style.display = 'block';
-    } else {
-      if (status) { status.textContent = t('users.not_found'); status.style.color = 'var(--yellow)'; }
-    }
-  } catch(e) {
-    if (status) { status.textContent = e.message; status.style.color = 'var(--red)'; }
+  if (editor.style.display !== 'none') {
+    closeUserClaudeMdEditor(uid);
+    return;
   }
+  openUserClaudeMdEditor(uid);
 }
 
 async function loadDefaultClaudeMd(uid) {
@@ -240,10 +304,9 @@ async function loadDefaultClaudeMd(uid) {
   try {
     const r = await fetch(`/api/claude-md-template/${tpl}`);
     const d = await r.json();
-    const editor  = document.getElementById(`uf-${uid}-md-editor`);
     const content = document.getElementById(`uf-${uid}-md-content`);
     if (content) content.value = d.content || '';
-    if (editor)  editor.style.display = 'block';
+    openUserClaudeMdEditor(uid);
     if (status)  { status.textContent = t('users.template_loaded', {tpl: d.template}); status.style.color = 'var(--green)'; setTimeout(() => { status.textContent = ''; }, 3000); }
   } catch(e) {
     if (status) { status.textContent = e.message; status.style.color = 'var(--red)'; }

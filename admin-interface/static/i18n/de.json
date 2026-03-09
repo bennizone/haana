@@ -129,8 +129,7 @@
       "whatsapp": "WhatsApp",
       "infra": "Infra",
       "logs": "Logs",
-      "retention": "Retention",
-      "claude_md": "CLAUDE.md"
+      "retention": "Retention"
     }
   },
   "config_llm": {
@@ -392,14 +391,6 @@
     "dream_process": "Traumprozess",
     "dream_process_desc": "Nächtliche Konsolidierung: Konversationen werden zu dauerhaften Erinnerungen verdichtet und verknüpft."
   },
-  "config_claude_md": {
-    "title": "CLAUDE.md Editor",
-    "save": "Speichern",
-    "saved": "Gespeichert – sofort aktiv",
-    "save_error": "Fehler beim Speichern",
-    "loaded": "{instance}/CLAUDE.md geladen",
-    "saved_toast": "CLAUDE.md gespeichert"
-  },
   "config_planned": {
     "ha_subs": "HA Subscriptions",
     "ha_subs_desc": "Echtzeit-Subscriptions auf HA-Ereignisse (Türklingel, Bewegungsmelder, …). Der Agent wird proaktiv benachrichtigt.",
@@ -457,6 +448,9 @@
     "template_loaded": "Template \"{tpl}\" geladen",
     "claude_md_saved": "CLAUDE.md für {uid} gespeichert",
     "claude_md_saved_short": "Gespeichert",
+    "claude_md_preview": "CLAUDE.md Vorschau",
+    "claude_md_expand": "Bearbeiten",
+    "claude_md_collapse": "Schließen",
     "language": "Antwortsprache",
     "language_help": "Sprache in der der Assistent antwortet"
   },
