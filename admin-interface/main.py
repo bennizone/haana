@@ -237,18 +237,10 @@ TEMPLATES_DIR   = INST_DIR / "templates"
 # ── Default-Konfiguration ────────────────────────────────────────────────────
 
 DEFAULT_CONFIG = {
-    "providers": [
-        {"id": "anthropic-1", "name": "Anthropic (Primär)", "type": "anthropic", "auth_method": "api_key", "url": "", "key": ""},
-        {"id": "ollama-home",  "name": "Ollama (Lokal)",     "type": "ollama",
-         "url": os.environ.get("OLLAMA_URL", "http://localhost:11434"), "key": ""},
-    ],
-    "llms": [
-        {"id": "claude-primary",  "name": "Claude Sonnet",   "provider_id": "anthropic-1", "model": "claude-sonnet-4-6"},
-        {"id": "claude-fallback", "name": "Claude Haiku",    "provider_id": "anthropic-1", "model": "claude-haiku-4-5-20251001"},
-        {"id": "ollama-extract",  "name": "Ministral Lokal", "provider_id": "ollama-home", "model": "ministral-3-32k:3b"},
-    ],
+    "providers": [],
+    "llms": [],
     "memory": {
-        "extraction_llm":          "ollama-extract",
+        "extraction_llm":          "",
         "extraction_llm_fallback": "",
         "context_enrichment":      False,
         "context_before":          3,
@@ -281,34 +273,10 @@ DEFAULT_CONFIG = {
     },
     "users": [
         {
-            "id": "alice", "display_name": "Alice", "role": "admin",
-            "language": "de",
-            "primary_llm": "claude-primary", "fallback_llm": "claude-fallback",
-
-            "ha_user": "alice", "whatsapp_phone": "",
-            "api_port": 8001, "container_name": "haana-instanz-alice-1",
-            "claude_md_template": "admin",
-            "caldav_url": "", "caldav_user": "", "caldav_pass": "",
-            "imap_host": "", "imap_port": 993, "imap_user": "", "imap_pass": "",
-            "smtp_host": "", "smtp_port": 587, "smtp_user": "", "smtp_pass": "",
-        },
-        {
-            "id": "bob", "display_name": "Bob", "role": "user",
-            "language": "de",
-            "primary_llm": "claude-primary", "fallback_llm": "claude-fallback",
-
-            "ha_user": "bob", "whatsapp_phone": "",
-            "api_port": 8002, "container_name": "haana-instanz-bob-1",
-            "claude_md_template": "user",
-            "caldav_url": "", "caldav_user": "", "caldav_pass": "",
-            "imap_host": "", "imap_port": 993, "imap_user": "", "imap_pass": "",
-            "smtp_host": "", "smtp_port": 587, "smtp_user": "", "smtp_pass": "",
-        },
-        {
             "id": "ha-assist", "display_name": "HAANA Voice", "role": "voice",
             "system": True,
             "language": "de",
-            "primary_llm": "ollama-extract", "fallback_llm": "",
+            "primary_llm": "", "fallback_llm": "",
 
             "ha_user": "", "whatsapp_phone": "",
             "api_port": 8003, "container_name": "haana-instanz-ha-assist-1",
@@ -321,7 +289,7 @@ DEFAULT_CONFIG = {
             "id": "ha-advanced", "display_name": "HAANA Advanced", "role": "voice-advanced",
             "system": True,
             "language": "de",
-            "primary_llm": "claude-primary", "fallback_llm": "",
+            "primary_llm": "", "fallback_llm": "",
 
             "ha_user": "", "whatsapp_phone": "",
             "api_port": 8004, "container_name": "haana-instanz-ha-advanced-1",
@@ -351,8 +319,8 @@ DEFAULT_CONFIG = {
 # ── Hilfsfunktionen ──────────────────────────────────────────────────────────
 
 _SYSTEM_USERS = {
-    "ha-assist":   DEFAULT_CONFIG["users"][2],  # HAANA Voice
-    "ha-advanced": DEFAULT_CONFIG["users"][3],  # HAANA Advanced
+    "ha-assist":   DEFAULT_CONFIG["users"][0],  # HAANA Voice
+    "ha-advanced": DEFAULT_CONFIG["users"][1],  # HAANA Advanced
 }
 _SYSTEM_USER_IDS = set(_SYSTEM_USERS.keys())
 
@@ -854,6 +822,204 @@ async def get_claude_md_template(template_name: str):
     return {"content": tpl_path.read_text(encoding="utf-8"), "template": safe}
 
 
+# ── API: Setup Wizard ─────────────────────────────────────────────────────────
+
+@app.get("/api/setup-status")
+async def setup_status():
+    """Erkennt ob die Ersteinrichtung nötig ist (kein Provider / keine User)."""
+    cfg = load_config()
+    providers = cfg.get("providers", [])
+    # Ollama braucht keinen Key – prüfe ob min. 1 Provider mit Key ODER Ollama-URL existiert
+    has_provider = any(
+        p.get("key") or (p.get("type", "").lower() == "ollama" and p.get("url"))
+        for p in providers
+    )
+    # Explizites Flag: Wizard wurde abgeschlossen
+    setup_done = cfg.get("setup_done", False)
+    users = [u for u in cfg.get("users", []) if u.get("id") not in _SYSTEM_USER_IDS]
+
+    if setup_done:
+        return {"needs_setup": False}
+    if not providers or not has_provider:
+        return {"needs_setup": True, "step": 1}
+    if not users:
+        return {"needs_setup": True, "step": 2}
+    return {"needs_setup": False}
+
+
+@app.get("/api/supervisor/addons")
+async def supervisor_addons():
+    """Listet installierte Add-ons via HA Supervisor API (nur im Add-on-Modus)."""
+    supervisor_token = os.environ.get("SUPERVISOR_TOKEN", "")
+    if not supervisor_token:
+        return {"ok": False, "addon_mode": False, "addons": []}
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            r = await client.get(
+                "http://supervisor/addons",
+                headers={"Authorization": f"Bearer {supervisor_token}"},
+            )
+            r.raise_for_status()
+            data = r.json().get("data", {})
+            addons = data.get("addons", [])
+            result = [
+                {"slug": a.get("slug", ""), "name": a.get("name", ""), "state": a.get("state", "")}
+                for a in addons
+            ]
+            return {"ok": True, "addon_mode": True, "addons": result}
+    except Exception as e:
+        return {"ok": False, "addon_mode": True, "addons": [], "error": str(e)[:200]}
+
+
+@app.get("/api/supervisor/self")
+async def supervisor_self():
+    """Liefert Infos über das eigene Add-on (Hostname, Ingress-URL etc.)."""
+    supervisor_token = os.environ.get("SUPERVISOR_TOKEN", "")
+    if not supervisor_token:
+        return {"ok": False, "error": "Not running as add-on"}
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            r = await client.get(
+                "http://supervisor/addons/self/info",
+                headers={"Authorization": f"Bearer {supervisor_token}"},
+            )
+            r.raise_for_status()
+            data = r.json().get("data", {})
+            return {
+                "ok": True,
+                "hostname": data.get("hostname", ""),
+                "ingress_url": data.get("ingress_url", ""),
+                "port": 8080,
+            }
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
+
+
+@app.post("/api/setup/complete")
+async def setup_complete(request: Request):
+    """Schließt den Setup-Wizard ab: Provider, LLMs, User, System-Agents konfigurieren."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Ungültiges JSON")
+
+    cfg = load_config()
+
+    # 1. Providers setzen
+    if "providers" in body:
+        cfg["providers"] = body["providers"]
+
+    # 2. LLMs setzen
+    if "llms" in body:
+        cfg["llms"] = body["llms"]
+
+    # 3. User anlegen (mit Defaults)
+    if "users" in body:
+        existing_ports = [u.get("api_port", 0) for u in cfg.get("users", [])]
+        for wu in body["users"]:
+            uid = wu.get("id", "").strip().lower()
+            if not uid or uid in _SYSTEM_USER_IDS:
+                continue
+            # Nur anlegen wenn noch nicht vorhanden
+            if any(u["id"] == uid for u in cfg.get("users", [])):
+                continue
+            port = _find_free_port(existing_ports)
+            existing_ports.append(port)
+            user = {
+                "id":                  uid,
+                "display_name":        wu.get("display_name", uid.capitalize()),
+                "role":                wu.get("role", "admin"),
+                "language":            wu.get("language", "de"),
+                "primary_llm":         wu.get("primary_llm", ""),
+                "fallback_llm":        wu.get("fallback_llm", ""),
+                "ha_user":             wu.get("ha_user", uid),
+                "whatsapp_phone":      wu.get("whatsapp_phone", ""),
+                "api_port":            port,
+                "container_name":      f"haana-instanz-{uid}-1",
+                "claude_md_template":  wu.get("claude_md_template", "admin" if wu.get("role") == "admin" else "user"),
+                "caldav_url": "", "caldav_user": "", "caldav_pass": "",
+                "imap_host": "", "imap_port": 993, "imap_user": "", "imap_pass": "",
+                "smtp_host": "", "smtp_port": 587, "smtp_user": "", "smtp_pass": "",
+            }
+            cfg.setdefault("users", []).append(user)
+
+    # 4. System-User LLMs zuweisen
+    ha_assist_llm = body.get("ha_assist_llm", "")
+    ha_advanced_llm = body.get("ha_advanced_llm", "")
+    for u in cfg.get("users", []):
+        if u["id"] == "ha-assist" and ha_assist_llm:
+            u["primary_llm"] = ha_assist_llm
+        if u["id"] == "ha-advanced" and ha_advanced_llm:
+            u["primary_llm"] = ha_advanced_llm
+
+    # 5. Memory extraction LLM
+    extraction_llm = body.get("extraction_llm", "")
+    if extraction_llm:
+        cfg.setdefault("memory", {})["extraction_llm"] = extraction_llm
+
+    # 6. Dream-Einstellungen
+    if "dream_enabled" in body:
+        cfg.setdefault("dream", {})["enabled"] = bool(body["dream_enabled"])
+
+    # 7. Services (MCP etc.)
+    if "services" in body:
+        svc = cfg.setdefault("services", {})
+        for k, v in body["services"].items():
+            svc[k] = v
+
+    # System-User sicherstellen
+    _ensure_system_users(cfg)
+    _ensure_user_defaults(cfg)
+
+    # 8. CLAUDE.md für jeden neuen User generieren
+    for u in cfg.get("users", []):
+        uid = u.get("id", "")
+        if not uid:
+            continue
+        claude_md_dir = INST_DIR / uid
+        claude_md_dir.mkdir(parents=True, exist_ok=True)
+        claude_md_path = claude_md_dir / "CLAUDE.md"
+        if not claude_md_path.exists():
+            content = _render_claude_md(
+                u.get("claude_md_template", "user"),
+                u.get("display_name", uid.capitalize()),
+                uid,
+                u.get("ha_user", uid),
+                u.get("language", "de"),
+            )
+            claude_md_path.write_text(content, encoding="utf-8")
+
+    # 9. Setup als abgeschlossen markieren + Speichern
+    cfg["setup_done"] = True
+    save_config(cfg)
+
+    # 10. Agents starten
+    started = []
+    errors = []
+    for u in cfg.get("users", []):
+        uid = u.get("id", "")
+        if not uid:
+            continue
+        try:
+            result = await _agent_manager.start_agent(u, cfg)
+            if result.get("ok"):
+                started.append(uid)
+            else:
+                errors.append({"id": uid, "error": result.get("error", "unbekannt")})
+        except Exception as e:
+            errors.append({"id": uid, "error": str(e)[:200]})
+
+    # Rebuild-State erweitern
+    for u in cfg.get("users", []):
+        uid = u.get("id", "")
+        if uid and uid not in _rebuild:
+            _rebuild[uid] = {"status": "idle", "done": 0, "total": 0, "started": 0.0, "error": ""}
+
+    return {"ok": True, "started": started, "errors": errors}
+
+
 # ── API: Status ───────────────────────────────────────────────────────────────
 
 @app.get("/api/status")
@@ -916,6 +1082,30 @@ async def get_status():
                 "days": len(days),
                 "latest": days[0].name.replace(".jsonl", "") if days else None,
             }
+
+    # Prescriptive Hints
+    hints: list[dict] = []
+    providers = cfg.get("providers", [])
+    has_provider = any(
+        p.get("key") or (p.get("type", "").lower() == "ollama" and p.get("url"))
+        for p in providers
+    )
+    if not providers or not has_provider:
+        hints.append({"type": "error", "msg": "no_provider_key", "action": "config_providers"})
+    non_system_users = [u for u in cfg.get("users", []) if u.get("id") not in _SYSTEM_USER_IDS]
+    if not non_system_users:
+        hints.append({"type": "warning", "msg": "no_users", "action": "users"})
+    # Agents offline prüfen
+    if non_system_users and _agent_manager:
+        all_offline = True
+        for u in non_system_users:
+            s = _agent_manager.agent_status(u["id"])
+            if s and s not in ("offline", "stopped", "unknown", "not_found"):
+                all_offline = False
+                break
+        if all_offline:
+            hints.append({"type": "info", "msg": "agents_offline", "action": "users"})
+    status["hints"] = hints
 
     return status
 
@@ -1399,8 +1589,8 @@ async def ha_stt_tts():
 async def ha_users():
     """Listet Home Assistant Person-Entitäten für User-Mapping auf."""
     cfg = load_config()
-    ha_url   = cfg.get("services", {}).get("ha_url",   "").rstrip("/")
-    ha_token = cfg.get("services", {}).get("ha_token", "").strip()
+    ha_url   = (cfg.get("services", {}).get("ha_url", "") or os.environ.get("HA_URL", "")).rstrip("/")
+    ha_token = (cfg.get("services", {}).get("ha_token", "") or os.environ.get("SUPERVISOR_TOKEN", "")).strip()
     if not ha_url or not ha_token:
         return {"ok": False, "error": "HA URL oder Token nicht konfiguriert", "users": []}
     import httpx
@@ -1419,7 +1609,7 @@ async def ha_users():
                 if eid.startswith("person."):
                     uid  = eid[len("person."):]
                     name = state.get("attributes", {}).get("friendly_name", uid)
-                    persons.append({"id": uid, "display_name": name})
+                    persons.append({"id": eid, "name": name, "friendly_name": name, "display_name": name})
             return {"ok": True, "users": persons}
     except httpx.ConnectError:
         return {"ok": False, "error": "HA nicht erreichbar", "users": []}

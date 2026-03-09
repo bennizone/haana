@@ -159,7 +159,9 @@ def _build_agent_env(user: dict, cfg: dict, resolve_llm_fn, find_ollama_url_fn) 
     embed_type = "ollama"
     embed_url = ""
     embed_key = ""
-    if embed_provider_id:
+    if embed_provider_id == "__local__":
+        embed_type = "fastembed"
+    elif embed_provider_id:
         for prov in cfg.get("providers", []):
             if prov.get("id") == embed_provider_id:
                 embed_type = prov.get("type", "ollama")

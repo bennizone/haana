@@ -1,4 +1,4 @@
-// app.js – Tab-Wechsel, Init, globaler State, SSE-Reconnect
+// app.js – Tab-Wechsel, Init, globaler State, SSE-Reconnect (v8)
 // Globals: currentInstance, currentViewMode, sse, cfg
 // INSTANCES is set in index.html from Jinja2
 
@@ -141,18 +141,56 @@ function scrollToRebuild() {
   }, 100);
 }
 
+// ── HA Ingress Detection ────────────────────────────────────────────────────
+(function() {
+  const isHaIngress = window.location.pathname.includes('/api/hassio_ingress/')
+    || window.parent !== window;
+  if (isHaIngress) {
+    document.documentElement.classList.add('ha-theme');
+    // Try to read HA theme (light/dark) from parent frame
+    try {
+      const haTheme = window.parent?.document?.documentElement?.getAttribute('data-theme');
+      if (haTheme === 'light') document.documentElement.classList.add('ha-theme-light');
+    } catch(_) { /* cross-origin, ignore */ }
+  }
+})();
+
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  I18n.load().then(() => {
+  // Auto-detect browser language as default if no preference stored
+  const storedLang  = localStorage.getItem('haana_lang');
+  const browserLang = navigator.language?.startsWith('de') ? 'de' : 'en';
+  const initLang    = storedLang || browserLang;
+
+  I18n.load(initLang).then(() => {
     const sel = document.getElementById('lang-selector');
     if (sel) sel.value = I18n.getLang();
 
-    // Default: first instance, live mode
-    currentInstance = INSTANCES.length > 0 ? INSTANCES[0] : '__all__';
-    currentViewMode = 'live';
-
-    initConversationsView();
-    loadStatus();
-    refreshWaStatus();
+    // Check if setup is needed
+    fetch('/api/setup-status')
+      .then(r => r.ok ? r.json() : { needs_setup: false })
+      .then(d => {
+        if (d && d.needs_setup) {
+          // Hide normal UI
+          document.querySelector('header').style.display = 'none';
+          document.querySelector('.tabs').style.display = 'none';
+          document.querySelectorAll('.panel').forEach(p => p.style.display = 'none');
+          // Show wizard
+          wizardInit();
+        } else {
+          _appInit();
+        }
+      })
+      .catch(() => _appInit());
   });
 });
+
+function _appInit() {
+  // Default: first instance, live mode
+  currentInstance = INSTANCES.length > 0 ? INSTANCES[0] : '__all__';
+  currentViewMode = 'live';
+
+  initConversationsView();
+  loadStatus();
+  refreshWaStatus();
+}

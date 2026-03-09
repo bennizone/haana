@@ -4,9 +4,60 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HAANA Admin</title>
-<link rel="stylesheet" href="/static/css/admin.css?v=7">
+<link rel="stylesheet" href="/static/css/admin.css?v=8">
 </head>
 <body>
+
+<!-- ════════════════════════════════════════════════ SETUP WIZARD OVERLAY -->
+<div id="wizard-overlay" class="wizard-overlay" style="display:none;">
+  <div class="wizard-container">
+    <!-- Header -->
+    <div class="wizard-header">
+      <div class="wizard-logo">HAANA</div>
+      <div class="wizard-subtitle" data-i18n="wizard.setup_title">Einrichtung</div>
+    </div>
+
+    <!-- Step Indicator -->
+    <div class="wizard-steps">
+      <div class="wizard-step wizard-step-active" id="wiz-step-1">
+        <div class="wizard-step-num">1</div>
+        <div class="wizard-step-label" data-i18n="wizard.step1_label">KI-Dienste</div>
+      </div>
+      <div class="wizard-step-connector"></div>
+      <div class="wizard-step" id="wiz-step-2">
+        <div class="wizard-step-num">2</div>
+        <div class="wizard-step-label" data-i18n="wizard.step2_label">Haushalt</div>
+      </div>
+      <div class="wizard-step-connector"></div>
+      <div class="wizard-step" id="wiz-step-3">
+        <div class="wizard-step-num">3</div>
+        <div class="wizard-step-label" data-i18n="wizard.step3_label">Extras</div>
+      </div>
+    </div>
+
+    <!-- Step Content -->
+    <div id="wizard-content" class="wizard-content">
+      <!-- filled by wizard.js -->
+    </div>
+
+    <!-- Navigation -->
+    <div class="wizard-nav" id="wizard-nav">
+      <button class="btn btn-secondary" id="wiz-back-btn" style="display:none;"
+              onclick="_wizGoTo(_wizState.step - 1)" data-i18n="wizard.back">
+        &#8592; Zurück
+      </button>
+      <div style="flex:1;"></div>
+      <button class="btn btn-primary" id="wiz-next-btn" disabled
+              onclick="_wizGoTo(_wizState.step + 1)" data-i18n="wizard.next">
+        Weiter &#8594;
+      </button>
+      <button class="btn btn-primary" id="wiz-finish-btn" style="display:none;"
+              onclick="wizFinish()" data-i18n="wizard.finish">
+        HAANA starten &#10003;
+      </button>
+    </div>
+  </div>
+</div>
 
 <header>
   <div class="status-dot" id="header-dot" title="System-Status"></div>
@@ -900,7 +951,10 @@
 <script src="/static/js/modal.js?v=3"></script>
 
 <!-- App-Kern (globaler State, Tabs, Init) -->
-<script src="/static/js/app.js?v=7"></script>
+<script src="/static/js/app.js?v=8"></script>
+
+<!-- Setup Wizard -->
+<script src="/static/js/wizard.js?v=1"></script>
 
 <!-- Feature-Module -->
 <script src="/static/js/chat.js?v=5"></script>

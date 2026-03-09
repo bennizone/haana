@@ -53,20 +53,15 @@ def _import_main():
 def test_default_config_has_providers():
     main = _import_main()
     assert "providers" in main.DEFAULT_CONFIG
-    assert len(main.DEFAULT_CONFIG["providers"]) >= 2
-    for p in main.DEFAULT_CONFIG["providers"]:
-        assert "id" in p
-        assert "type" in p
+    # New installs ship with empty providers (configured via setup wizard)
+    assert isinstance(main.DEFAULT_CONFIG["providers"], list)
 
 
 def test_default_config_has_llms():
     main = _import_main()
     assert "llms" in main.DEFAULT_CONFIG
-    assert len(main.DEFAULT_CONFIG["llms"]) >= 2
-    for l in main.DEFAULT_CONFIG["llms"]:
-        assert "id" in l
-        assert "provider_id" in l
-        assert "model" in l
+    # New installs ship with empty llms (configured via setup wizard)
+    assert isinstance(main.DEFAULT_CONFIG["llms"], list)
 
 
 def test_default_config_no_llm_providers():
