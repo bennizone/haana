@@ -1,4 +1,4 @@
-// wizard.js – Setup-Wizard (v2)
+// wizard.js – Setup-Wizard (v3)
 // Zeigt sich beim ersten Start wenn needs_setup === true
 // Unterstützt auch wiederholbare Nutzung (extend / fresh)
 
@@ -64,6 +64,7 @@ function wizardInit() {
   if (nav) nav.style.display = '';
 
   overlay.style.display = 'flex';
+  _wizUpdateCloseBtn();
   _wizRenderStep(1);
 }
 
@@ -84,6 +85,9 @@ async function wizardInitExtend() {
   _wizState.users = [];
 
   if (currentCfg) {
+    // Pre-fill existing LLMs first (must happen before _wizRebuildLlmList)
+    _wizState.existingLlms = currentCfg.llms || [];
+
     // Pre-fill providers as "existing" (key empty – backend keeps existing key)
     (currentCfg.providers || []).forEach(p => {
       _wizState.providers.push({
@@ -112,9 +116,6 @@ async function wizardInitExtend() {
       });
     });
 
-    // Pre-fill existing LLMs (für Extend-Modus: Modell-Optionen in Dropdowns)
-    _wizState.existingLlms = currentCfg.llms || [];
-
     // Pre-fill system LLMs
     if (currentCfg.ha_assist_llm)  _wizState.haAssistLlm   = currentCfg.ha_assist_llm;
     if (currentCfg.ha_advanced_llm) _wizState.haAdvancedLlm = currentCfg.ha_advanced_llm;
@@ -134,6 +135,7 @@ async function wizardInitExtend() {
   if (nav) nav.style.display = '';
 
   overlay.style.display = 'flex';
+  _wizUpdateCloseBtn();
   _wizRenderStep(1);
 }
 
@@ -282,8 +284,9 @@ function _wizProviderCardHtml(p, i) {
         oninput="_wizState.providers[${i}].url=this.value;_wizState.providers[${i}].tested=false;_wizUpdateNextBtn();">
     </div>` : keyField}
     <div style="display:flex;gap:var(--sp-2);align-items:center;">
-      <button class="btn btn-secondary btn-sm" onclick="wizTestProvider(${i})" id="wiz-prov-${i}-test-btn">
-        ${t('wizard.test_connection')}
+      <button class="btn btn-secondary btn-sm" onclick="wizTestProvider(${i})" id="wiz-prov-${i}-test-btn"
+        title="${p.existing ? t('wizard.provider_retest_title') : ''}">
+        ${p.existing ? t('wizard.provider_retest') : t('wizard.test_connection')}
       </button>
       <span id="wiz-prov-${i}-status">${status}</span>
     </div>
@@ -921,4 +924,33 @@ function wizClose() {
   document.querySelectorAll('.panel').forEach(p => p.style.removeProperty('display'));
   // Reload page to get fresh state
   window.location.reload();
+}
+
+// Close wizard without saving (extend mode: discard changes, return to normal UI)
+function wizardClose() {
+  const overlay = document.getElementById('wizard-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+// Render or remove the close button in the wizard header based on current mode
+function _wizUpdateCloseBtn() {
+  const header = document.querySelector('#wizard-overlay .wizard-header');
+  if (!header) return;
+  let closeBtn = document.getElementById('wiz-close-btn');
+  if (_wizState.mode === 'extend') {
+    if (!closeBtn) {
+      closeBtn = document.createElement('button');
+      closeBtn.id = 'wiz-close-btn';
+      closeBtn.className = 'btn btn-secondary btn-sm';
+      closeBtn.style.cssText = 'position:absolute;top:var(--sp-4);right:var(--sp-4);font-size:13px;';
+      closeBtn.setAttribute('title', t('wizard.close_btn'));
+      closeBtn.onclick = wizardClose;
+      closeBtn.textContent = '\u2715 ' + t('wizard.close_btn');
+      // Make header position:relative if not already
+      header.style.position = 'relative';
+      header.appendChild(closeBtn);
+    }
+  } else {
+    if (closeBtn) closeBtn.remove();
+  }
 }

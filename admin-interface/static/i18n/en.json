@@ -666,7 +666,10 @@
     "restart_fresh_warning": "Warning: All providers, users and LLMs will be deleted!",
     "extend_provider_existing": "Existing",
     "extend_title": "Extend configuration",
-    "api_key_replace_placeholder": "Enter new key (leave empty = keep unchanged)"
+    "api_key_replace_placeholder": "Enter new key (leave empty = keep unchanged)",
+    "close_btn": "Close",
+    "provider_retest": "Test connection",
+    "provider_retest_title": "Optional: re-test connection and reload models"
   },
   "status_hints": {
     "no_provider": "No LLM provider configured. Go to Config > Providers.",

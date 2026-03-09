@@ -666,7 +666,10 @@
     "restart_fresh_warning": "Achtung: Alle Provider, Benutzer und LLMs werden gelöscht!",
     "extend_provider_existing": "Vorhanden",
     "extend_title": "Konfiguration erweitern",
-    "api_key_replace_placeholder": "Neuen Key eingeben (leer lassen = unverändert)"
+    "api_key_replace_placeholder": "Neuen Key eingeben (leer lassen = unverändert)",
+    "close_btn": "Schließen",
+    "provider_retest": "Verbindung testen",
+    "provider_retest_title": "Optional: Verbindung neu testen und Modelle nachladen"
   },
   "status_hints": {
     "no_provider": "Kein LLM-Provider konfiguriert. Gehe zu Konfiguration > Provider.",
