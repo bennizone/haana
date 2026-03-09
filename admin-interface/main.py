@@ -47,7 +47,7 @@ from urllib.parse import urlparse, parse_qs
 import glob as _glob
 
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
