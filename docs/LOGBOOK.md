@@ -4,6 +4,28 @@ Chronologische Dokumentation der wichtigsten Aenderungen am HAANA-Projekt.
 
 ---
 
+## 2026-03-09 — Traumprozess (Dream Process)
+
+**Aenderungen:**
+- `admin-interface/main.py`: `_dream_state` (globaler Laufzustand), `_dream_scheduler()` (APScheduler-Job, configurabler Zeitplan), `_run_dream()` (Memory-Konsolidierung + Tages-Zusammenfassung), `_build_dream_config()` (Konfigurationsaufbau aus config.json)
+- 4 neue API-Endpunkte: `GET /api/dream/status`, `POST /api/dream/trigger`, `GET /api/dream/config`, `POST /api/dream/config`
+- `core/agent.py`: `_extract_date_references()` (erkennt "gestern", "vorgestern", "yesterday", DD.MM.YYYY), `_load_dream_summaries()` (laedt Tages-Zusammenfassungen aus JSONL), Einbindung als Context in `run_async()`
+- `core/logger.py`: `log_dream_summary()` schreibt Tages-Zusammenfassungen nach `/data/logs/dream/{instance}/YYYY-MM-DD.jsonl`
+- `admin-interface/static/js/config.js`: Dream-UI-Funktionen (LLM-Dropdown, Zeitplan, Enable/Disable, "Dream Now"-Button)
+- `admin-interface/templates/index.html`: Dream-Konfigurationsbereich im Admin-Interface
+
+**Entscheidungen:**
+- Tages-Zusammenfassungen als JSONL-Tagebuch (ein File pro Tag pro Instanz): suchbar, inkrementell erweiterbar, kompakt
+- Datums-Referenz-Extraktion im Agent (nicht als MCP-Tool): keine Tool-Runde noetig, reagiert transparent auf natuerliche Sprache
+- "Dream Now"-Button: ermoeglicht sofortigen Trigger ohne Warten auf Scheduler — wichtig fuer Entwicklung und manuelle Konsolidierung
+- LLM konfigurierbar (nicht hardcoded): Traumprozess kann eigenes Modell nutzen (z.B. lokales Ollama), unabhaengig vom Chat-LLM
+
+**Offene Punkte:**
+- HA Schlaf-Focus-Entity als automatischer Trigger (Beide schlafen > 30min) noch nicht implementiert
+- Dream-Protokoll-Anzeige im Admin-Interface (aufklappbar) noch nicht gebaut
+
+---
+
 ## 2026-03-09 — Explicit Memory Write
 
 **Aenderungen:**

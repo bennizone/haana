@@ -119,6 +119,37 @@ def log_tool_call(
     })
 
 
+def log_dream_summary(
+    instance: str,
+    date: str,
+    summary: str,
+    consolidated: int,
+    contradictions: int,
+    duration_s: float,
+) -> None:
+    """Speichert eine Dream-Tages-Zusammenfassung als JSONL-Eintrag.
+
+    Speicherpfad: data/logs/dream/{instance}/YYYY-MM-DD.jsonl
+    """
+    root = _log_root()
+    path = root / "dream" / instance / f"{date}.jsonl"
+    record = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "instance": instance,
+        "date": date,
+        "summary": summary,
+        "consolidated": consolidated,
+        "contradictions": contradictions,
+        "duration_s": round(duration_s, 2),
+    }
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception as e:
+        _logger.error(f"[HaanaLogger] Dream-Log schreiben nach {path} fehlgeschlagen: {e}")
+
+
 def list_instances() -> list[str]:
     """Gibt alle Instanzen zurück für die Konversations-Logs existieren."""
     conv_dir = _log_root() / "conversations"

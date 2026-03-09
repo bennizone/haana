@@ -11,11 +11,14 @@ Authentifizierung läuft über die gebundelte Claude Code CLI
 Custom Tools werden als MCP-Server eingebunden (Phase 2+).
 """
 
+import json
 import os
+import re
 import asyncio
 import logging
 import signal
 import time
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -69,6 +72,61 @@ def _is_explicit_memory_request(user_message: str) -> bool:
         "behalte im kopf",
     )
     return any(p in lower for p in patterns)
+
+
+def _extract_date_references(message: str) -> list[str]:
+    """Extrahiert Datumsreferenzen aus einer Nachricht. Gibt Liste von YYYY-MM-DD zurück."""
+    dates = []
+    today = date.today()
+    lower = message.lower()
+
+    if "gestern" in lower or "yesterday" in lower:
+        dates.append((today - timedelta(days=1)).isoformat())
+    if "vorgestern" in lower:
+        dates.append((today - timedelta(days=2)).isoformat())
+
+    # Explizite Datumsangaben: "am 1.2.", "am 01.02.", "am 1.2.2026"
+    for m in re.finditer(r'(\d{1,2})\.(\d{1,2})\.?(\d{2,4})?', message):
+        day, month = int(m.group(1)), int(m.group(2))
+        year = int(m.group(3)) if m.group(3) else today.year
+        if year < 100:
+            year += 2000
+        try:
+            dates.append(date(year, month, day).isoformat())
+        except ValueError:
+            pass
+
+    return dates
+
+
+def _load_dream_summaries(instance: str, date_refs: list[str]) -> str:
+    """Lädt Dream-Zusammenfassungen für die angegebenen Daten."""
+    log_root = Path(os.environ.get("HAANA_LOG_DIR", "data/logs"))
+    dream_dir = log_root / "dream" / instance
+    if not dream_dir.exists():
+        return ""
+
+    parts = []
+    for d in date_refs:
+        fpath = dream_dir / f"{d}.jsonl"
+        if not fpath.exists():
+            continue
+        try:
+            for line in fpath.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                    summary = entry.get("summary", "")
+                    if summary:
+                        parts.append(f"[dream-diary] {d}: {summary}")
+                except json.JSONDecodeError:
+                    pass
+        except Exception:
+            pass
+
+    return "\n".join(parts)
 
 
 class HaanaAgent:
@@ -565,6 +623,14 @@ class HaanaAgent:
         # Memory: relevanten Kontext laden (in Executor – blockiert Event-Loop nicht)
         loop = asyncio.get_running_loop()
         memory_context = await loop.run_in_executor(None, self.memory.search, user_message)
+
+        # Dream-Tagebuch: bei Datumsreferenzen passende Zusammenfassungen laden
+        date_refs = _extract_date_references(user_message)
+        if date_refs:
+            dream_context = _load_dream_summaries(self.instance, date_refs)
+            if dream_context:
+                memory_context = (memory_context + "\n" + dream_context) if memory_context else dream_context
+
         parts = []
         if memory_context:
             parts.append(f"<relevante_erinnerungen>\n{memory_context}\n</relevante_erinnerungen>")

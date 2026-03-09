@@ -292,6 +292,40 @@
       </div>
     </div>
 
+    <!-- Dream Process -->
+    <div class="config-section" id="dream-section">
+      <div class="config-section-header" data-i18n="config_memory.dream_title">Traumprozess</div>
+      <div class="config-section-body">
+
+        <!-- Toggle + Uhrzeit + LLM -->
+        <div class="form-row" style="align-items:flex-end;flex-wrap:wrap;gap:14px;">
+          <div class="form-group" style="flex:0 0 auto;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="checkbox" id="dream-enabled">
+              <span data-i18n="config_memory.dream_enabled">Aktiviert</span>
+            </label>
+          </div>
+          <div class="form-group" style="flex:0 0 140px;">
+            <label data-i18n="config_memory.dream_schedule">Uhrzeit</label>
+            <input type="time" id="dream-schedule" value="02:00">
+          </div>
+          <div class="form-group" style="flex:1;min-width:180px;">
+            <label data-i18n="config_memory.dream_llm">LLM für Konsolidierung</label>
+            <select id="dream-llm"><!-- JS --></select>
+            <span style="font-size:11px;color:var(--muted);" data-i18n="config_memory.dream_llm_default">(wie Memory Extraction)</span>
+          </div>
+        </div>
+
+        <!-- Status + Aktionen -->
+        <div style="display:flex;align-items:center;gap:12px;margin-top:14px;flex-wrap:wrap;">
+          <button class="btn btn-secondary" onclick="runDreamNow()" id="dream-run-btn" data-i18n="config_memory.dream_run_now">Jetzt träumen</button>
+          <button class="btn btn-secondary" onclick="openDreamDiary()" id="dream-diary-btn" data-i18n="config_memory.dream_diary">Tagebuch</button>
+          <span id="dream-status-text" style="font-size:12px;color:var(--muted);"></span>
+        </div>
+
+      </div>
+    </div>
+
     <!-- Memory Rebuild -->
     <div class="config-section" id="rebuild-section">
       <div class="config-section-header" data-i18n="config_memory.rebuild_title">Memory Rebuild aus Konversations-Logs</div>
@@ -788,7 +822,7 @@
 
 <!-- Feature-Module -->
 <script src="/static/js/chat.js?v=4"></script>
-<script src="/static/js/config.js?v=4"></script>
+<script src="/static/js/config.js?v=5"></script>
 <script src="/static/js/users.js?v=5"></script>
 <script src="/static/js/status.js?v=3"></script>
 <script src="/static/js/logs.js?v=4"></script>

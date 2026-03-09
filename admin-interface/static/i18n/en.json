@@ -244,7 +244,21 @@
     "embedding_changed_title": "Embedding model changed",
     "embedding_changed_body": "The embedding model has been changed.\nExisting Qdrant collections are incompatible with the new model and need to be rebuilt.\n\nWithout a rebuild, memory search will not work correctly.",
     "embedding_changed_rebuild": "Go to rebuild",
-    "embedding_changed_later": "Later"
+    "embedding_changed_later": "Later",
+    "dream_title": "Dream Process",
+    "dream_enabled": "Enabled",
+    "dream_schedule": "Schedule",
+    "dream_llm": "LLM for consolidation",
+    "dream_llm_default": "same as memory extraction",
+    "dream_run_now": "Dream now",
+    "dream_status_idle": "Next run",
+    "dream_status_running": "Running...",
+    "dream_status_done": "Last run",
+    "dream_status_error": "Error",
+    "dream_consolidated": "consolidated",
+    "dream_contradictions": "contradictions resolved",
+    "dream_diary": "Diary",
+    "dream_diary_empty": "No entries yet"
   },
   "config_services": {
     "ha_title": "Home Assistant",

@@ -56,6 +56,7 @@ def _call_llm(
     import requests as req
 
     try:
+        r = None
         if extract_type == "ollama":
             url = extract_url or ollama_url
             if not url:
@@ -91,6 +92,8 @@ def _call_llm(
                         return block.get("text", "").strip()
         elif extract_type == "openai":
             url = extract_url or "https://api.openai.com/v1"
+            if not extract_key:
+                return None
             r = req.post(
                 f"{url}/chat/completions",
                 headers={
@@ -107,6 +110,8 @@ def _call_llm(
             if r.status_code == 200:
                 return r.json()["choices"][0]["message"]["content"].strip()
         elif extract_type == "gemini":
+            if not extract_key:
+                return None
             api_url = (
                 f"https://generativelanguage.googleapis.com/v1beta/"
                 f"models/{model}:generateContent?key={extract_key}"
@@ -453,6 +458,7 @@ class DreamProcess:
             )
             if success:
                 _qdrant_delete_points(self._qdrant_url, scope, [id2])
+                merged_ids.add(id1)
                 merged_ids.add(id2)
                 consolidated += 1
                 logger.debug(
@@ -545,6 +551,7 @@ class DreamProcess:
 
         # Auf max ~4000 Zeichen begrenzen (Batch-weise bei großen Collections)
         if len(entries_text) > 4000:
+            logger.warning(f"[Dream] {scope}: Contradiction-Check auf 4000 Zeichen gekürzt ({len(entries_text)} total)")
             entries_text = entries_text[:4000] + "\n[... gekürzt ...]"
 
         prompt = _CONTRADICTION_PROMPT.format(entries=entries_text.strip())

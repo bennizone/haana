@@ -866,6 +866,22 @@ Schritt 7: Privacy
 - i18n: Keys `users.language` + `users.language_hint` in de.json + en.json ergaenzt
 - i18n/Mehrsprachigkeit (Agenten-Antwortsprache): FERTIG
 
+**Weitere erledigte Aufgaben (Session 2026-03-09, Traumprozess) ✅:**
+- Traumprozess implementiert: Memory-Konsolidierung (Duplikate zusammenfuehren, Widersprueche aufloesen) via `_run_dream()` in `admin-interface/main.py`
+- Tages-Zusammenfassungen als durchsuchbares Tagebuch: `/data/logs/dream/{instance}/YYYY-MM-DD.jsonl`, geschrieben via `core/logger.py` `log_dream_summary()`
+- Konfigurierbarer Zeitplan (APScheduler), LLM-Auswahl und Enable/Disable-Toggle im Admin-Interface
+- "Dream Now"-Button fuer sofortigen manuellen Trigger (`POST /api/dream/trigger`)
+- 4 neue API-Endpunkte: `GET /api/dream/status`, `POST /api/dream/trigger`, `GET /api/dream/config`, `POST /api/dream/config`
+- Dream-Diary-Integration in `core/agent.py`: Agent beantwortet Datums-Fragen ("was habe ich am 1.2. gemacht?") durch automatisches Laden der Tages-Zusammenfassung als Context
+- Datums-Referenz-Extraktion: `_extract_date_references()` erkennt "gestern", "vorgestern", "yesterday", DD.MM.YYYY — laedt passende JSONL-Dateien via `_load_dream_summaries()`
+- Dream-UI-Abschnitt in `admin-interface/static/js/config.js` und `admin-interface/templates/index.html`
+
+**Weitere erledigte Aufgaben (Session 2026-03-09, Proaktive Benachrichtigungen) ✅:**
+- Proaktive Benachrichtigungen via Webhook: Admin-Interface empfaengt Events, loest Agent-Nachrichten aus
+
+**Weitere erledigte Aufgaben (Session 2026-03-09, Fallback-Kaskade) ✅:**
+- Fallback-LLM Kaskade bei Auth-/Connection-Fehlern: automatischer Wechsel auf naechsten LLM bei Fehler
+
 **Weitere erledigte Aufgaben (Session 2026-03-09, OAuth-Haertung) ✅:**
 - OAuth Login Flow auf `claude setup-token` umgestellt (`admin-interface/main.py`): langlebiger Token (~1 Jahr) statt kurzlebigem Session-Token
 - PTY-Spawn mit `TERM=dumb` + `NO_COLOR=1` + 500-Zeichen-Terminalbreite (gegen URL-Umbruch)
@@ -882,7 +898,7 @@ Schritt 7: Privacy
 - i18n-Key fuer "Token gueltig (langlebig)" in admin-interface JS ergaenzen
 - `{{RESPONSE_LANGUAGE}}` Platzhalter in allen CLAUDE.md-Varianten pruefen und ggf. nachpflegen
 
-**Ergebnis:** Alice chattet per WhatsApp (Text + Sprache, bidirektional). Agent kennt ihn bereits (Phase 1 Memory). STT + TTS via Nabu Casa. Admin-Interface unter `http://10.83.1.11:8080` zugänglich, responsiv, vollständig mehrsprachig (437 Keys). Claude OAuth pro Provider ohne SSH möglich — jetzt mit `setup-token` und langlebigen Tokens. 6 Provider-Typen mit typspezifischen Formularen. Provider/LLM-Trennung (`providers[]` + `llms[]`). HA Add-on Packaging vorbereitet (3 Add-ons, Dual-Mode Architektur). Env-Isolation fuer InProcess-Modus. Embedding-Mismatch-Detection. Ollama als Primary LLM nutzbar (OpenAI-kompatibler `/v1/` Endpoint). Chat-UI mit Model-Badge und aufklappbaren Memory/Tool-Details. Universeller LLM-Proxy (Fake-Ollama-API) mit Tool-Calling und Agent-Routing/Delegation. Multi-Provider Memory Extraction + Context Enrichment. Smart Rebuild mit Pre-Filtering und Pause/Resume. Log-Management (Download/Loesch-Funktion). 187 Unit-Tests. Dokumentation in `docs/`. Credential-Watcher fuer automatischen Fallback-Reset bei Token-Rotation.
+**Ergebnis:** Alice chattet per WhatsApp (Text + Sprache, bidirektional). Agent kennt ihn bereits (Phase 1 Memory). STT + TTS via Nabu Casa. Admin-Interface unter `http://10.83.1.11:8080` zugaenglich, responsiv, vollstaendig mehrsprachig. Claude OAuth pro Provider ohne SSH moeglich — `setup-token` mit langlebigen Tokens. 6 Provider-Typen mit typspezifischen Formularen. Provider/LLM-Trennung (`providers[]` + `llms[]`). HA Add-on Packaging vorbereitet (3 Add-ons, Dual-Mode Architektur). Env-Isolation fuer InProcess-Modus. Embedding-Mismatch-Detection. Ollama als Primary LLM nutzbar. Chat-UI mit Model-Badge und aufklappbaren Memory/Tool-Details. Universeller LLM-Proxy (Fake-Ollama-API) mit Tool-Calling und Agent-Routing/Delegation. Multi-Provider Memory Extraction + Context Enrichment. Smart Rebuild mit Pre-Filtering und Pause/Resume. Log-Management (Download/Loesch-Funktion). Traumprozess: Memory-Konsolidierung, Tages-Tagebuch (`/data/logs/dream/`), Datums-Referenz-Extraktion ("gestern", DD.MM.YYYY), Dream-Diary als Agent-Context. Proaktive Benachrichtigungen via Webhook. Fallback-LLM Kaskade. Dokumentation in `docs/`. Credential-Watcher fuer automatischen Fallback-Reset bei Token-Rotation.
 
 ---
 
