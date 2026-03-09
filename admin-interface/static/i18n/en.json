@@ -54,7 +54,19 @@
     "entries": "entries",
     "entries_saved": "entries saved",
     "log_saved": "Log saved – consider rebuilding memory!",
-    "error": "Error"
+    "error": "Error",
+    "manage": "Management",
+    "download_all": "Download all logs",
+    "download_system": "Download system logs",
+    "download_conversations": "Download conversations",
+    "delete_all": "Delete all logs",
+    "delete_system": "Delete system logs",
+    "delete_conversations": "Delete conversations",
+    "delete_confirm": "Really delete {scope}? This cannot be undone!",
+    "deleted_success": "{count} file(s) deleted",
+    "scope_all": "all logs",
+    "scope_system": "system logs",
+    "scope_conversations": "all conversations"
   },
   "config": {
     "save": "Save configuration",

@@ -96,6 +96,22 @@
     <div class="empty-state"><div class="icon">--</div><div data-i18n="logs.loading">Logs werden geladen...</div></div>
   </div>
 
+  <!-- Download / Löschen -->
+  <div style="margin-top:24px;">
+    <div class="section-header">
+      <span class="section-label" data-i18n="logs.manage">Verwaltung</span>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+      <button class="btn btn-secondary" onclick="downloadLogs('all')" data-i18n="logs.download_all">Alle Logs herunterladen</button>
+      <button class="btn btn-secondary" onclick="downloadLogs('system')" data-i18n="logs.download_system">System-Logs herunterladen</button>
+      <button class="btn btn-secondary" onclick="downloadLogs('conversations')" data-i18n="logs.download_conversations">Konversationen herunterladen</button>
+      <span style="width:16px;"></span>
+      <button class="btn btn-danger" onclick="confirmDeleteLogs('all')" data-i18n="logs.delete_all">Alle Logs löschen</button>
+      <button class="btn btn-danger" onclick="confirmDeleteLogs('system')" data-i18n="logs.delete_system">System-Logs löschen</button>
+      <button class="btn btn-danger" onclick="confirmDeleteLogs('conversations')" data-i18n="logs.delete_conversations">Konversationen löschen</button>
+    </div>
+  </div>
+
   <!-- Log-Dateien (editierbar) -->
   <div style="margin-top:24px;">
     <div class="section-header">
@@ -764,7 +780,7 @@
 <script src="/static/js/config.js?v=4"></script>
 <script src="/static/js/users.js?v=4"></script>
 <script src="/static/js/status.js?v=3"></script>
-<script src="/static/js/logs.js?v=3"></script>
+<script src="/static/js/logs.js?v=4"></script>
 <script src="/static/js/whatsapp.js?v=3"></script>
 </body>
 </html>

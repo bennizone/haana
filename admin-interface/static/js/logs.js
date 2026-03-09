@@ -55,6 +55,39 @@ async function loadLogs(cat) {
   }
 }
 
+// ── Download / Löschen ──────────────────────────────────────────────────────
+
+function downloadLogs(scope) {
+  window.location.href = `/api/logs-download?scope=${encodeURIComponent(scope)}`;
+}
+
+async function confirmDeleteLogs(scope) {
+  const labels = {
+    all: t('logs.scope_all'),
+    system: t('logs.scope_system'),
+    conversations: t('logs.scope_conversations'),
+  };
+  const label = labels[scope] || scope;
+  if (!confirm(t('logs.delete_confirm').replace('{scope}', label))) return;
+  try {
+    const r = await fetch('/api/logs-delete', {
+      method: 'DELETE',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ scope }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      toast(t('logs.deleted_success').replace('{count}', d.deleted), 'ok');
+      loadLogs(currentLogCat);
+      loadLogFiles(currentInstance);
+    } else {
+      toast(d.error || t('logs.error'), 'error');
+    }
+  } catch(e) {
+    toast(e.message, 'error');
+  }
+}
+
 // ── Log-Dateien ─────────────────────────────────────────────────────────────
 function selectLogFileInstance(inst) {
   currentInstance = inst;

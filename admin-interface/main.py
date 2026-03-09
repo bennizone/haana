@@ -17,6 +17,8 @@ Routen:
   PATCH /api/users/{user_id}         → User aktualisieren (Container-Restart)
   DELETE /api/users/{user_id}        → User löschen (Container entfernen)
   POST /api/users/{user_id}/restart  → Container neu starten
+  GET  /api/logs-download             → Logs als ZIP herunterladen (scope=all|system|conversations)
+  DELETE /api/logs-delete             → Logs löschen (scope=all|system|conversations|conversations:inst)
   GET  /api/whatsapp-status          → Bridge-Verbindungsstatus (Proxy)
   GET  /api/whatsapp-qr              → QR-Code als Base64 Data-URL (Proxy)
   POST /api/whatsapp-logout          → WhatsApp-Session trennen (Proxy)
@@ -629,6 +631,95 @@ async def get_logs(category: str, limit: int = 100):
     if category not in valid:
         raise HTTPException(400, f"Kategorie muss eine von {valid} sein")
     return read_recent_logs(category, limit=limit)
+
+
+@app.get("/api/logs-download")
+async def download_logs(scope: str = "all"):
+    """Erstellt ein ZIP mit Logs. scope: all | system | conversations | conversations:{instance}"""
+    import io
+    import zipfile
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        if scope in ("all", "system"):
+            for cat in ("memory-ops", "tool-calls", "llm-calls"):
+                cat_dir = LOG_ROOT / cat
+                if cat_dir.exists():
+                    for f in sorted(cat_dir.glob("*.jsonl")):
+                        zf.write(f, f"system-logs/{cat}/{f.name}")
+
+        if scope == "all" or scope.startswith("conversations"):
+            conv_dir = LOG_ROOT / "conversations"
+            if conv_dir.exists():
+                # scope=conversations:alice → nur alice
+                inst_filter = scope.split(":", 1)[1] if ":" in scope else None
+                for inst_dir in sorted(conv_dir.iterdir()):
+                    if not inst_dir.is_dir():
+                        continue
+                    if inst_filter and inst_dir.name != inst_filter:
+                        continue
+                    for f in sorted(inst_dir.glob("*.jsonl")):
+                        zf.write(f, f"conversations/{inst_dir.name}/{f.name}")
+
+    buf.seek(0)
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    fname = f"haana-logs-{scope.replace(':', '-')}-{ts}.zip"
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+@app.delete("/api/logs-delete")
+async def delete_logs(request: Request):
+    """Löscht Logs. Body: {"scope": "all"|"system"|"conversations"|"conversations:alice"}"""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Ungültiges JSON")
+
+    scope = body.get("scope", "all")
+    deleted = 0
+
+    if scope in ("all", "system"):
+        for cat in ("memory-ops", "tool-calls", "llm-calls"):
+            cat_dir = LOG_ROOT / cat
+            if cat_dir.exists():
+                for f in cat_dir.glob("*.jsonl"):
+                    f.unlink()
+                    deleted += 1
+
+    if scope == "all" or scope.startswith("conversations"):
+        conv_dir = LOG_ROOT / "conversations"
+        if conv_dir.exists():
+            inst_filter = scope.split(":", 1)[1] if ":" in scope else None
+            for inst_dir in sorted(conv_dir.iterdir()):
+                if not inst_dir.is_dir():
+                    continue
+                if inst_filter and inst_dir.name != inst_filter:
+                    continue
+                for f in inst_dir.glob("*.jsonl"):
+                    f.unlink()
+                    deleted += 1
+                # Leeres Verzeichnis aufräumen
+                if not any(inst_dir.iterdir()):
+                    inst_dir.rmdir()
+
+        # Rebuild-Progress auch löschen
+        progress_dir = LOG_ROOT / ".rebuild-progress"
+        if progress_dir.exists():
+            if inst_filter:
+                pf = progress_dir / f"{inst_filter}.json"
+                if pf.exists():
+                    pf.unlink()
+            elif scope in ("all", "conversations"):
+                for pf in progress_dir.glob("*.json"):
+                    pf.unlink()
+
+    import logging as _log
+    _log.getLogger(__name__).info(f"[LogDelete] {deleted} Datei(en) gelöscht (scope={scope})")
+    return {"ok": True, "deleted": deleted}
 
 
 # ── API: Konfiguration ────────────────────────────────────────────────────────

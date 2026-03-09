@@ -54,7 +54,19 @@
     "entries": "Einträge",
     "entries_saved": "Einträge gespeichert",
     "log_saved": "Log gespeichert – Memory ggf. neu aufbauen!",
-    "error": "Fehler"
+    "error": "Fehler",
+    "manage": "Verwaltung",
+    "download_all": "Alle Logs herunterladen",
+    "download_system": "System-Logs herunterladen",
+    "download_conversations": "Konversationen herunterladen",
+    "delete_all": "Alle Logs löschen",
+    "delete_system": "System-Logs löschen",
+    "delete_conversations": "Konversationen löschen",
+    "delete_confirm": "Wirklich {scope} löschen? Diese Aktion kann nicht rückgängig gemacht werden!",
+    "deleted_success": "{count} Datei(en) gelöscht",
+    "scope_all": "alle Logs",
+    "scope_system": "System-Logs",
+    "scope_conversations": "alle Konversationen"
   },
   "config": {
     "save": "Konfiguration speichern",
