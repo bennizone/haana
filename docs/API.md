@@ -351,6 +351,7 @@ Base-URL: `http://<host>:8080`
 ### GET /api/claude-auth/status
 **Beschreibung:** Prueft ob gueltige Claude OAuth-Credentials vorliegen (globaler Pfad).
 **Response:** `{"ok": true, "status": "valid", "detail": "Token gueltig (noch 3.5h)", "expires_in_hours": 3.5}`
+**Hinweis:** Bei langlebigen Tokens (via `setup-token`, `expiresAt=0`) lautet die Antwort `{"detail": "Token gueltig (langlebig)"}` ohne `expires_in_hours`-Feld.
 
 ### POST /api/claude-auth/refresh
 **Beschreibung:** Versucht den OAuth-Token zu erneuern (nur Standalone-Modus mit Docker).
@@ -362,16 +363,16 @@ Base-URL: `http://<host>:8080`
 **Response:** `{"ok": true, "detail": "Credentials gespeichert."}`
 
 ### POST /api/claude-auth/login/start
-**Beschreibung:** Start OAuth Login: spawnt `claude auth login`, gibt die Auth-URL zurueck.
+**Beschreibung:** Start OAuth Login: spawnt `claude setup-token` via PTY (TERM=dumb), gibt die Auth-URL zurueck. Erzeugt einen langlebigen Token (~1 Jahr) statt kurzlebigem Session-Token.
 **Response:** `{"ok": true, "url": "https://claude.ai/oauth/authorize?...", "state": "..."}`
 
 ### POST /api/claude-auth/login/complete
-**Beschreibung:** OAuth Login abschliessen: Authorization Code an lokalen Callback senden.
+**Beschreibung:** OAuth Login abschliessen: sendet den Authorization Code via PTY-stdin an den laufenden `claude setup-token`-Prozess. Liest Credentials aus dem temporaeren HOME oder extrahiert Token-String aus PTY-Output (Fallback). Speichert nach `/data/claude-auth/{provider-id}/.credentials.json`.
 **Body:** `{"code": "..."}`
-**Response:** `{"ok": true, "detail": "Login successful."}`
+**Response:** `{"ok": true, "detail": "Login successful. Long-lived token saved."}`
 
 ### GET /api/claude-auth/status/{provider_id}
-**Beschreibung:** OAuth-Status fuer einen spezifischen Provider pruefen.
+**Beschreibung:** OAuth-Status fuer einen spezifischen Provider pruefen. Liest `/data/claude-auth/{provider_id}/.credentials.json`. Bei `expiresAt=0` (langlebiger Token) wird "Token gueltig (langlebig)" zurueckgegeben.
 **Parameter:** `provider_id` (Path)
 **Response:** Wie `/api/claude-auth/status`
 

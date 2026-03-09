@@ -78,9 +78,25 @@ class HaanaAgent:
             self._cli_model = None
         self.session_id: Optional[str] = None
 
+        # Config aus config.json nachladen wenn Env-Vars fehlen
+        # (z.B. bei docker-compose Start ohne Process Manager)
+        if not self._env.get("HAANA_FALLBACK_MODEL") or not self._env.get("HAANA_OAUTH_DIR"):
+            self._load_config_env()
+
         # Fallback-LLM: Wird aktiviert bei Auth/Connection-Fehlern
         self._fallback_available = bool(self._env.get("HAANA_FALLBACK_MODEL"))
         self._fallback_active = False
+
+        # Credential-Watcher: Merkt sich mtime der Credentials-Datei.
+        # Bei Änderung wird Fallback automatisch zurückgesetzt.
+        self._creds_path: Optional[Path] = None
+        self._creds_mtime: float = 0.0
+        oauth_dir_init = self._env.get("HAANA_OAUTH_DIR")
+        if oauth_dir_init:
+            cp = Path(oauth_dir_init) / ".credentials.json"
+            if cp.exists():
+                self._creds_path = cp
+                self._creds_mtime = cp.stat().st_mtime
 
         # OAuth: Credentials aus Data-Volume symlinken.
         # Nicht bei Ollama/MiniMax — dort übernimmt ANTHROPIC_AUTH_TOKEN die Auth.
@@ -92,12 +108,19 @@ class HaanaAgent:
             if src.exists():
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 try:
+                    # Erst Symlink versuchen, bei Read-Only Filesystem kopieren
                     if dst.exists() or dst.is_symlink():
                         dst.unlink()
                     dst.symlink_to(src)
                     logger.info(f"[{instance_name}] OAuth credentials verlinkt: {src}")
-                except Exception as e:
-                    logger.warning(f"[{instance_name}] OAuth symlink fehlgeschlagen: {e}")
+                except OSError:
+                    # Read-only mount → Datei kopieren statt symlinken
+                    import shutil
+                    try:
+                        shutil.copy2(str(src), str(dst))
+                        logger.info(f"[{instance_name}] OAuth credentials kopiert: {src} → {dst}")
+                    except Exception as e2:
+                        logger.warning(f"[{instance_name}] OAuth credentials weder link noch kopie möglich: {e2}")
 
         # Arbeitsverzeichnis = Verzeichnis mit CLAUDE.md der Instanz.
         # Claude Code CLI lädt CLAUDE.md automatisch als Projektkontext.
@@ -171,6 +194,62 @@ class HaanaAgent:
         logger.debug(f"[{self.instance}] Tools erweitert: {tools}")
 
     # ── Fallback-LLM ────────────────────────────────────────────────────────
+
+    def _load_config_env(self):
+        """Liest fehlende Env-Vars aus config.json nach.
+
+        Wird beim Start aufgerufen wenn Agents via docker-compose gestartet werden
+        (ohne _build_agent_env aus dem Process Manager). Lädt:
+        - Fallback-LLM Konfiguration
+        - OAuth-Directory für Primary Provider
+        """
+        import json as _json
+        config_path = Path(self._env.get("HAANA_CONF_FILE", "/data/config/config.json"))
+        if not config_path.exists():
+            return
+
+        try:
+            cfg = _json.loads(config_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            logger.warning(f"[{self.instance}] config.json nicht lesbar: {e}")
+            return
+
+        # User mit passender instance finden
+        user = None
+        for u in cfg.get("users", []):
+            if u.get("id") == self.instance:
+                user = u
+                break
+        if not user:
+            return
+
+        # OAuth-Dir für Primary Provider setzen (wenn nicht schon gesetzt)
+        if not self._env.get("HAANA_OAUTH_DIR"):
+            primary_llm_id = user.get("primary_llm", "")
+            p_llm = next((l for l in cfg.get("llms", []) if l.get("id") == primary_llm_id), None)
+            if p_llm:
+                p_prov = next((p for p in cfg.get("providers", []) if p.get("id") == p_llm.get("provider_id")), None)
+                if p_prov and p_prov.get("type") == "anthropic" and p_prov.get("auth_method") == "oauth":
+                    oauth_dir = p_prov.get("oauth_dir", "")
+                    if oauth_dir:
+                        self._env["HAANA_OAUTH_DIR"] = oauth_dir
+                        logger.info(f"[{self.instance}] OAuth-Dir aus config.json: {oauth_dir}")
+
+        # Fallback-LLM laden (wenn nicht schon gesetzt)
+        if not self._env.get("HAANA_FALLBACK_MODEL") and user.get("fallback_llm"):
+            fb_llm_id = user["fallback_llm"]
+            fb_llm = next((l for l in cfg.get("llms", []) if l.get("id") == fb_llm_id), None)
+            if fb_llm:
+                fb_prov = next((p for p in cfg.get("providers", []) if p.get("id") == fb_llm.get("provider_id")), None)
+                if fb_prov:
+                    from core.process_manager import _build_fallback_env
+                    ollama_url = self._env.get("OLLAMA_URL", "")
+                    fb_env = _build_fallback_env(fb_llm, fb_prov, ollama_url, cfg)
+                    self._env.update(fb_env)
+                    logger.info(
+                        f"[{self.instance}] Fallback-LLM aus config.json: "
+                        f"{fb_llm.get('model')} ({fb_prov.get('type')})"
+                    )
 
     @staticmethod
     def _is_fallback_error(error) -> bool:
@@ -285,7 +364,42 @@ class HaanaAgent:
         )
 
     async def _ensure_connected(self):
-        """Stellt sicher dass der persistente Subprocess läuft. Lazy-Init."""
+        """Stellt sicher dass der persistente Subprocess läuft. Lazy-Init.
+        Prüft auch ob sich Credentials geändert haben → Fallback zurücksetzen."""
+        # Credential-Watcher: Bei Token-Änderung Fallback automatisch zurücksetzen
+        if self._fallback_active and self._creds_path:
+            try:
+                new_mtime = self._creds_path.stat().st_mtime
+                if new_mtime > self._creds_mtime:
+                    self._creds_mtime = new_mtime
+                    logger.info(
+                        f"[{self.instance}] Credentials geändert – "
+                        f"setze Fallback zurück auf primäres LLM"
+                    )
+                    await self.close()
+                    self._fallback_active = False
+                    # Fallback-Env-Vars entfernen (wurden von _activate_fallback gesetzt)
+                    for key in ("ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN",
+                                "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL",
+                                "OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL",
+                                "GEMINI_API_KEY", "GEMINI_MODEL"):
+                        self._env.pop(key, None)
+                    # Primäre Env-Vars wiederherstellen
+                    self._load_config_env()
+                    # Credentials neu symlinken
+                    src = self._creds_path
+                    dst = Path.home() / ".claude" / ".credentials.json"
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    try:
+                        if dst.exists() or dst.is_symlink():
+                            dst.unlink()
+                        dst.symlink_to(src)
+                    except OSError:
+                        import shutil
+                        shutil.copy2(str(src), str(dst))
+            except (OSError, FileNotFoundError):
+                pass
+
         if self._client is None:
             options = self._build_options()
             self._client = ClaudeSDKClient(options=options)
@@ -480,7 +594,6 @@ class HaanaAgent:
                                 f"[{self.instance}] TextBlock: {block.text[:80]}..."
                             )
                         elif isinstance(block, ToolUseBlock):
-                            t_tool = time.monotonic()
                             logger.info(
                                 f"[{self.instance}] Tool-Aufruf: {block.name} "
                                 f"| input={str(block.input)[:120]}"

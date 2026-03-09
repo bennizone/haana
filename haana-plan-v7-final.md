@@ -858,12 +858,22 @@ Schritt 7: Privacy
 - Initiale Dokumentation erstellt: `docs/LOGBOOK.md`, `docs/API.md`, `docs/CONFIG.md`, `docs/UI-HELP.md`
 - Test-Suite: 187 total (59 config, 23 agent, 31 memory, 8 i18n, 64 ollama-compat, 2 integration)
 
+**Weitere erledigte Aufgaben (Session 2026-03-09, OAuth-Haertung) ✅:**
+- OAuth Login Flow auf `claude setup-token` umgestellt (`admin-interface/main.py`): langlebiger Token (~1 Jahr) statt kurzlebigem Session-Token
+- PTY-Spawn mit `TERM=dumb` + `NO_COLOR=1` + 500-Zeichen-Terminalbreite (gegen URL-Umbruch)
+- Token-Extraktion aus PTY-Output als Fallback (`sk-ant-...` Regex) wenn keine Credentials-Datei geschrieben wird
+- Zentraler Token-Store: `/data/claude-auth/{provider-id}/.credentials.json`; Agenten symlinken beim Start
+- Docker-Mount Fix: `/home/haana/.claude` (statt `/root/.claude`) → `/claude-auth` im admin-interface Container
+- Credential-Watcher in `core/agent.py`: ueberwacht `mtime`, setzt Fallback automatisch zurueck bei Token-Rotation — kein Container-Restart noetig
+- Status-Endpunkt `GET /api/claude-auth/status/{provider_id}`: "Token gueltig (langlebig)" bei `expiresAt=0`
+- Fallback-LLM bei Auth-Fehler automatisch nutzen: FERTIG (als Teil der Fallback-Kaskade)
+
 **Noch offen:**
 - HA Add-on in Test-HA installieren und testen
 - Backup auf TrueNAS (SMB/CIFS) → optional, nachrangig
-- Fallback-LLM bei Auth-Fehler automatisch nutzen
+- i18n-Key fuer "Token gueltig (langlebig)" in admin-interface JS ergaenzen
 
-**Ergebnis:** Alice chattet per WhatsApp (Text + Sprache, bidirektional). Agent kennt ihn bereits (Phase 1 Memory). STT + TTS via Nabu Casa. Admin-Interface unter `http://10.83.1.11:8080` zugänglich, responsiv, vollständig mehrsprachig (437 Keys). Claude OAuth pro Provider ohne SSH möglich. 6 Provider-Typen mit typspezifischen Formularen. Provider/LLM-Trennung (`providers[]` + `llms[]`). HA Add-on Packaging vorbereitet (3 Add-ons, Dual-Mode Architektur). Env-Isolation fuer InProcess-Modus. Embedding-Mismatch-Detection. Ollama als Primary LLM nutzbar (OpenAI-kompatibler `/v1/` Endpoint). Chat-UI mit Model-Badge und aufklappbaren Memory/Tool-Details. Universeller LLM-Proxy (Fake-Ollama-API) mit Tool-Calling und Agent-Routing/Delegation. Multi-Provider Memory Extraction + Context Enrichment. Smart Rebuild mit Pre-Filtering und Pause/Resume. Log-Management (Download/Loesch-Funktion). 187 Unit-Tests. Dokumentation in `docs/`.
+**Ergebnis:** Alice chattet per WhatsApp (Text + Sprache, bidirektional). Agent kennt ihn bereits (Phase 1 Memory). STT + TTS via Nabu Casa. Admin-Interface unter `http://10.83.1.11:8080` zugänglich, responsiv, vollständig mehrsprachig (437 Keys). Claude OAuth pro Provider ohne SSH möglich — jetzt mit `setup-token` und langlebigen Tokens. 6 Provider-Typen mit typspezifischen Formularen. Provider/LLM-Trennung (`providers[]` + `llms[]`). HA Add-on Packaging vorbereitet (3 Add-ons, Dual-Mode Architektur). Env-Isolation fuer InProcess-Modus. Embedding-Mismatch-Detection. Ollama als Primary LLM nutzbar (OpenAI-kompatibler `/v1/` Endpoint). Chat-UI mit Model-Badge und aufklappbaren Memory/Tool-Details. Universeller LLM-Proxy (Fake-Ollama-API) mit Tool-Calling und Agent-Routing/Delegation. Multi-Provider Memory Extraction + Context Enrichment. Smart Rebuild mit Pre-Filtering und Pause/Resume. Log-Management (Download/Loesch-Funktion). 187 Unit-Tests. Dokumentation in `docs/`. Credential-Watcher fuer automatischen Fallback-Reset bei Token-Rotation.
 
 ---
 

@@ -34,7 +34,6 @@ services:
       - ./instanzen/alice/CLAUDE.md:/app/CLAUDE.md:ro
       - ./skills:/app/skills:ro
       - haana-data:/data
-      - /home/haana/.claude:/home/haana/.claude:ro
     restart: unless-stopped
     depends_on:
       qdrant:
@@ -55,7 +54,6 @@ services:
       - ./instanzen/bob/CLAUDE.md:/app/CLAUDE.md:ro
       - ./skills:/app/skills:ro
       - haana-data:/data
-      - /home/haana/.claude:/home/haana/.claude:ro
     restart: unless-stopped
     depends_on:
       qdrant:
@@ -98,7 +96,7 @@ services:
       - ./core:/app/core:ro
       - haana-data:/data
       - /var/run/docker.sock:/var/run/docker.sock
-      - /root/.claude:/claude-auth
+      - /home/haana/.claude:/claude-auth
       - /home/haana/.local/bin/claude:/usr/local/bin/claude:ro
     restart: unless-stopped
     depends_on:

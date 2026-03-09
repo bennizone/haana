@@ -35,7 +35,7 @@ Provider sind die Verbindungen zu LLM-Diensten. Jeder Provider hat einen Typ und
 | `url` | string | nein | API-URL (leer = Standard des Providers). Bei Ollama Pflicht. |
 | `key` | string | nein | API-Key. Bei Ollama nicht noetig, bei Anthropic OAuth optional. |
 | `auth_method` | string | nein | Nur bei `anthropic`: `api_key` oder `oauth` |
-| `oauth_dir` | string | nein | Nur bei OAuth: Pfad zu Credentials (default: `/data/claude-auth/{id}`) |
+| `oauth_dir` | string | nein | Nur bei OAuth: Pfad zum Credentials-Verzeichnis (default: `/data/claude-auth/{id}`). Muss `.credentials.json` enthalten. |
 
 **Provider-Typen:**
 
@@ -47,6 +47,23 @@ Provider sind die Verbindungen zu LLM-Diensten. Jeder Provider hat einen Typ und
 | `openai` | OpenAI (GPT-4o, o1, o3) | Optional (Standard: api.openai.com) | API-Key |
 | `gemini` | Google Gemini (Flash, Pro) | Automatisch | API-Key |
 | `custom` | Eigener Endpunkt / Proxy | URL noetig | Optional |
+
+**Zentraler Token-Store (OAuth):**
+
+Credentials werden pro Anthropic-Provider in `/data/claude-auth/{provider-id}/.credentials.json` gespeichert.
+Agent-Container symlinken diesen Pfad auf `~/.claude/.credentials.json` beim Start.
+Bei Read-Only-Filesystemen wird kopiert statt symlinkt.
+
+Der Credential-Watcher in `core/agent.py` ueberwacht `mtime` der Credentials-Datei.
+Aendert sich der Token (z.B. nach erneutem Login), wird der Fallback automatisch zurueckgesetzt — kein Container-Restart noetig.
+
+**OAuth Login Flow:**
+
+Der Login-Flow nutzt `claude setup-token` (nicht `claude auth login`):
+- `setup-token` erzeugt langlebige Tokens (~1 Jahr, `expiresAt=0`) — ideal fuer headless Container-Betrieb
+- `TERM=dumb` + breites PTY-Fenster verhindern TUI-Modus und URL-Umbruch
+- Code wird via PTY-stdin uebertragen
+- Fallback: Token-String (`sk-ant-...`) wird per Regex aus PTY-Output extrahiert wenn keine Credentials-Datei geschrieben wird
 
 ---
 

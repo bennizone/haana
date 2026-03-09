@@ -4,6 +4,27 @@ Chronologische Dokumentation der wichtigsten Aenderungen am HAANA-Projekt.
 
 ---
 
+## 2026-03-09 — OAuth setup-token, Credential-Watcher, zentraler Token-Store
+
+**Aenderungen:**
+- OAuth Login Flow auf `claude setup-token` umgestellt (`admin-interface/main.py`): erzeugt langlebigen Token (~1 Jahr) statt kurzlebigem Session-Token
+- PTY-Spawn mit `TERM=dumb` und `NO_COLOR=1` um TUI-Modus zu deaktivieren, 500-Zeichen-Terminal-Breite gegen URL-Umbruch
+- Fallback: `setup-token` schreibt Token manchmal als String nach stdout statt als Datei — Regex `sk-ant-[...]` extrahiert Token aus PTY-Output
+- `expiresAt: 0` signalisiert langlebigen Token; `GET /api/claude-auth/status/{provider_id}` zeigt "Token gueltig (langlebig)" statt abgelaufener Stunden-Rechnung
+- Credential-Watcher in `core/agent.py` (`_ensure_connected`): prueft `mtime` der Credentials-Datei bei jedem Request; bei Aenderung wird Fallback automatisch zurueckgesetzt und Symlink neu gesetzt — kein Container-Restart noetig
+- Docker-Mount Fix in `docker-compose.yml`: `/home/haana/.claude` (statt `/root/.claude`) wird als `/claude-auth` ins admin-interface gemountet
+- Zentraler Token-Store: `/data/claude-auth/{provider-id}/.credentials.json`; Agenten symlinken `~/.claude/.credentials.json` auf diesen Pfad; bei Read-Only-Filesystem wird kopiert
+
+**Entscheidungen:**
+- `setup-token` statt `auth login`: auth login erzeugt kurzlebige Session-Tokens (~8h), setup-token erzeugt langlebige Tokens ohne Ablaufdatum — ideal fuer headless/Container-Betrieb
+- `TERM=dumb` verhindert dass Claude CLI in interaktiven TUI-Modus wechselt, der kein programmatisches stdin akzeptiert
+- mtime-Polling statt inotify: kein zusaetzlicher Kernel-Subsystem-Zugriff noetig, reicht fuer die erwartete Aenderungsfrequenz (selten)
+- `/home/haana/.claude` statt `/root/.claude`: admin-interface laeuft als User 1000 (haana), nicht als root
+
+**Offene Punkte:**
+- Token-Status-Anzeige in der UI zeigt bei `expiresAt=0` noch "langlebig" als Rohtext — i18n-Key fehlt noch
+- Automatisches Symlink-Update bei Credential-Aenderung nur bei aktivem Fallback; normaler Betrieb ohne Fallback bemerkt Credential-Rotation nicht aktiv (kein Problem, da Token langlebig)
+
 ## 2026-03-09 — Sub-Agenten, Log-Management, Fake-Ollama Delegation
 
 - Sub-Agenten fuer Review, Webinterface-Entwicklung und Dokumentation eingerichtet (`.claude/agents/`)

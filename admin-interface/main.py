@@ -27,6 +27,7 @@ Routen:
 import asyncio
 import http.client
 import json
+import logging
 import os
 import pty
 import re
@@ -60,6 +61,8 @@ from core.process_manager import (
     detect_mode, create_agent_manager, AgentManager,
 )
 from core.ollama_compat import create_ollama_router
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="HAANA Admin", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -2163,7 +2166,7 @@ async def agent_health(instance: str):
 # ── Claude Auth Management ────────────────────────────────────────────────────
 
 CLAUDE_AUTH_DIR = Path("/claude-auth")       # gemountet via docker-compose
-CLAUDE_AUTH_HOST = Path("/root/.claude")     # Host-Pfad (für Referenz)
+CLAUDE_AUTH_HOST = Path("/home/haana/.claude")  # Host-Pfad (für Referenz)
 
 @app.get("/api/claude-auth/status")
 async def claude_auth_status():
@@ -2256,9 +2259,13 @@ async def claude_auth_upload(request: Request):
         return {"ok": False, "detail": str(e)[:200]}
 
 
-# ── Claude OAuth Login Flow ──────────────────────────────────────────────────
+# ── Claude OAuth Login Flow (setup-token) ────────────────────────────────────
+# Nutzt `claude setup-token` statt `claude auth login`.
+# setup-token erzeugt einen langlebigen Token (~1 Jahr) der in headless/Container-
+# Umgebungen funktioniert. Der Flow: URL anzeigen → User autorisiert im Browser →
+# Code wird angezeigt → User gibt Code ein → Token wird gespeichert.
 
-# Stores active login session: {pid, fd, port, state, url}
+# Stores active login session: {pid, fd, tmp_home}
 _oauth_login_session: dict | None = None
 
 
@@ -2279,27 +2286,48 @@ def _cleanup_oauth_session():
 
 
 def _start_oauth_login_sync():
-    """Blocking: spawn claude auth login, extract URL and callback port."""
+    """Blocking: spawn `claude setup-token`, extract OAuth URL."""
     global _oauth_login_session
 
     _cleanup_oauth_session()
 
     tmp_home = "/tmp/claude-oauth-login"
+    import shutil
+    if os.path.exists(tmp_home):
+        shutil.rmtree(tmp_home)
     os.makedirs(f"{tmp_home}/.claude", exist_ok=True)
 
     env = os.environ.copy()
     env["HOME"] = tmp_home
+    # TERM=dumb disables TUI mode so setup-token accepts stdin input
+    env["TERM"] = "dumb"
+    env["NO_COLOR"] = "1"
 
     pid, fd = pty.fork()
     if pid == 0:
+        # Set wide terminal to avoid URL wrapping
+        import struct, fcntl, termios
+        try:
+            winsize = struct.pack("HHHH", 50, 500, 0, 0)
+            fcntl.ioctl(1, termios.TIOCSWINSZ, winsize)
+        except Exception:
+            pass
         for k, v in env.items():
             os.environ[k] = v
-        os.execvp("claude", ["claude", "auth", "login"])
+        os.execvp("claude", ["claude", "setup-token"])
         os._exit(1)
+
+    # Set PTY window size on parent side too
+    import struct, fcntl, termios
+    try:
+        winsize = struct.pack("HHHH", 50, 500, 0, 0)
+        fcntl.ioctl(fd, termios.TIOCSWINSZ, winsize)
+    except Exception:
+        pass
 
     # Read output until we get the URL
     output = b""
-    end_time = time.time() + 10
+    end_time = time.time() + 25
     while time.time() < end_time:
         r, _, _ = select.select([fd], [], [], 1)
         if r:
@@ -2308,140 +2336,198 @@ def _start_oauth_login_sync():
                 if not data:
                     break
                 output += data
+                if b"prompted" in output or b"Paste" in output:
+                    break
             except OSError:
                 break
 
     text = output.decode("utf-8", errors="replace")
+    # Strip ANSI escape codes and control sequences
+    clean = re.sub(r"\x1b\[[0-9;?]*[a-zA-Z]", "", text)
+    # Remove all CR/LF to join wrapped URL lines
+    flat = re.sub(r"[\r\n]+", "", clean)
 
-    url_match = re.search(r"(https://claude\.ai/oauth/authorize\S+)", text)
+    url_match = re.search(r"(https://claude\.ai/oauth/authorize[^\s]*)", flat)
     if not url_match:
         _cleanup_oauth_session()
-        return {"ok": False, "detail": "Could not extract OAuth URL from claude auth login"}
+        return {"ok": False, "detail": f"Could not extract OAuth URL."}
 
     auth_url = url_match.group(1)
-    parsed = urlparse(auth_url)
-    qs = parse_qs(parsed.query)
-    state_val = qs.get("state", [""])[0]
+    # state is the last query param; trim trailing prompt text
+    state_match = re.search(r"state=([A-Za-z0-9\-_]{43})", auth_url)
+    if state_match:
+        auth_url = auth_url[:state_match.end()]
 
-    # Find the local callback port via /proc/net/tcp{,6}
-    port = None
-    time.sleep(1)  # give claude time to open the port
-    try:
-        child_inodes = set()
-        for fd_entry in Path(f"/proc/{pid}/fd").iterdir():
-            try:
-                target = os.readlink(str(fd_entry))
-                if target.startswith("socket:["):
-                    child_inodes.add(target.split("[")[1].rstrip("]"))
-            except (OSError, IndexError):
-                continue
-
-        localhost_v4 = {"0100007F", "0B00007F"}
-        localhost_v6 = {"00000000000000000000000001000000"}
-        is_ipv6 = False
-        for tcp_file in ["/proc/net/tcp", "/proc/net/tcp6"]:
-            try:
-                with open(tcp_file) as f:
-                    for line in f:
-                        parts = line.strip().split()
-                        if len(parts) < 10 or parts[3] != "0A":
-                            continue
-                        addr_hex, port_hex = parts[1].rsplit(":", 1)
-                        if parts[9] in child_inodes and (
-                            addr_hex in localhost_v4 or addr_hex in localhost_v6
-                        ):
-                            port = int(port_hex, 16)
-                            is_ipv6 = addr_hex in localhost_v6
-                            break
-            except FileNotFoundError:
-                continue
-            if port:
-                break
-    except Exception:
-        pass
-
-    if not port:
-        _cleanup_oauth_session()
-        return {"ok": False, "detail": "Could not find local callback port"}
-
-    callback_host = "::1" if is_ipv6 else "127.0.0.1"
     _oauth_login_session = {
-        "pid": pid, "fd": fd, "port": port, "host": callback_host,
-        "state": state_val, "url": auth_url, "tmp_home": tmp_home,
+        "pid": pid, "fd": fd, "tmp_home": tmp_home,
+        "url": auth_url,
     }
-    return {"ok": True, "url": auth_url, "state": state_val}
+    return {"ok": True, "url": auth_url}
 
 
 @app.post("/api/claude-auth/login/start")
 async def claude_auth_login_start():
-    """Start OAuth login: spawns 'claude auth login', returns the auth URL."""
+    """Start OAuth login: spawns 'claude setup-token', returns the auth URL."""
     return await asyncio.to_thread(_start_oauth_login_sync)
 
 
 def _complete_oauth_login_sync(code: str):
-    """Blocking: send authorization code to the local callback server."""
+    """Blocking: send authorization code to claude setup-token via PTY stdin."""
     global _oauth_login_session
 
     if not _oauth_login_session:
         return {"ok": False, "detail": "No active login session. Start login first."}
 
-    port = _oauth_login_session["port"]
-    state_val = _oauth_login_session["state"]
     fd = _oauth_login_session["fd"]
     tmp_home = _oauth_login_session["tmp_home"]
-    callback_host = _oauth_login_session["host"]
 
-    # Send code to the local callback server
+    # Set PTY to raw mode so special chars like # pass through unprocessed
+    import tty
     try:
-        conn = http.client.HTTPConnection(callback_host, port, timeout=10)
-        from urllib.parse import quote
-        conn.request("GET", f"/callback?code={quote(code, safe='')}&state={quote(state_val, safe='')}")
-        resp = conn.getresponse()
-        resp.read()
-        conn.close()
-    except Exception as e:
-        _cleanup_oauth_session()
-        return {"ok": False, "detail": f"Callback failed: {e}"}
+        tty.setraw(fd)
+    except Exception:
+        pass
 
-    # Wait for process to finish and read remaining output
-    time.sleep(2)
+    # Write the code to the PTY (stdin of claude setup-token)
+    try:
+        os.write(fd, code.encode("utf-8"))
+        time.sleep(0.3)
+        os.write(fd, b"\r")
+    except OSError as e:
+        _cleanup_oauth_session()
+        return {"ok": False, "detail": f"Could not send code to CLI: {e}"}
+
+    # Wait for process to finish and read output (setup-token does token exchange)
+    # Token exchange with Anthropic can take 5-10s, so we must NOT break on idle.
     pty_text = ""
+    end_time = time.time() + 30
+    while time.time() < end_time:
+        try:
+            r, _, _ = select.select([fd], [], [], 2)
+            if r:
+                data = os.read(fd, 8192)
+                if not data:
+                    break
+                pty_text += data.decode("utf-8", errors="replace")
+                logger.info(f"setup-token output chunk: {repr(data[:200])}")
+                # Check for completion indicators
+                lower = pty_text.lower()
+                if "error" in lower or "invalid" in lower or "retry" in lower:
+                    time.sleep(1)  # give time for full error message
+                    break
+                if "success" in lower or "authenticated" in lower or "logged in" in lower or "token saved" in lower:
+                    time.sleep(2)  # give time to write credentials
+                    break
+            # else: no data yet - keep waiting (token exchange takes time)
+        except OSError:
+            break
+
+    # Also wait for the process to exit and capture remaining output
     try:
         r, _, _ = select.select([fd], [], [], 3)
         if r:
-            pty_text = os.read(fd, 8192).decode("utf-8", errors="replace")
+            remaining = os.read(fd, 8192)
+            if remaining:
+                pty_text += remaining.decode("utf-8", errors="replace")
+                logger.info(f"setup-token remaining output: {repr(remaining[:200])}")
     except OSError:
         pass
 
-    success = "Login failed" not in pty_text and resp.status < 400
+    clean = re.sub(r"\x1b\[[0-9;?]*[a-zA-Z]", "", pty_text)
+    clean = re.sub(r"[\r\n]+", " ", clean).strip()
 
-    if success:
-        tmp_creds = Path(tmp_home) / ".claude" / ".credentials.json"
-        if tmp_creds.is_file():
-            try:
-                creds_data = tmp_creds.read_text(encoding="utf-8")
+    # Log full output for debugging
+    clean_log = re.sub(r"\x1b\[[0-9;?]*[a-zA-Z]", "", pty_text)
+    logger.info(f"setup-token full output: {repr(clean_log[:500])}")
+
+    # Look for credentials in tmp home - check multiple possible locations
+    creds_saved = False
+    tmp_creds = Path(tmp_home) / ".claude" / ".credentials.json"
+    # setup-token might also write to .claude.json or other locations
+    alt_creds_paths = [
+        Path(tmp_home) / ".claude" / ".credentials.json",
+        Path(tmp_home) / ".claude" / "credentials.json",
+        Path(tmp_home) / ".credentials.json",
+    ]
+    for p in alt_creds_paths:
+        if p.is_file():
+            logger.info(f"setup-token: Found credentials at {p}")
+            tmp_creds = p
+            break
+    else:
+        # List what files actually exist in tmp_home
+        try:
+            import subprocess as _sp2
+            ls_result = _sp2.run(["find", tmp_home, "-type", "f"], capture_output=True, text=True, timeout=5)
+            logger.info(f"setup-token: Files in {tmp_home}: {ls_result.stdout.strip()}")
+        except Exception:
+            pass
+
+    if tmp_creds.is_file():
+        try:
+            creds_data = tmp_creds.read_text(encoding="utf-8")
+            creds = json.loads(creds_data)
+            if creds.get("claudeAiOauth", {}).get("accessToken"):
                 CLAUDE_AUTH_DIR.mkdir(parents=True, exist_ok=True)
                 dest = CLAUDE_AUTH_DIR / ".credentials.json"
                 dest.write_text(creds_data, encoding="utf-8")
                 os.chmod(dest, 0o600)
-                import subprocess
-                subprocess.run(["chown", "1000:1000", str(dest)], check=False)
-            except Exception as e:
-                _cleanup_oauth_session()
-                return {"ok": False, "detail": f"Login succeeded but credential copy failed: {e}"}
+                import subprocess as _sp
+                _sp.run(["chown", "1000:1000", str(dest)], check=False)
+                creds_saved = True
+                logger.info("setup-token: Credentials in CLAUDE_AUTH_DIR gespeichert")
+        except Exception as e:
+            logger.error(f"setup-token: Credential copy failed: {e}")
+
+    if creds_saved:
+        _cleanup_oauth_session()
+        return {"ok": True, "detail": "Login successful. Long-lived token saved."}
+
+    # Fallback: setup-token might print a token string to stdout instead of writing a file
+    # Look for token patterns like sk-ant-oat01-... in the output
+    token_match = re.search(r"(sk-ant-[a-zA-Z0-9_-]{20,})", pty_text)
+    if token_match:
+        token_str = token_match.group(1)
+        logger.info(f"setup-token: Found token in stdout output (len={len(token_str)})")
+        # Build credentials JSON from the token
+        creds_data = json.dumps({
+            "claudeAiOauth": {
+                "accessToken": token_str,
+                "refreshToken": "",
+                "expiresAt": 0,  # setup-token tokens are long-lived
+                "scopes": ["user:inference", "user:profile"],
+            }
+        })
+        try:
+            CLAUDE_AUTH_DIR.mkdir(parents=True, exist_ok=True)
+            dest = CLAUDE_AUTH_DIR / ".credentials.json"
+            dest.write_text(creds_data, encoding="utf-8")
+            os.chmod(dest, 0o600)
+            import subprocess as _sp
+            _sp.run(["chown", "1000:1000", str(dest)], check=False)
+            _cleanup_oauth_session()
+            logger.info("setup-token: Token aus stdout in CLAUDE_AUTH_DIR gespeichert")
+            return {"ok": True, "detail": "Login successful. Long-lived token saved."}
+        except Exception as e:
+            logger.error(f"setup-token: Token save failed: {e}")
 
     _cleanup_oauth_session()
 
-    if success:
-        return {"ok": True, "detail": "Login successful. Credentials saved."}
-    # Strip ANSI escape codes from error output
-    clean = re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", pty_text).strip()
-    return {"ok": False, "detail": f"Login failed. {clean[:200]}"}
+    # Check for error messages
+    clean = re.sub(r"\x1b\[[0-9;?]*[a-zA-Z]", "", pty_text)
+    clean = re.sub(r"[\r\n]+", " ", clean).strip()
+    if "error" in clean.lower() or "invalid" in clean.lower():
+        detail = re.sub(r"[^\x20-\x7e]", "", clean).strip()
+        # Compress multiple spaces
+        detail = re.sub(r" {2,}", " ", detail)[:200]
+        return {"ok": False, "detail": f"Login fehlgeschlagen: {detail}"}
+
+    return {"ok": False, "detail": "Credentials nicht gefunden. Bitte Login erneut starten."}
 
 
 @app.post("/api/claude-auth/login/complete")
 async def claude_auth_login_complete(request: Request):
-    """Complete OAuth login: send the authorization code to the local callback."""
+    """Complete OAuth login: send the authorization code via PTY stdin."""
     body = await request.json()
     code = body.get("code", "").strip()
     if not code:
@@ -2469,12 +2555,20 @@ async def claude_auth_status_provider(provider_id: str):
             return {"ok": False, "status": "no_token", "detail": "Kein Access-Token"}
         expires_at = oauth.get("expiresAt", 0) / 1000
         now = time.time()
-        if now > expires_at:
+        if expires_at > 0 and now > expires_at:
             hours_ago = (now - expires_at) / 3600
             return {"ok": False, "status": "expired", "detail": f"Token abgelaufen (vor {hours_ago:.1f}h)"}
-        hours_left = (expires_at - now) / 3600
-        return {"ok": True, "status": "valid", "detail": f"Token gültig (noch {hours_left:.1f}h)",
-                "expires_in_hours": round(hours_left, 1)}
+        if expires_at > 0:
+            hours_left = (expires_at - now) / 3600
+            days_left = hours_left / 24
+            if days_left > 30:
+                return {"ok": True, "status": "valid",
+                        "detail": f"Token gültig (noch {days_left:.0f} Tage)",
+                        "expires_in_hours": round(hours_left, 1)}
+            return {"ok": True, "status": "valid", "detail": f"Token gültig (noch {hours_left:.1f}h)",
+                    "expires_in_hours": round(hours_left, 1)}
+        # No expiry set = long-lived token
+        return {"ok": True, "status": "valid", "detail": "Token gültig (langlebig)"}
     except Exception as e:
         return {"ok": False, "status": "error", "detail": str(e)[:200]}
 
@@ -2512,11 +2606,12 @@ async def claude_auth_login_complete_provider(provider_id: str, request: Request
                 import subprocess
                 subprocess.run(["chown", "1000:1000", str(dest)], check=False)
                 logger.info(f"OAuth credentials kopiert: {global_creds} → {dest}")
-                # Wenn Kopie geklappt hat aber Login fehlschlug (Doppelklick),
-                # trotzdem als Erfolg melden wenn Credentials gültig sind
+                # Nur als Erfolg melden wenn die Credentials tatsächlich gültig sind
                 if not result.get("ok"):
                     creds = json.loads(dest.read_text(encoding="utf-8"))
-                    if creds.get("claudeAiOauth", {}).get("accessToken"):
+                    oauth = creds.get("claudeAiOauth", {})
+                    expires_at = oauth.get("expiresAt", 0) / 1000
+                    if oauth.get("accessToken") and (expires_at == 0 or expires_at > time.time()):
                         result = {"ok": True, "detail": "Login successful. Credentials saved."}
             except Exception as e:
                 logger.error(f"OAuth credential copy failed: {e}")

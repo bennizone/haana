@@ -114,9 +114,19 @@ Hilfe-Texte fuer alle UI-Bereiche des Admin-Interface.
 - **i18n-key:** `config_provider.add_provider`, `config_provider.select_type`
 
 #### Anthropic Auth-Methode
-- **de:** "API-Key: Direkt eingeben, kein Ablauf. OAuth: Claude Pro/Team Login, Token laeuft ab, muss erneuert werden."
-- **en:** "API-Key: Enter directly, no expiration. OAuth: Claude Pro/Team login, token expires, needs renewal."
+- **de:** "API-Key: Direkt eingeben, kein Ablauf. OAuth: Claude Pro/Team Login via 'setup-token' — erzeugt langlebigen Token (~1 Jahr), kein regelmaessiger Ablauf."
+- **en:** "API-Key: Enter directly, no expiration. OAuth: Claude Pro/Team login via 'setup-token' — creates long-lived token (~1 year), no regular expiration."
 - **i18n-key:** `config_provider.auth_method_apikey`, `config_provider.auth_method_oauth`
+
+#### OAuth Login starten
+- **de:** "Oeffnet den Claude OAuth Login-Flow. Du erhaeltst eine URL die du im Browser oeffnest, anschliessend den angezeigten Code hier einfuegst. Der Token ist ca. 1 Jahr gueltig."
+- **en:** "Opens the Claude OAuth login flow. You receive a URL to open in your browser, then paste the displayed code here. The token is valid for approximately 1 year."
+- **i18n-key:** `auth.login_start`, `auth.login_instructions`
+
+#### Token-Status (langlebig)
+- **de:** "Zeigt 'Token gueltig (langlebig)' wenn ein setup-token ohne Ablaufdatum gespeichert ist. Erneuerung ist nicht regelmaessig noetig."
+- **en:** "Shows 'Token valid (long-lived)' when a setup-token without expiry is stored. Renewal is not regularly required."
+- **i18n-key:** `auth.status_long_lived`
 
 #### Provider URL
 - **de:** "API-Endpunkt URL. Bei Anthropic/OpenAI leer lassen fuer Standard-URL. Bei Ollama Pflichtfeld."
