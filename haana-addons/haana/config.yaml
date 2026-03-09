@@ -2,7 +2,7 @@ name: "HAANA"
 description: "AI Household Assistant with persistent memory"
 version: "0.1.0"
 slug: "haana"
-url: "https://github.com/benpro-haana/haana-addons"
+url: "https://github.com/alicezone/haana-dev"
 arch:
   - amd64
   - aarch64
