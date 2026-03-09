@@ -36,6 +36,7 @@ import logging
 import os
 import pty
 import re
+import secrets
 import select
 import signal
 import time
@@ -45,10 +46,13 @@ from typing import Optional
 from urllib.parse import urlparse, parse_qs
 import glob as _glob
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.middleware.base import BaseHTTPMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+
+import auth as _auth
 
 try:
     from dotenv import load_dotenv
@@ -72,6 +76,37 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="HAANA Admin", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
+
+# ── Auth-Middleware ───────────────────────────────────────────────────────────
+
+# Pfade die OHNE Authentifizierung zugänglich sind
+_AUTH_EXEMPT_PREFIXES = ("/static/", "/ws/")
+_AUTH_EXEMPT_EXACT = {"/", "/api/auth/login", "/api/auth/logout", "/api/auth/status", "/api/health", "/api/setup-status"}
+
+
+class AuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+
+        # Exempt: exakte Matches
+        if path in _AUTH_EXEMPT_EXACT:
+            return await call_next(request)
+
+        # Exempt: Präfix-Matches (static, ws)
+        if any(path.startswith(p) for p in _AUTH_EXEMPT_PREFIXES):
+            return await call_next(request)
+
+        # Auth prüfen
+        if not _auth.is_authenticated(request):
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Not authenticated", "mode": "ingress" if _auth.IS_INGRESS_MODE else "standalone"},
+            )
+
+        return await call_next(request)
+
+
+app.add_middleware(AuthMiddleware)
 
 # ── Rebuild-Zustand (pro Instanz) ─────────────────────────────────────────────
 # status: "idle" | "running" | "done" | "error" | "cancelled"
@@ -140,6 +175,7 @@ async def startup_event():
     asyncio.create_task(_cleanup_loop())
     asyncio.create_task(_dream_scheduler())
     _sync_rebuild_state()
+    _auth.log_startup_info()
     # AgentManager initialisieren (nach Config-Laden, damit _resolve_llm verfügbar ist)
     _agent_manager = create_agent_manager(
         HAANA_MODE,
@@ -619,6 +655,58 @@ def read_recent_logs(category: str, sub: Optional[str] = None, limit: int = 100)
     return records
 
 
+# ── Auth-Endpoints ───────────────────────────────────────────────────────────
+
+@app.get("/api/auth/status")
+async def auth_status(request: Request):
+    """Gibt Auth-Status und Modus zurück. Immer erreichbar (kein Auth-Guard)."""
+    mode = "ingress" if _auth.IS_INGRESS_MODE else "standalone"
+    authenticated = _auth.is_authenticated(request)
+    return {"authenticated": authenticated, "mode": mode}
+
+
+@app.post("/api/auth/login")
+async def auth_login(request: Request):
+    """
+    Standalone-Login mit Token.
+    Body: {"token": "..."}
+    Bei Erfolg: setzt HTTP-Only Cookie haana_session (7 Tage).
+    """
+    if _auth.IS_INGRESS_MODE:
+        # Im Ingress-Modus ist kein Login nötig
+        return {"ok": True, "mode": "ingress"}
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Ungültiger JSON-Body")
+
+    provided = body.get("token", "")
+    expected = _auth.get_admin_token()
+
+    if not provided or not secrets.compare_digest(provided, expected):
+        raise HTTPException(401, "Ungültiger Token")
+
+    response = JSONResponse({"ok": True, "mode": "standalone"})
+    response.set_cookie(
+        key=_auth.COOKIE_NAME,
+        value=expected,
+        max_age=7 * 24 * 3600,  # 7 Tage
+        httponly=True,
+        samesite="lax",
+        secure=False,  # kein HTTPS im lokalen Netz erzwingen
+    )
+    return response
+
+
+@app.post("/api/auth/logout")
+async def auth_logout():
+    """Löscht den Session-Cookie."""
+    response = JSONResponse({"ok": True})
+    response.delete_cookie(key=_auth.COOKIE_NAME, samesite="lax")
+    return response
+
+
 # ── HTML ─────────────────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
@@ -897,6 +985,89 @@ async def supervisor_self():
         return {"ok": False, "error": str(e)[:200]}
 
 
+@app.get("/api/setup/current-config")
+async def setup_current_config():
+    """Gibt bestehende Config für Vorausfüllung im Extend-Modus zurück (Keys maskiert)."""
+    cfg = load_config()
+
+    def _mask_key(key: str) -> str:
+        """Maskiert einen API-Key: erste 4 + '...' + letzte 4 Zeichen."""
+        if not key or len(key) < 9:
+            return "***"
+        return key[:4] + "..." + key[-4:]
+
+    providers_out = []
+    for p in cfg.get("providers", []):
+        providers_out.append({
+            "id":         p.get("id", ""),
+            "type":       p.get("type", ""),
+            "name":       p.get("name", ""),
+            "url":        p.get("url", ""),
+            "key_masked": _mask_key(p.get("key", "")),
+        })
+
+    llms_out = []
+    for llm in cfg.get("llms", []):
+        llms_out.append({
+            "name":     llm.get("name", ""),
+            "type":     llm.get("type", ""),
+            "provider": llm.get("provider", ""),
+            "model":    llm.get("model", ""),
+        })
+
+    users_out = []
+    for u in cfg.get("users", []):
+        if u.get("id") in _SYSTEM_USER_IDS:
+            continue
+        users_out.append({
+            "id":           u.get("id", ""),
+            "display_name": u.get("display_name", ""),
+            "primary_llm":  u.get("primary_llm", ""),
+            "fallback_llm": u.get("fallback_llm", ""),
+            "language":     u.get("language", "de"),
+        })
+
+    ha_assist_llm   = ""
+    ha_advanced_llm = ""
+    for u in cfg.get("users", []):
+        if u.get("id") == "ha-assist":
+            ha_assist_llm = u.get("primary_llm", "")
+        if u.get("id") == "ha-advanced":
+            ha_advanced_llm = u.get("primary_llm", "")
+
+    return {
+        "providers":       providers_out,
+        "llms":            llms_out,
+        "users":           users_out,
+        "ha_assist_llm":   ha_assist_llm,
+        "ha_advanced_llm": ha_advanced_llm,
+        "extraction_llm":  cfg.get("memory", {}).get("extraction_llm", ""),
+        "dream_enabled":   cfg.get("dream", {}).get("enabled", False),
+    }
+
+
+@app.post("/api/setup/reset")
+async def setup_reset(request: Request):
+    """Setzt setup_done = false; bei mode='fresh' wird die Config geleert."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Ungültiges JSON")
+
+    mode = body.get("mode", "extend")
+    cfg  = load_config()
+
+    if mode == "fresh":
+        cfg["providers"] = []
+        cfg["llms"]      = []
+        # Non-System-User löschen; System-User bleiben erhalten
+        cfg["users"] = [u for u in cfg.get("users", []) if u.get("id") in _SYSTEM_USER_IDS]
+
+    cfg["setup_done"] = False
+    save_config(cfg)
+    return {"ok": True, "mode": mode}
+
+
 @app.post("/api/setup/complete")
 async def setup_complete(request: Request):
     """Schließt den Setup-Wizard ab: Provider, LLMs, User, System-Agents konfigurieren."""
@@ -905,11 +1076,35 @@ async def setup_complete(request: Request):
     except Exception:
         raise HTTPException(400, "Ungültiges JSON")
 
-    cfg = load_config()
+    cfg  = load_config()
+    mode = body.get("mode", "fresh")  # "fresh" | "extend"
 
-    # 1. Providers setzen
+    # 1. Providers setzen / mergen
     if "providers" in body:
-        cfg["providers"] = body["providers"]
+        if mode == "extend":
+            # Extend-Modus: bestehende Provider beibehalten, neue hinzufügen / Keys aktualisieren
+            def _prov_merge_key(p: dict) -> tuple:
+                return (p.get("type", ""), p.get("url", "") or p.get("name", ""))
+            existing = cfg.get("providers", [])
+            existing_map = {_prov_merge_key(p): p for p in existing}
+            for bp in body["providers"]:
+                mk = _prov_merge_key(bp)
+                if mk in existing_map:
+                    ep = existing_map[mk]
+                    # Key nur überschreiben wenn nicht leer (leerer Key = "nicht ändern")
+                    new_key = bp.get("key", "")
+                    if new_key:
+                        ep["key"] = new_key
+                    if bp.get("url"):
+                        ep["url"] = bp["url"]
+                    if bp.get("name"):
+                        ep["name"] = bp["name"]
+                else:
+                    existing.append(bp)
+                    existing_map[mk] = bp
+            cfg["providers"] = list(existing_map.values())
+        else:
+            cfg["providers"] = body["providers"]
 
     # 2. LLMs setzen
     if "llms" in body:
@@ -922,7 +1117,7 @@ async def setup_complete(request: Request):
             uid = wu.get("id", "").strip().lower()
             if not uid or uid in _SYSTEM_USER_IDS:
                 continue
-            # Nur anlegen wenn noch nicht vorhanden
+            # Nur anlegen wenn noch nicht vorhanden (extend: bestehende User bleiben)
             if any(u["id"] == uid for u in cfg.get("users", [])):
                 continue
             port = _find_free_port(existing_ports)

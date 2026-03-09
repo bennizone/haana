@@ -1,4 +1,4 @@
-// app.js – Tab-Wechsel, Init, globaler State, SSE-Reconnect (v8)
+// app.js – Tab-Wechsel, Init, globaler State, SSE-Reconnect (v9)
 // Globals: currentInstance, currentViewMode, sse, cfg
 // INSTANCES is set in index.html from Jinja2
 
@@ -155,6 +155,70 @@ function scrollToRebuild() {
   }
 })();
 
+// ── Auth ───────────────────────────────────────────────────────────────────
+
+function _showLoginOverlay() {
+  const overlay = document.getElementById('login-overlay');
+  if (overlay) overlay.style.display = 'flex';
+  // Focus token input
+  setTimeout(() => {
+    const inp = document.getElementById('login-token-input');
+    if (inp) inp.focus();
+  }, 80);
+}
+
+function _hideLoginOverlay() {
+  const overlay = document.getElementById('login-overlay');
+  if (overlay) overlay.style.display = 'none';
+  const err = document.getElementById('login-error');
+  if (err) err.style.display = 'none';
+}
+
+function loginSubmit() {
+  const inp = document.getElementById('login-token-input');
+  const token = inp ? inp.value.trim() : '';
+  if (!token) return;
+
+  fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  })
+    .then(r => {
+      if (r.ok) return r.json();
+      throw new Error('invalid');
+    })
+    .then(() => {
+      _hideLoginOverlay();
+      _postAuthInit();
+    })
+    .catch(() => {
+      const err = document.getElementById('login-error');
+      if (err) err.style.display = '';
+    });
+}
+
+function authLogout() {
+  fetch('/api/auth/logout', { method: 'POST' })
+    .then(() => { location.reload(); })
+    .catch(() => { location.reload(); });
+}
+
+// Global 401 interceptor – wrapper um fetch
+const _origFetch = window.fetch.bind(window);
+window.fetch = function(url, opts) {
+  return _origFetch(url, opts).then(resp => {
+    if (resp.status === 401) {
+      // Exempt: auth endpoints selbst
+      const u = typeof url === 'string' ? url : url.toString();
+      if (!u.includes('/api/auth/')) {
+        _showLoginOverlay();
+      }
+    }
+    return resp;
+  });
+};
+
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   // Auto-detect browser language as default if no preference stored
@@ -166,24 +230,45 @@ document.addEventListener('DOMContentLoaded', () => {
     const sel = document.getElementById('lang-selector');
     if (sel) sel.value = I18n.getLang();
 
-    // Check if setup is needed
-    fetch('/api/setup-status')
-      .then(r => r.ok ? r.json() : { needs_setup: false })
-      .then(d => {
-        if (d && d.needs_setup) {
-          // Hide normal UI
-          document.querySelector('header').style.display = 'none';
-          document.querySelector('.tabs').style.display = 'none';
-          document.querySelectorAll('.panel').forEach(p => p.style.display = 'none');
-          // Show wizard
-          wizardInit();
-        } else {
-          _appInit();
+    // Check auth status first
+    fetch('/api/auth/status')
+      .then(r => r.ok ? r.json() : { authenticated: true, mode: 'standalone' })
+      .then(authData => {
+        if (!authData.authenticated && authData.mode === 'standalone') {
+          // Standalone-Modus, nicht eingeloggt → Login-Overlay
+          _showLoginOverlay();
+          return;
         }
+        // Authentifiziert (oder Ingress-Modus) → weiter mit Setup-Check
+        _checkSetupAndInit();
       })
-      .catch(() => _appInit());
+      .catch(() => _checkSetupAndInit());
   });
 });
+
+function _checkSetupAndInit() {
+  // Check if setup is needed
+  fetch('/api/setup-status')
+    .then(r => r.ok ? r.json() : { needs_setup: false })
+    .then(d => {
+      if (d && d.needs_setup) {
+        // Hide normal UI
+        document.querySelector('header').style.display = 'none';
+        document.querySelector('.tabs').style.display = 'none';
+        document.querySelectorAll('.panel').forEach(p => p.style.display = 'none');
+        // Show wizard
+        wizardInit();
+      } else {
+        _appInit();
+      }
+    })
+    .catch(() => _appInit());
+}
+
+function _postAuthInit() {
+  // Nach erfolgreichem Login: normalen Init-Flow starten
+  _checkSetupAndInit();
+}
 
 function _appInit() {
   // Default: first instance, live mode
@@ -193,4 +278,63 @@ function _appInit() {
   initConversationsView();
   loadStatus();
   refreshWaStatus();
+}
+
+// ── Wizard-Shortcuts (für Header-Button) ───────────────────────────────────
+window.openWizardExtend = async function() {
+  await wizardInitExtend();
+};
+
+window.openWizardFresh = async function() {
+  try {
+    const resp = await fetch('/api/setup/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'fresh' }),
+    });
+    if (!resp.ok) {
+      let msg = `Reset fehlgeschlagen (HTTP ${resp.status})`;
+      try { const d = await resp.json(); if (d.detail) msg = d.detail; } catch(_) {}
+      alert(msg);
+      return;
+    }
+  } catch(e) {
+    alert(`Reset fehlgeschlagen: ${e.message}`);
+    return;
+  }
+  // Hide normal UI while wizard is open
+  document.querySelector('header')?.style?.setProperty('display', 'none');
+  document.querySelector('.tabs')?.style?.setProperty('display', 'none');
+  document.querySelectorAll('.panel').forEach(p => p.style.display = 'none');
+  wizardInit();
+};
+
+function openWizardRestartModal() {
+  const modal = document.getElementById('wizard-restart-modal');
+  if (modal) {
+    modal.style.display = 'flex';
+    // Reset confirm state
+    const confirm = document.getElementById('wizard-restart-fresh-confirm');
+    if (confirm) confirm.style.display = 'none';
+  }
+}
+
+function closeWizardRestartModal() {
+  const modal = document.getElementById('wizard-restart-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function wizardRestartExtend() {
+  closeWizardRestartModal();
+  wizardInitExtend();
+}
+
+function wizardRestartFreshConfirm() {
+  const confirm = document.getElementById('wizard-restart-fresh-confirm');
+  if (confirm) confirm.style.display = 'block';
+}
+
+async function wizardRestartFreshConfirmed() {
+  closeWizardRestartModal();
+  await openWizardFresh();
 }

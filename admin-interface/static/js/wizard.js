@@ -1,10 +1,13 @@
-// wizard.js – Setup-Wizard (v1)
+// wizard.js – Setup-Wizard (v2)
 // Zeigt sich beim ersten Start wenn needs_setup === true
+// Unterstützt auch wiederholbare Nutzung (extend / fresh)
 
 const _wizState = {
   step: 1,
-  providers: [],      // [{type, name, url, key, models:[], tested:false}]
+  mode: 'fresh',      // 'fresh' | 'extend'
+  providers: [],      // [{type, name, url, key, key_masked, models:[], tested:false, existing:false}]
   llms: [],           // flattened: [{providerIdx, model, label}]
+  existingLlms: [],   // LLM-Einträge aus aktueller Config (im extend-Modus befüllt)
   users: [],          // [{id, name, primaryLlm, fallbackLlm, lang, selected}]
   haAssistLlm: '',
   haAdvancedLlm: '',
@@ -36,10 +39,100 @@ const _PROVIDER_DEFAULTS = {
   ollama:    'http://localhost:11434',
 };
 
-// ── Entry Point ────────────────────────────────────────────────────────────
+// ── Entry Points ───────────────────────────────────────────────────────────
 function wizardInit() {
+  // Reset state for fresh start
+  _wizState.mode = 'fresh';
+  _wizState.providers = [];
+  _wizState.llms = [];
+  _wizState.users = [];
+  _wizState.haAssistLlm = '';
+  _wizState.haAdvancedLlm = '';
+  _wizState.extractionLlm = '';
+  _wizState.dreamEnabled = false;
+  _wizState.selectedPipeline = '';
+
   const overlay = document.getElementById('wizard-overlay');
   if (!overlay) return;
+
+  // Update header subtitle
+  const subtitle = overlay.querySelector('.wizard-subtitle');
+  if (subtitle) subtitle.textContent = t('wizard.setup_title');
+
+  // Show nav
+  const nav = document.getElementById('wizard-nav');
+  if (nav) nav.style.display = '';
+
+  overlay.style.display = 'flex';
+  _wizRenderStep(1);
+}
+
+async function wizardInitExtend() {
+  _wizState.mode = 'extend';
+
+  // Load current config
+  let currentCfg = null;
+  try {
+    const r = await fetch('/api/setup/current-config');
+    if (r.ok) currentCfg = await r.json();
+  } catch(_) {}
+
+  // Reset providers/users but pre-fill from existing config
+  _wizState.providers = [];
+  _wizState.llms = [];
+  _wizState.existingLlms = [];
+  _wizState.users = [];
+
+  if (currentCfg) {
+    // Pre-fill providers as "existing" (key empty – backend keeps existing key)
+    (currentCfg.providers || []).forEach(p => {
+      _wizState.providers.push({
+        type:       p.type,
+        name:       p.name,
+        url:        p.url || '',
+        key:        '',           // empty = do not change on backend
+        key_masked: p.key_masked || '',
+        models:     [],
+        tested:     true,         // treat as already tested
+        existing:   true,         // flag for UI rendering
+      });
+    });
+    _wizRebuildLlmList();
+
+    // Pre-fill users
+    (currentCfg.users || []).forEach(u => {
+      _wizState.users.push({
+        id:           u.id,
+        display_name: u.display_name,
+        primary_llm:  u.primary_llm || '',
+        fallback_llm: u.fallback_llm || '',
+        language:     u.language || 'de',
+        selected:     true,
+        existing:     true,
+      });
+    });
+
+    // Pre-fill existing LLMs (für Extend-Modus: Modell-Optionen in Dropdowns)
+    _wizState.existingLlms = currentCfg.llms || [];
+
+    // Pre-fill system LLMs
+    if (currentCfg.ha_assist_llm)  _wizState.haAssistLlm   = currentCfg.ha_assist_llm;
+    if (currentCfg.ha_advanced_llm) _wizState.haAdvancedLlm = currentCfg.ha_advanced_llm;
+    if (currentCfg.extraction_llm) _wizState.extractionLlm  = currentCfg.extraction_llm;
+    if (currentCfg.dream_enabled !== undefined) _wizState.dreamEnabled = currentCfg.dream_enabled;
+  }
+
+  const overlay = document.getElementById('wizard-overlay');
+  if (!overlay) return;
+
+  // Update header subtitle to "extend" mode label
+  const subtitle = overlay.querySelector('.wizard-subtitle');
+  if (subtitle) subtitle.textContent = t('wizard.extend_title');
+
+  // Show nav
+  const nav = document.getElementById('wizard-nav');
+  if (nav) nav.style.display = '';
+
   overlay.style.display = 'flex';
   _wizRenderStep(1);
 }
@@ -93,7 +186,10 @@ function _wizUpdateNextBtn() {
   if (!nextBtn) return;
   const step = _wizState.step;
   if (step === 1) {
-    const ok = _wizState.providers.some(p => p.tested && p.models.length > 0);
+    // In extend mode, existing providers (p.existing) count as valid even without re-testing
+    const ok = _wizState.providers.some(p =>
+      (p.tested && p.models.length > 0) || p.existing
+    );
     nextBtn.disabled = !ok;
     nextBtn.title = ok ? '' : t('wizard.step1_need_provider');
   } else {
@@ -103,7 +199,13 @@ function _wizUpdateNextBtn() {
 
 // ── Step 1: Providers ──────────────────────────────────────────────────────
 function _wizStep1Html() {
+  const modeHint = _wizState.mode === 'extend'
+    ? `<div style="background:var(--accent2);background:color-mix(in srgb,var(--accent2) 15%,transparent);border:1px solid var(--accent2);border-radius:var(--radius-sm);padding:var(--sp-2) var(--sp-3);margin-bottom:var(--sp-3);font-size:12px;color:var(--accent2);">
+        &#128274; ${t('wizard.mode_extend')} – ${t('wizard.restart_extend_desc')}
+      </div>`
+    : '';
   return `
+    ${modeHint}
     <h2 class="wizard-section-title" data-i18n="wizard.step1_title">${t('wizard.step1_title')}</h2>
     <p class="wizard-section-desc" data-i18n="wizard.step1_desc">${t('wizard.step1_desc')}</p>
     <div id="wiz-providers-list"></div>
@@ -140,14 +242,36 @@ function _wizProviderCardHtml(p, i) {
   const status = p.tested
     ? (p.models.length > 0
       ? `<span style="color:var(--green);">&#10003; ${t('wizard.connected')} &middot; ${p.models.length} ${t('wizard.models')}</span>`
-      : `<span style="color:var(--yellow);">&#9888; ${t('wizard.connected_no_models')}</span>`)
+      : (p.existing
+        ? `<span style="color:var(--green);">&#128274; ${t('wizard.extend_provider_existing')}</span>`
+        : `<span style="color:var(--yellow);">&#9888; ${t('wizard.connected_no_models')}</span>`))
     : `<span style="color:var(--muted);">${t('wizard.not_tested')}</span>`;
 
+  // Existing provider: show masked key, placeholder for new key input
+  const keyField = p.existing
+    ? `
+    <div class="form-group" style="margin-bottom:var(--sp-3);">
+      <label>API-Key <span style="font-size:11px;color:var(--muted);">(${t('wizard.extend_provider_existing')}: ${escHtml(p.key_masked || '***')})</span></label>
+      <input type="password" id="wiz-prov-${i}-key" value=""
+        placeholder="${t('wizard.api_key_replace_placeholder')}"
+        oninput="_wizState.providers[${i}].key=this.value;_wizState.providers[${i}].tested=false;_wizUpdateNextBtn();">
+    </div>`
+    : `
+    <div class="form-group" style="margin-bottom:var(--sp-3);">
+      <label>API-Key</label>
+      <input type="password" id="wiz-prov-${i}-key" value="${escAttr(p.key || '')}"
+        placeholder="${t('wizard.api_key_placeholder')}"
+        oninput="_wizState.providers[${i}].key=this.value;_wizState.providers[${i}].tested=false;_wizUpdateNextBtn();">
+    </div>`;
+
+  const cardBorder = p.existing ? 'border-left:3px solid var(--accent2);' : '';
+
   return `
-  <div class="wizard-provider-card" id="wiz-prov-${i}">
+  <div class="wizard-provider-card" id="wiz-prov-${i}" style="${cardBorder}">
     <div style="display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-3);">
       <span style="font-size:20px;">${meta.icon}</span>
       <span style="font-weight:600;color:var(--accent2);flex:1;">${escHtml(meta.label)}</span>
+      ${p.existing ? `<span style="font-size:11px;color:var(--accent2);border:1px solid var(--accent2);border-radius:var(--radius-sm);padding:2px 6px;">&#128274; ${t('wizard.extend_provider_existing')}</span>` : ''}
       <button class="btn btn-sm btn-danger" onclick="wizRemoveProvider(${i})">&#10005;</button>
     </div>
     ${p.type === 'ollama' ? `
@@ -156,13 +280,7 @@ function _wizProviderCardHtml(p, i) {
       <input type="url" id="wiz-prov-${i}-url" value="${escAttr(p.url || _PROVIDER_DEFAULTS.ollama)}"
         placeholder="http://localhost:11434"
         oninput="_wizState.providers[${i}].url=this.value;_wizState.providers[${i}].tested=false;_wizUpdateNextBtn();">
-    </div>` : `
-    <div class="form-group" style="margin-bottom:var(--sp-3);">
-      <label>API-Key</label>
-      <input type="password" id="wiz-prov-${i}-key" value="${escAttr(p.key || '')}"
-        placeholder="${t('wizard.api_key_placeholder')}"
-        oninput="_wizState.providers[${i}].key=this.value;_wizState.providers[${i}].tested=false;_wizUpdateNextBtn();">
-    </div>`}
+    </div>` : keyField}
     <div style="display:flex;gap:var(--sp-2);align-items:center;">
       <button class="btn btn-secondary btn-sm" onclick="wizTestProvider(${i})" id="wiz-prov-${i}-test-btn">
         ${t('wizard.test_connection')}
@@ -229,8 +347,14 @@ async function wizTestProvider(i) {
   if (keyEl) p.key = keyEl.value.trim();
   if (urlEl) p.url = urlEl.value.trim();
 
-  if (!p.url && !p.key && p.type !== 'ollama') {
+  if (!p.url && !p.key && !p.key_masked && p.type !== 'ollama') {
     statusEl.innerHTML = `<span style="color:var(--yellow);">&#9888; ${t('wizard.enter_key_first')}</span>`;
+    return;
+  }
+  // Existing provider with empty key: cannot re-test without a new key
+  if (p.existing && !p.key && p.type !== 'ollama') {
+    statusEl.innerHTML = `<span style="color:var(--muted);">&#128274; ${t('wizard.extend_provider_existing')} – ${t('wizard.api_key_replace_placeholder')}</span>`;
+    if (testBtn) testBtn.disabled = false;
     return;
   }
 
@@ -268,11 +392,32 @@ async function wizTestProvider(i) {
 function _wizRebuildLlmList() {
   // Rebuild flat LLM list from all tested providers
   _wizState.llms = [];
+  const seenIds = new Set();
+
   _wizState.providers.forEach((p, pi) => {
     if (!p.tested) return;
     (p.models || []).forEach(m => {
-      _wizState.llms.push({ providerIdx: pi, providerType: p.type, model: m, label: `${m} (${p.name})` });
+      const id = `${p.type}::${m}`;
+      if (!seenIds.has(id)) {
+        seenIds.add(id);
+        _wizState.llms.push({ providerIdx: pi, providerType: p.type, model: m, label: `${m} (${p.name})` });
+      }
     });
+  });
+
+  // Im Extend-Modus: existierende LLM-Einträge aus der Config hinzufügen (dedupliziert)
+  (_wizState.existingLlms || []).forEach(llm => {
+    const id = llm.id || llm.name || '';
+    if (id && !seenIds.has(id)) {
+      seenIds.add(id);
+      _wizState.llms.push({
+        providerIdx:  -1,
+        providerType: llm.provider || '',
+        model:        llm.model || llm.name || id,
+        label:        llm.name || llm.model || id,
+        existingId:   id,
+      });
+    }
   });
 }
 
@@ -414,6 +559,11 @@ function _wizCheapestModel() {
 
 function _wizLlmOptions(selected) {
   if (_wizState.llms.length === 0) {
+    // In extend mode: show the currently assigned value as a disabled placeholder
+    if (selected) {
+      return `<option value="${escAttr(selected)}" selected>${escHtml(selected)}</option>
+              <option value="" disabled>── ${t('wizard.no_models_available')} ──</option>`;
+    }
     return `<option value="">${t('wizard.no_models_available')}</option>`;
   }
   return _wizState.llms.map(m =>
@@ -707,7 +857,13 @@ async function wizFinish() {
 
   try {
     const payload = {
-      providers:     _wizState.providers.map(p => ({ type: p.type, name: p.name, url: p.url, key: p.key })),
+      mode:          _wizState.mode || 'fresh',
+      providers:     _wizState.providers.map(p => ({
+        type: p.type,
+        name: p.name,
+        url:  p.url,
+        key:  p.key,  // empty string = "do not change" in extend mode
+      })),
       users:         _wizState.users,
       ha_assist_llm: _wizState.haAssistLlm,
       ha_advanced_llm: _wizState.haAdvancedLlm,

@@ -8,6 +8,32 @@
 </head>
 <body>
 
+<!-- ═══════════════════════════════════════════════════════ LOGIN OVERLAY -->
+<div id="login-overlay" class="wizard-overlay" style="display:none;">
+  <div class="wizard-container" style="max-width:420px;">
+    <div class="wizard-header">
+      <div class="wizard-logo">HAANA</div>
+      <div class="wizard-subtitle" data-i18n="auth.login_title">Anmeldung</div>
+    </div>
+    <div class="wizard-content" style="padding:32px 32px 24px;">
+      <p class="form-hint" style="margin-bottom:20px;" data-i18n="auth.standalone_hint">
+        Den Admin-Token findest du beim ersten Start in den HAANA-Logs.
+      </p>
+      <div class="form-group" style="margin-bottom:16px;">
+        <input type="password" id="login-token-input"
+               data-i18n-placeholder="auth.token_placeholder"
+               placeholder="Admin-Token eingeben..."
+               style="width:100%;padding:10px 14px;font-size:14px;"
+               onkeydown="if(event.key==='Enter') loginSubmit()">
+      </div>
+      <div id="login-error" style="color:var(--red);font-size:13px;margin-bottom:12px;display:none;"
+           data-i18n="auth.error_invalid_token">Ungültiger Token.</div>
+      <button class="btn btn-primary" style="width:100%;" onclick="loginSubmit()"
+              data-i18n="auth.login_btn">Anmelden</button>
+    </div>
+  </div>
+</div>
+
 <!-- ════════════════════════════════════════════════ SETUP WIZARD OVERLAY -->
 <div id="wizard-overlay" class="wizard-overlay" style="display:none;">
   <div class="wizard-container">
@@ -63,11 +89,61 @@
   <div class="status-dot" id="header-dot" title="System-Status"></div>
   <h1>HAANA <span>Admin</span></h1>
   <span class="header-status" id="header-status">Verbinde...</span>
+  <button class="btn btn-secondary btn-sm" id="wizard-restart-btn"
+          onclick="openWizardRestartModal()"
+          data-i18n="wizard.restart_btn"
+          style="margin-left:auto;font-size:12px;padding:4px 10px;">
+    &#9881; Einrichtung
+  </button>
   <select class="header-lang" id="lang-selector" onchange="I18n.load(this.value)">
     <option value="de">DE</option>
     <option value="en">EN</option>
   </select>
 </header>
+
+<!-- ══════════════════════════════════════════ WIZARD RESTART MODAL -->
+<div id="wizard-restart-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9000;align-items:center;justify-content:center;">
+  <div style="background:var(--bg-card);border-radius:var(--radius);padding:var(--sp-6);max-width:440px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.4);">
+    <h3 style="margin:0 0 var(--sp-4);font-size:16px;" data-i18n="wizard.restart_title">Einrichtung anpassen</h3>
+
+    <!-- Option: Extend -->
+    <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:var(--sp-4);margin-bottom:var(--sp-3);cursor:pointer;"
+         onclick="wizardRestartExtend()">
+      <div style="font-weight:600;margin-bottom:4px;">
+        &#10133; <span data-i18n="wizard.mode_extend">Konfiguration erweitern</span>
+      </div>
+      <div style="font-size:12px;color:var(--muted);" data-i18n="wizard.restart_extend_desc">
+        Weitere Provider, Benutzer oder LLMs hinzufügen
+      </div>
+    </div>
+
+    <!-- Option: Fresh -->
+    <div style="border:1px solid var(--red);border-radius:var(--radius-sm);padding:var(--sp-4);margin-bottom:var(--sp-5);cursor:pointer;"
+         onclick="wizardRestartFreshConfirm()">
+      <div style="font-weight:600;margin-bottom:4px;color:var(--red);">
+        &#9888; <span data-i18n="wizard.mode_fresh">Neu einrichten</span>
+      </div>
+      <div style="font-size:12px;color:var(--muted);" data-i18n="wizard.restart_fresh_desc">
+        Alles zurücksetzen und von vorne beginnen
+      </div>
+    </div>
+
+    <!-- Confirm fresh warning (hidden initially) -->
+    <div id="wizard-restart-fresh-confirm" style="display:none;background:color-mix(in srgb,var(--red) 12%,transparent);border:1px solid var(--red);border-radius:var(--radius-sm);padding:var(--sp-3);margin-bottom:var(--sp-4);">
+      <div style="font-size:13px;color:var(--red);font-weight:600;margin-bottom:var(--sp-2);" data-i18n="wizard.restart_fresh_warning">
+        Achtung: Alle Provider, Benutzer und LLMs werden gelöscht!
+      </div>
+      <div style="display:flex;gap:var(--sp-2);">
+        <button class="btn btn-danger btn-sm" onclick="wizardRestartFreshConfirmed()" data-i18n="wizard.mode_fresh">Neu einrichten</button>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('wizard-restart-fresh-confirm').style.display='none'" data-i18n="common.cancel">Abbrechen</button>
+      </div>
+    </div>
+
+    <div style="text-align:right;">
+      <button class="btn btn-secondary btn-sm" onclick="closeWizardRestartModal()" data-i18n="common.cancel">Abbrechen</button>
+    </div>
+  </div>
+</div>
 
 <div class="tabs">
   <button class="tab-btn active" onclick="showTab('conversations', event)" data-i18n="tabs.conversations">Konversationen</button>
@@ -951,10 +1027,10 @@
 <script src="/static/js/modal.js?v=3"></script>
 
 <!-- App-Kern (globaler State, Tabs, Init) -->
-<script src="/static/js/app.js?v=8"></script>
+<script src="/static/js/app.js?v=10"></script>
 
 <!-- Setup Wizard -->
-<script src="/static/js/wizard.js?v=1"></script>
+<script src="/static/js/wizard.js?v=2"></script>
 
 <!-- Feature-Module -->
 <script src="/static/js/chat.js?v=5"></script>

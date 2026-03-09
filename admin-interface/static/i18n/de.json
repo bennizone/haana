@@ -1,4 +1,12 @@
 {
+  "auth": {
+    "login_title": "HAANA Admin – Anmeldung",
+    "token_placeholder": "Admin-Token eingeben...",
+    "login_btn": "Anmelden",
+    "logout": "Abmelden",
+    "error_invalid_token": "Ungültiger Token. Bitte prüfe den Token in den HAANA-Logs.",
+    "standalone_hint": "Den Admin-Token findest du beim ersten Start in den HAANA-Logs (Supervisor → Logs). Er beginnt mit 'HAANA Admin Token: ...'."
+  },
   "app": {
     "title": "HAANA Admin",
     "connecting": "Verbinde..."
@@ -648,7 +656,17 @@
     "done_desc": "Die Einrichtung ist abgeschlossen. Du kannst jetzt mit HAANA chatten.",
     "start_chatting": "Zum Chat",
     "finish_error": "Einrichtung fehlgeschlagen",
-    "try_again": "Erneut versuchen"
+    "try_again": "Erneut versuchen",
+    "mode_extend": "Konfiguration erweitern",
+    "mode_fresh": "Neu einrichten",
+    "restart_btn": "Einrichtung",
+    "restart_title": "Einrichtung anpassen",
+    "restart_extend_desc": "Weitere Provider, Benutzer oder LLMs hinzufügen",
+    "restart_fresh_desc": "Alles zurücksetzen und von vorne beginnen",
+    "restart_fresh_warning": "Achtung: Alle Provider, Benutzer und LLMs werden gelöscht!",
+    "extend_provider_existing": "Vorhanden",
+    "extend_title": "Konfiguration erweitern",
+    "api_key_replace_placeholder": "Neuen Key eingeben (leer lassen = unverändert)"
   },
   "status_hints": {
     "no_provider": "Kein LLM-Provider konfiguriert. Gehe zu Konfiguration > Provider.",
