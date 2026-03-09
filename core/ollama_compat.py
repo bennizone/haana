@@ -10,6 +10,8 @@ Architektur: Universeller LLM-Proxy mit Tool-Calling-Support und Delegation.
 - Übersetzt und leitet an beliebigen Provider weiter (Ollama, Anthropic, OpenAI, MiniMax, Gemini)
 - Übersetzt Tool-Calls zurück ins Ollama-Format (für HA)
 - Delegation: ha-assist kann komplexe Anfragen an ha-advanced weiterleiten ([DELEGATE]-Marker)
+- Agent-Routing: Reguläre User-Agents (alice, bob, ...) werden als Modelle exponiert
+  und Nachrichten direkt an die Agent-API geroutet (System-Prompt/Kontext wird abgeschnitten)
 
 Endpoints:
   GET  /api/tags     → Listet konfigurierte Modelle
@@ -497,6 +499,13 @@ def create_ollama_router(
         models = get_config().get("ollama_compat", {}).get("exposed_models", [])
         return models if models else ["ha-assist", "ha-advanced"]
 
+    def _all_user_ids() -> list[str]:
+        return [u["id"] for u in get_config().get("users", [])]
+
+    def _is_agent_model(instance: str) -> bool:
+        """True wenn instance ein regulärer User-Agent ist (kein Proxy-Modell)."""
+        return instance not in _exposed_models() and instance in _all_user_ids()
+
     def _resolve_user_llm(instance: str) -> tuple[dict, dict, dict]:
         cfg = get_config()
         user = next((u for u in cfg.get("users", []) if u["id"] == instance), {})
@@ -518,10 +527,15 @@ def create_ollama_router(
         if not _is_enabled():
             return JSONResponse({"models": []}, status_code=200)
         models = []
+        # Proxy-Modelle (exposed_models mit LLM-Config)
         for inst in _exposed_models():
             user, llm, prov = _resolve_user_llm(inst)
             if user and llm:
                 models.append(_model_entry(inst))
+        # Reguläre User-Agents (direkt an Agent-API geroutet)
+        for uid in _all_user_ids():
+            if uid not in _exposed_models():
+                models.append(_model_entry(uid))
         return {"models": models}
 
     @router.post("/api/chat")
@@ -539,6 +553,26 @@ def create_ollama_router(
         messages = body.get("messages", [])
         tools = body.get("tools")
         stream = body.get("stream", True)
+
+        # ── Agent-Modell: direkt an laufenden Agent routen ──
+        if _is_agent_model(instance):
+            if not get_agent_url:
+                return JSONResponse({"error": f"Agent-Routing nicht verfügbar"}, status_code=503)
+            _, user_message = _extract_messages(messages)
+            if not user_message:
+                return _make_response("", model_raw, 0.0, stream)
+            t_start = time.monotonic()
+            agent_text = await _handle_delegation(
+                instance, user_message, get_agent_url=get_agent_url,
+            )
+            elapsed = time.monotonic() - t_start
+            if agent_text is None:
+                return JSONResponse({"error": f"Agent '{instance}' nicht erreichbar"}, status_code=503)
+            logger.info(
+                "[ollama-compat] agent %s: %.2fs | Q: %s | A: %s",
+                instance, elapsed, user_message[:80], agent_text[:120],
+            )
+            return _make_response(agent_text, model_raw, elapsed, stream)
 
         exposed = _exposed_models()
         if instance not in exposed:
@@ -677,7 +711,7 @@ def create_ollama_router(
             return JSONResponse({"error": "Ungültiges JSON"}, status_code=400)
         model_raw = body.get("name", body.get("model", ""))
         instance = _strip_tag(model_raw)
-        if instance not in _exposed_models():
+        if instance not in _exposed_models() and not _is_agent_model(instance):
             return JSONResponse({"error": f"Modell '{model_raw}' nicht gefunden"}, status_code=404)
         return {
             "modelfile": f'FROM {instance}\nSYSTEM "HAANA Voice {instance}"',
@@ -701,6 +735,15 @@ def create_ollama_router(
                 models.append({
                     "name": f"{inst}:latest", "model": f"{inst}:latest",
                     "size": 0, "digest": f"haana-{inst}",
+                    "details": _MODEL_META,
+                    "expires_at": "2099-12-31T23:59:59Z", "size_vram": 0,
+                })
+        # Reguläre User-Agents
+        for uid in _all_user_ids():
+            if uid not in _exposed_models():
+                models.append({
+                    "name": f"{uid}:latest", "model": f"{uid}:latest",
+                    "size": 0, "digest": f"haana-{uid}",
                     "details": _MODEL_META,
                     "expires_at": "2099-12-31T23:59:59Z", "size_vram": 0,
                 })

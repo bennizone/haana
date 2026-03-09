@@ -1091,3 +1091,182 @@ def test_no_delegation_without_agent_url(mock_llm, mock_mem, config_with_delegat
 
     # Fallback auf eigene Antwort
     assert resp.json()["message"]["content"] == "[DELEGATE]"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Tests: Agent-Routing (reguläre User-Agents als Ollama-Modelle)
+# ══════════════════════════════════════════════════════════════════════════════
+
+_USERS_WITH_AGENTS = list(_USERS) + [
+    {"id": "alice", "primary_llm": "ollama-ministral"},
+    {"id": "bob", "primary_llm": "ollama-ministral"},
+]
+
+
+@pytest.fixture
+def config_with_agents():
+    return {
+        "ollama_compat": {"enabled": True, "exposed_models": ["ha-assist", "ha-advanced"]},
+        "users": list(_USERS_WITH_AGENTS),
+        "llms": list(_LLMS),
+        "providers": list(_PROVIDERS),
+    }
+
+
+def _make_agent_app(cfg, agent_url_map=None):
+    """Erstellt eine Test-App mit Agent-Routing-Support."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    app = FastAPI()
+    router = create_ollama_router(
+        get_config=lambda: cfg,
+        resolve_llm=_resolve_llm,
+        find_ollama_url=lambda c: "http://localhost:11434",
+        get_agent_url=lambda inst: (agent_url_map or {}).get(inst, ""),
+    )
+    app.include_router(router)
+    return TestClient(app)
+
+
+def test_tags_includes_user_agents(config_with_agents):
+    """User-Agents werden neben Proxy-Modellen in /api/tags gelistet."""
+    client = _make_agent_app(config_with_agents, {"alice": "http://alice:8001"})
+    resp = client.get("/api/tags")
+    names = [m["name"] for m in resp.json()["models"]]
+    assert "ha-assist:latest" in names
+    assert "ha-advanced:latest" in names
+    assert "alice:latest" in names
+    assert "bob:latest" in names
+
+
+def test_show_accepts_user_agent(config_with_agents):
+    """POST /api/show funktioniert auch für User-Agents."""
+    client = _make_agent_app(config_with_agents)
+    resp = client.post("/api/show", json={"name": "alice:latest"})
+    assert resp.status_code == 200
+    assert resp.json()["details"]["family"] == "haana"
+
+
+def test_ps_includes_user_agents(config_with_agents):
+    """GET /api/ps listet auch User-Agents."""
+    client = _make_agent_app(config_with_agents)
+    resp = client.get("/api/ps")
+    names = [m["name"] for m in resp.json()["models"]]
+    assert "alice:latest" in names
+    assert "bob:latest" in names
+
+
+@mock.patch("core.ollama_compat._handle_delegation", return_value="Hallo, hier ist Alice!")
+def test_agent_chat_routes_to_agent(mock_deleg, config_with_agents):
+    """Chat an User-Agent wird direkt an Agent-API geroutet."""
+    client = _make_agent_app(config_with_agents, {"alice": "http://alice:8001"})
+
+    resp = client.post("/api/chat", json={
+        "model": "alice:latest",
+        "messages": [
+            {"role": "system", "content": "HA system prompt with entities"},
+            {"role": "user", "content": "Was hast du heute gemacht?"},
+        ],
+        "stream": False,
+    })
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["message"]["content"] == "Hallo, hier ist Alice!"
+    assert data["model"] == "alice:latest"
+
+    # System-Prompt wurde abgeschnitten — nur User-Message an Agent
+    mock_deleg.assert_called_once()
+    call_args = mock_deleg.call_args
+    assert call_args[0][0] == "alice"
+    assert call_args[0][1] == "Was hast du heute gemacht?"
+
+
+@mock.patch("core.ollama_compat._handle_delegation", return_value="Antwort von Bob")
+def test_agent_chat_strips_system_prompt(mock_deleg, config_with_agents):
+    """System-Prompt und HA-Kontext werden abgeschnitten, nur User-Message gesendet."""
+    client = _make_agent_app(config_with_agents, {"bob": "http://bob:8003"})
+
+    resp = client.post("/api/chat", json={
+        "model": "bob",
+        "messages": [
+            {"role": "system", "content": "Very long HA system prompt with all entities..."},
+            {"role": "user", "content": "Hallo Bob"},
+        ],
+        "stream": False,
+    })
+
+    assert resp.status_code == 200
+    # Nur User-Message wurde weitergeleitet
+    assert mock_deleg.call_args[0][1] == "Hallo Bob"
+
+
+def test_agent_chat_no_user_message(config_with_agents):
+    """Leere User-Message bei Agent-Routing gibt leere Antwort."""
+    client = _make_agent_app(config_with_agents, {"alice": "http://alice:8001"})
+
+    resp = client.post("/api/chat", json={
+        "model": "alice",
+        "messages": [{"role": "system", "content": "Only system prompt"}],
+        "stream": False,
+    })
+
+    assert resp.status_code == 200
+    assert resp.json()["message"]["content"] == ""
+
+
+@mock.patch("core.ollama_compat._handle_delegation", return_value=None)
+def test_agent_chat_agent_unavailable(mock_deleg, config_with_agents):
+    """Wenn Agent nicht erreichbar, 503 Fehler."""
+    client = _make_agent_app(config_with_agents, {"alice": "http://alice:8001"})
+
+    resp = client.post("/api/chat", json={
+        "model": "alice",
+        "messages": [{"role": "user", "content": "Hallo"}],
+        "stream": False,
+    })
+
+    assert resp.status_code == 503
+
+
+def test_agent_chat_no_agent_url_callback(config_with_agents):
+    """Ohne get_agent_url Callback: 503 für Agent-Modelle."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    app = FastAPI()
+    router = create_ollama_router(
+        get_config=lambda: config_with_agents,
+        resolve_llm=_resolve_llm,
+        find_ollama_url=lambda c: "http://localhost:11434",
+        # Kein get_agent_url
+    )
+    app.include_router(router)
+    client = TestClient(app)
+
+    resp = client.post("/api/chat", json={
+        "model": "alice",
+        "messages": [{"role": "user", "content": "Hallo"}],
+        "stream": False,
+    })
+
+    assert resp.status_code == 503
+
+
+@mock.patch("core.ollama_compat._handle_delegation", return_value="Agent Streaming Test")
+def test_agent_chat_streaming(mock_deleg, config_with_agents):
+    """Agent-Routing unterstützt Streaming."""
+    client = _make_agent_app(config_with_agents, {"alice": "http://alice:8001"})
+
+    resp = client.post("/api/chat", json={
+        "model": "alice",
+        "messages": [{"role": "user", "content": "Test"}],
+        "stream": True,
+    })
+
+    assert resp.status_code == 200
+    lines = [l for l in resp.text.strip().split("\n") if l.strip()]
+    assert len(lines) >= 2
+    last = json.loads(lines[-1])
+    assert last["done"] is True
