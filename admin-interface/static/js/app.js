@@ -17,7 +17,7 @@ function showTab(name, e) {
   else document.querySelector(`.tab-btn[onclick*="'${name}'"]`)?.classList.add('active');
 
   if (name === 'conversations') { initConversationsView(); }
-  if (name === 'config') { loadConfig(); loadMemoryStats(); }
+  if (name === 'config') { loadConfig(); loadMemoryStats(); loadGitStatus(); }
   if (name === 'users')  loadUsers();
   if (name === 'status') loadStatus();
   if (name === 'terminal') { initTerminal(); }

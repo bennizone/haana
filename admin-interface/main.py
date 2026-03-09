@@ -57,6 +57,7 @@ import auth as _auth
 import sys as _sys
 import os as _os
 _sys.path.insert(0, _os.path.dirname(__file__))
+import git_integration as _git
 from terminal import (
     ws_terminal as _ws_terminal,
     set_provider as _term_set_provider,
@@ -3813,3 +3814,35 @@ async def terminal_set_provider(request: Request):
 @app.get("/api/terminal/status")
 async def terminal_status():
     return await _term_status()
+
+
+# ── MS5: Git-Integration ───────────────────────────────────────────────────────
+
+@app.get("/api/git/status")
+async def api_git_status():
+    return await _git.git_status()
+
+
+@app.post("/api/git/pull")
+async def api_git_pull(request: Request):
+    return await _git.git_pull()
+
+
+@app.post("/api/git/push")
+async def api_git_push(request: Request):
+    return await _git.git_push()
+
+
+@app.post("/api/git/connect")
+async def api_git_connect(request: Request):
+    body = await request.json()
+    url = body.get("url", "")
+    token = body.get("token", "")
+    if not url.startswith(("https://", "http://")):
+        return {"ok": False, "error": "URL muss mit https:// beginnen"}
+    return await _git.git_connect(url, token, load_config, save_config)
+
+
+@app.get("/api/git/log")
+async def api_git_log():
+    return await _git.git_log()

@@ -687,5 +687,22 @@
     "no_provider": "Kein LLM-Provider konfiguriert. Gehe zu Konfiguration > Provider.",
     "no_users": "Noch keine Benutzer angelegt. Erstelle deinen ersten Assistenten.",
     "agents_offline": "Agenten sind nicht gestartet. Starte sie im Benutzer-Tab."
+  },
+  "git": {
+    "section_title": "Git Repository",
+    "connect_btn": "Verbinden",
+    "pull_btn": "↓ Pull",
+    "push_btn": "↑ Push",
+    "log_btn": "Verlauf",
+    "url_label": "Repository-URL",
+    "token_label": "Access Token",
+    "save_btn": "Speichern & Verbinden",
+    "not_connected": "Nicht verbunden",
+    "status_ahead": "{{n}} ahead",
+    "status_behind": "{{n}} behind",
+    "status_dirty": "Lokale Änderungen",
+    "pull_success": "Pull erfolgreich",
+    "push_success": "Push erfolgreich",
+    "error": "Git-Fehler"
   }
 }
