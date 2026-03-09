@@ -6,14 +6,19 @@ Kategorien:
   llm-calls/YYYY-MM-DD.jsonl                 – jeder LLM-Call mit Metriken
   memory-ops/YYYY-MM-DD.jsonl                – Memory-Reads und -Writes
   tool-calls/YYYY-MM-DD.jsonl                – Tool-Aufrufe mit Parametern
+  dream/{instance}/YYYY-MM-DD.jsonl          – Dream-Tagebuch
 
 Format: JSONL (eine JSON-Zeile pro Event), täglich rotiert, nie gelöscht.
 Qdrant kann jederzeit aus den Logs rekonstruiert werden.
 
-Konfiguration:
-  HAANA_LOG_DIR – Log-Verzeichnis (Standard: data/logs)
+Speicherpfade:
+  /data/                    – Konfiguration, Kontext (immer gebackupt)
+  /media/haana/             – Logs, Qdrant-Daten (groß, wachsend)
+  HAANA_MEDIA_DIR           – Standard: /media/haana (HA Addon), Fallback: /data
+  HAANA_LOG_DIR             – Standard: {MEDIA_DIR}/logs
 """
 
+import hashlib
 import json
 import logging
 import os
@@ -24,8 +29,28 @@ from typing import Any, Optional
 _logger = logging.getLogger(__name__)
 
 
+def get_media_dir() -> Path:
+    """Gibt das Media-Verzeichnis zurück.
+
+    Priorität:
+      1. HAANA_MEDIA_DIR Env-Var
+      2. /media/haana (falls vorhanden, HA Addon)
+      3. /data (Fallback für Dev/Docker)
+    """
+    env = os.environ.get("HAANA_MEDIA_DIR", "").strip()
+    if env:
+        return Path(env)
+    default = Path("/media/haana")
+    if default.exists():
+        return default
+    return Path("/data")
+
+
 def _log_root() -> Path:
-    return Path(os.environ.get("HAANA_LOG_DIR", "data/logs"))
+    env = os.environ.get("HAANA_LOG_DIR", "").strip()
+    if env:
+        return Path(env)
+    return get_media_dir() / "logs"
 
 
 def _write(category: str, sub: Optional[str], record: dict) -> None:
@@ -129,7 +154,7 @@ def log_dream_summary(
 ) -> None:
     """Speichert eine Dream-Tages-Zusammenfassung als JSONL-Eintrag.
 
-    Speicherpfad: data/logs/dream/{instance}/YYYY-MM-DD.jsonl
+    Speicherpfad: {LOG_ROOT}/dream/{instance}/YYYY-MM-DD.jsonl
     """
     root = _log_root()
     path = root / "dream" / instance / f"{date}.jsonl"
@@ -156,3 +181,80 @@ def list_instances() -> list[str]:
     if not conv_dir.exists():
         return []
     return sorted(p.name for p in conv_dir.iterdir() if p.is_dir())
+
+
+# ── Extraction Index ──────────────────────────────────────────────────────────
+
+
+def _extraction_index_dir() -> Path:
+    return _log_root() / ".extraction-index"
+
+
+def _load_extraction_index(instance: str) -> dict:
+    """Lädt den Extraction-Index für eine Instanz."""
+    path = _extraction_index_dir() / f"{instance}.json"
+    if path.exists():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {}
+
+
+def _save_extraction_index(instance: str, index: dict) -> None:
+    """Speichert den Extraction-Index für eine Instanz."""
+    d = _extraction_index_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    path = d / f"{instance}.json"
+    try:
+        path.write_text(json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        _logger.error(f"[HaanaLogger] Extraction-Index schreiben fehlgeschlagen: {e}")
+
+
+def update_extraction_index(instance: str, date: str, log_file_path: str) -> None:
+    """Aktualisiert den Extraction-Index nach erfolgreicher Memory-Extraktion.
+
+    Berechnet MD5 der Log-Datei und speichert Hash + Zeitstempel.
+    """
+    try:
+        file_hash = hashlib.md5(
+            Path(log_file_path).read_bytes()
+        ).hexdigest()
+    except Exception as e:
+        _logger.error(f"[HaanaLogger] MD5-Berechnung fehlgeschlagen für {log_file_path}: {e}")
+        return
+
+    index = _load_extraction_index(instance)
+    index[date] = {
+        "hash": file_hash,
+        "extracted_at": datetime.now(timezone.utc).isoformat(),
+    }
+    _save_extraction_index(instance, index)
+
+
+def get_changed_log_files(instance: str) -> list[dict]:
+    """Vergleicht aktuelle Log-Dateien mit dem Extraction-Index.
+
+    Returns Liste von dicts: {"date": "YYYY-MM-DD", "status": "new"|"changed", "path": "..."}
+    """
+    index = _load_extraction_index(instance)
+    conv_dir = _log_root() / "conversations" / instance
+    if not conv_dir.exists():
+        return []
+
+    changed = []
+    for fpath in sorted(conv_dir.glob("*.jsonl")):
+        date = fpath.stem
+        try:
+            current_hash = hashlib.md5(fpath.read_bytes()).hexdigest()
+        except Exception:
+            continue
+
+        entry = index.get(date)
+        if entry is None:
+            changed.append({"date": date, "status": "new", "path": str(fpath)})
+        elif entry.get("hash") != current_hash:
+            changed.append({"date": date, "status": "changed", "path": str(fpath)})
+
+    return changed

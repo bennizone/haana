@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HAANA Admin</title>
-<link rel="stylesheet" href="/static/css/admin.css?v=4">
+<link rel="stylesheet" href="/static/css/admin.css?v=5">
 </head>
 <body>
 
@@ -87,49 +87,60 @@
 
 <!-- ═══════════════════════════════════════════════════════════════ LOGS -->
 <div id="panel-logs" class="panel">
-  <div class="instance-bar" style="margin-bottom:20px;">
-    <button class="inst-btn active" onclick="selectLogCat('memory-ops')"   id="logbtn-memory-ops" data-i18n="logs.memory">Memory</button>
-    <button class="inst-btn"        onclick="selectLogCat('tool-calls')"    id="logbtn-tool-calls" data-i18n="logs.tools">Tools</button>
-    <button class="inst-btn"        onclick="selectLogCat('llm-calls')"     id="logbtn-llm-calls" data-i18n="logs.llm_calls">LLM Calls</button>
-  </div>
-  <div id="log-list">
-    <div class="empty-state"><div class="icon">--</div><div data-i18n="logs.loading">Logs werden geladen...</div></div>
+
+  <!-- ── Konversations-Logs ── -->
+  <div class="log-section-title" data-i18n="logs.conv_logs_title">Konversations-Logs</div>
+
+  <!-- User/Instance tabs -->
+  <div class="log-user-tabs" id="log-user-tabs">
+    <button class="log-user-tab active" data-inst="__all__" onclick="selectLogInstance('__all__')" data-i18n="logs.tabs.all">Alle</button>
+    {% for inst in instances %}
+    <button class="log-user-tab" data-inst="{{ inst }}" onclick="selectLogInstance('{{ inst }}')">{{ inst }}</button>
+    {% endfor %}
   </div>
 
-  <!-- Download / Löschen -->
-  <div style="margin-top:24px;">
-    <div class="section-header">
-      <span class="section-label" data-i18n="logs.manage">Verwaltung</span>
+  <!-- User-level toolbar -->
+  <div class="log-toolbar" id="log-toolbar">
+    <div class="log-toolbar-actions" id="log-toolbar-actions">
+      <button class="btn btn-sm btn-secondary" id="log-export-btn" onclick="logExportUser()" data-i18n="logs.user.export">Export (ZIP)</button>
+      <button class="btn btn-sm btn-secondary" id="log-check-btn" onclick="logCheckRebuild()" data-i18n="logs.user.check_rebuild">Änderungen prüfen</button>
+      <button class="btn btn-sm btn-danger" id="log-delete-all-btn" onclick="logDeleteAllUser()" data-i18n="logs.user.delete_all">Alle Daten löschen</button>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
-      <button class="btn btn-secondary" onclick="downloadLogs('all')" data-i18n="logs.download_all">Alle Logs herunterladen</button>
-      <button class="btn btn-secondary" onclick="downloadLogs('system')" data-i18n="logs.download_system">System-Logs herunterladen</button>
-      <button class="btn btn-secondary" onclick="downloadLogs('conversations')" data-i18n="logs.download_conversations">Konversationen herunterladen</button>
-      <span style="width:16px;"></span>
-      <button class="btn btn-danger" onclick="confirmDeleteLogs('all')" data-i18n="logs.delete_all">Alle Logs löschen</button>
-      <button class="btn btn-danger" onclick="confirmDeleteLogs('system')" data-i18n="logs.delete_system">System-Logs löschen</button>
-      <button class="btn btn-danger" onclick="confirmDeleteLogs('conversations')" data-i18n="logs.delete_conversations">Konversationen löschen</button>
+    <!-- Date filter -->
+    <div class="log-filter-bar">
+      <div class="log-date-range">
+        <label class="log-filter-label" data-i18n="logs.filter.from">Von</label>
+        <input type="date" id="log-date-from" class="log-date-input" onchange="applyLogFilters()">
+        <label class="log-filter-label" data-i18n="logs.filter.to">Bis</label>
+        <input type="date" id="log-date-to" class="log-date-input" onchange="applyLogFilters()">
+      </div>
+      <div class="log-quick-filters">
+        <button class="log-quick-btn active" data-range="all" onclick="setLogDateRange('all')" data-i18n="logs.filter.all">Alles</button>
+        <button class="log-quick-btn" data-range="today" onclick="setLogDateRange('today')" data-i18n="logs.filter.today">Heute</button>
+        <button class="log-quick-btn" data-range="7" onclick="setLogDateRange('7')" data-i18n="logs.filter.7days">7 Tage</button>
+        <button class="log-quick-btn" data-range="30" onclick="setLogDateRange('30')" data-i18n="logs.filter.30days">30 Tage</button>
+      </div>
+      <div class="log-search-wrap">
+        <svg class="log-search-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="8.5" cy="8.5" r="5.5"/><line x1="13" y1="13" x2="18" y2="18"/>
+        </svg>
+        <input type="text" id="log-search" class="log-search-input" placeholder="Logs durchsuchen..."
+               data-i18n-placeholder="logs.filter.search" oninput="debounceLogSearch()">
+      </div>
     </div>
   </div>
 
-  <!-- Log-Dateien (editierbar) -->
-  <div style="margin-top:24px;">
-    <div class="section-header">
-      <span class="section-label" data-i18n="logs.log_files">Log-Dateien</span>
-      <button class="btn btn-sm btn-secondary" onclick="loadLogFiles(currentInstance)">↺</button>
-    </div>
-    <div class="instance-bar" style="margin-bottom:12px;">
-      {% for inst in instances %}
-      <button class="inst-btn {% if loop.first %}active{% endif %}"
-              onclick="selectLogFileInstance('{{ inst }}')" id="logfilebtn-{{ inst }}">
-        {{ inst }}
-      </button>
-      {% endfor %}
-    </div>
-    <div id="log-files-list" class="log-files-list">
-      <span class="log-files-loading" data-i18n="common.loading">Wird geladen...</span>
+  <!-- Check-rebuild result banner -->
+  <div id="log-check-result" class="log-check-banner" style="display:none;"></div>
+
+  <!-- Day-card list -->
+  <div id="log-day-list">
+    <div class="empty-state">
+      <div class="icon">&#8230;</div>
+      <div data-i18n="logs.loading">Logs werden geladen...</div>
     </div>
   </div>
+
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════ CONFIG -->
@@ -825,7 +836,7 @@
 <script src="/static/js/config.js?v=5"></script>
 <script src="/static/js/users.js?v=5"></script>
 <script src="/static/js/status.js?v=3"></script>
-<script src="/static/js/logs.js?v=4"></script>
+<script src="/static/js/logs.js?v=5"></script>
 <script src="/static/js/whatsapp.js?v=3"></script>
 </body>
 </html>

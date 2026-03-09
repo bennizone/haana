@@ -17,6 +17,25 @@ from typing import Optional, Protocol, runtime_checkable
 logger = logging.getLogger(__name__)
 
 
+def _get_default_media_dir() -> Path:
+    """Media-Verzeichnis: HAANA_MEDIA_DIR > /media/haana > /data."""
+    env = os.environ.get("HAANA_MEDIA_DIR", "").strip()
+    if env:
+        return Path(env)
+    default = Path("/media/haana")
+    if default.exists():
+        return default
+    return Path("/data")
+
+
+def _get_default_log_dir() -> Path:
+    """Log-Verzeichnis: HAANA_LOG_DIR > {MEDIA_DIR}/logs."""
+    env = os.environ.get("HAANA_LOG_DIR", "").strip()
+    if env:
+        return Path(env)
+    return _get_default_media_dir() / "logs"
+
+
 @runtime_checkable
 class AgentManager(Protocol):
     """Protocol für Agent-Lifecycle-Management."""
@@ -154,7 +173,8 @@ def _build_agent_env(user: dict, cfg: dict, resolve_llm_fn, find_ollama_url_fn) 
     env = {
         "HAANA_INSTANCE":        uid,
         "HAANA_API_PORT":        str(api_port),
-        "HAANA_LOG_DIR":         os.environ.get("HAANA_LOG_DIR", "/data/logs"),
+        "HAANA_MEDIA_DIR":       os.environ.get("HAANA_MEDIA_DIR", str(_get_default_media_dir())),
+        "HAANA_LOG_DIR":         os.environ.get("HAANA_LOG_DIR", str(_get_default_log_dir())),
         "HAANA_WRITE_SCOPES":    write_scopes,
         "HAANA_READ_SCOPES":     read_scopes,
         "HAANA_MODEL":           p_llm.get("model", "claude-sonnet-4-6"),
@@ -239,10 +259,12 @@ class DockerAgentManager:
 
     def __init__(self, docker_client, *, host_base: str, data_volume: str,
                  compose_network: str, agent_image: str,
+                 media_volume: str = "",
                  resolve_llm_fn, find_ollama_url_fn):
         self._client = docker_client
         self._host_base = host_base
         self._data_volume = data_volume
+        self._media_volume = media_volume or os.environ.get("HAANA_MEDIA_VOLUME", "haana_haana-media")
         self._compose_network = compose_network
         self._agent_image = agent_image
         self._resolve_llm = resolve_llm_fn
@@ -307,9 +329,10 @@ class DockerAgentManager:
         host_claude_config = "/home/haana/.claude"
 
         volumes = {
-            host_claude_md:    {"bind": "/app/CLAUDE.md", "mode": "ro"},
-            host_skills:       {"bind": "/app/skills",     "mode": "ro"},
-            self._data_volume: {"bind": "/data",           "mode": "rw"},
+            host_claude_md:      {"bind": "/app/CLAUDE.md",  "mode": "ro"},
+            host_skills:         {"bind": "/app/skills",     "mode": "ro"},
+            self._data_volume:   {"bind": "/data",           "mode": "rw"},
+            self._media_volume:  {"bind": "/media/haana",    "mode": "rw"},
         }
 
         # Provider aus env rekonstruieren für OAuth-Mount
@@ -575,6 +598,7 @@ def create_agent_manager(mode: str, *, main_app=None, docker_client=None,
             docker_client,
             host_base=kwargs.get("host_base", os.environ.get("HAANA_HOST_BASE", "/opt/haana")),
             data_volume=kwargs.get("data_volume", os.environ.get("HAANA_DATA_VOLUME", "haana_haana-data")),
+            media_volume=kwargs.get("media_volume", os.environ.get("HAANA_MEDIA_VOLUME", "haana_haana-media")),
             compose_network=kwargs.get("compose_network", os.environ.get("HAANA_COMPOSE_NETWORK", "haana_default")),
             agent_image=kwargs.get("agent_image", os.environ.get("HAANA_AGENT_IMAGE", "haana-instanz-alice")),
             resolve_llm_fn=resolve_llm_fn,

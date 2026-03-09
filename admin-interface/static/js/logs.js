@@ -1,85 +1,245 @@
-// logs.js – Logs laden/rendern, Log-Dateien, Log-Editor
+// logs.js – Konversations-Log Viewer (strukturierte Tag-Karten)
+// v5 – Redesign: User-Tabs, Datumsfilter, Suche, Tag-Akkordeons, User-Aktionen
 
-function selectLogCat(cat) {
-  currentLogCat = cat;
-  document.querySelectorAll('[id^="logbtn-"]').forEach(b => b.classList.remove('active'));
-  document.getElementById('logbtn-' + cat)?.classList.add('active');
-  loadLogs(cat);
+// ── State ────────────────────────────────────────────────────────────────────
+let _logCurrentInst   = '__all__';   // active instance tab
+let _logAllFiles      = [];          // all loaded log file records
+let _logSearchTimer   = null;        // debounce handle
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+function initLogView() {
+  _logCurrentInst = '__all__';
+  // Activate "Alle" tab
+  document.querySelectorAll('.log-user-tab').forEach(b => {
+    b.classList.toggle('active', b.dataset.inst === '__all__');
+  });
+  _updateToolbarVisibility();
+  loadLogDays();
 }
 
-async function loadLogs(cat) {
-  const list = document.getElementById('log-list');
-  list.innerHTML = '<div class="empty-state"><div class="icon">...</div><div>' + t('common.loading') + '</div></div>';
+// ── Instance Tab ─────────────────────────────────────────────────────────────
+function selectLogInstance(inst) {
+  _logCurrentInst = inst;
+  document.querySelectorAll('.log-user-tab').forEach(b => {
+    b.classList.toggle('active', b.dataset.inst === inst);
+  });
+  _updateToolbarVisibility();
+  // Reset check-result banner
+  const banner = document.getElementById('log-check-result');
+  if (banner) { banner.style.display = 'none'; banner.innerHTML = ''; }
+  loadLogDays();
+}
+
+function _updateToolbarVisibility() {
+  const actions = document.getElementById('log-toolbar-actions');
+  if (!actions) return;
+  // User-level actions only shown when a specific instance is selected
+  actions.style.display = _logCurrentInst === '__all__' ? 'none' : 'flex';
+}
+
+// ── Date Filter ──────────────────────────────────────────────────────────────
+function setLogDateRange(range) {
+  const fromEl = document.getElementById('log-date-from');
+  const toEl   = document.getElementById('log-date-to');
+  const today  = new Date();
+  const fmt    = d => d.toISOString().slice(0, 10);
+
+  document.querySelectorAll('.log-quick-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.range === range);
+  });
+
+  if (range === 'all') {
+    fromEl.value = '';
+    toEl.value   = '';
+  } else if (range === 'today') {
+    fromEl.value = fmt(today);
+    toEl.value   = fmt(today);
+  } else {
+    const from = new Date(today);
+    from.setDate(today.getDate() - parseInt(range, 10) + 1);
+    fromEl.value = fmt(from);
+    toEl.value   = fmt(today);
+  }
+  applyLogFilters();
+}
+
+function applyLogFilters() {
+  // Mark quick-filter buttons: deselect all when manually picking dates
+  const fromEl = document.getElementById('log-date-from');
+  const toEl   = document.getElementById('log-date-to');
+  if (fromEl.value || toEl.value) {
+    // keep existing quick-btn state but don't auto-select one
+  }
+  renderLogDays(_logAllFiles);
+}
+
+// ── Search ───────────────────────────────────────────────────────────────────
+function debounceLogSearch() {
+  if (_logSearchTimer) clearTimeout(_logSearchTimer);
+  _logSearchTimer = setTimeout(() => renderLogDays(_logAllFiles), 300);
+}
+
+// ── Load Day List ─────────────────────────────────────────────────────────────
+async function loadLogDays() {
+  const list = document.getElementById('log-day-list');
+  if (!list) return;
+  list.innerHTML = `<div class="empty-state"><div class="icon">&#8230;</div><div>${t('logs.loading')}</div></div>`;
+
   try {
-    const r = await fetch(`/api/logs/${cat}?limit=100`);
-    const data = await r.json();
-    if (!data.length) {
-      list.innerHTML = '<div class="empty-state"><div class="icon">--</div><div>' + t('logs.no_entries') + '</div></div>';
-      return;
+    // Use the existing files API — fetch for all instances or specific one
+    let files = [];
+    if (_logCurrentInst === '__all__') {
+      // Fetch for every instance in parallel
+      const results = await Promise.all(
+        INSTANCES.map(inst =>
+          fetch(`/api/conversations/${inst}/files`)
+            .then(r => r.json())
+            .then(arr => arr.map(f => ({ ...f, instance: inst })))
+            .catch(() => [])
+        )
+      );
+      files = results.flat();
+    } else {
+      const r = await fetch(`/api/conversations/${_logCurrentInst}/files`);
+      const arr = await r.json();
+      files = arr.map(f => ({ ...f, instance: _logCurrentInst }));
     }
-    list.innerHTML = data.map(rec => {
-      const ts = rec.ts ? new Date(rec.ts).toLocaleString('de-DE') : '–';
-      const badge = rec.success !== false
-        ? '<span style="color:var(--green);font-size:11px;">✓</span>'
-        : '<span style="color:var(--red);font-size:11px;">✗</span>';
-      let detail = '';
-      if (cat === 'memory-ops') {
-        detail = `<span class="tag">${rec.op||'?'}</span> <span class="tag">${rec.scope||'?'}</span>`;
-        if (rec.results_count !== null && rec.results_count !== undefined) detail += ' \u2192 ' + rec.results_count + ' ' + t('logs.hits');
-        if (rec.query) detail += `<br><span style="color:var(--muted);font-size:11px;">${escHtml(rec.query.substring(0,80))}</span>`;
-      } else if (cat === 'tool-calls') {
-        detail = `<span class="tool-chip">${escHtml(rec.tool||'?')}</span>`;
-        if (rec.latency_s) detail += ` <span class="latency">${rec.latency_s}s</span>`;
-        if (rec.input) detail += `<br><span style="color:var(--muted);font-size:11px;">${escHtml(rec.input.substring(0,100))}</span>`;
-      } else if (cat === 'llm-calls') {
-        detail = `<span class="tag">${escHtml(rec.model||'?')}</span>`;
-        if (rec.use_case) detail += ` <span class="tag">${escHtml(rec.use_case)}</span>`;
-        if (rec.latency_s !== null && rec.latency_s !== undefined) detail += ` <span class="latency">${rec.latency_s}s</span>`;
-        const tokIn  = rec.prompt_tokens     != null ? `${rec.prompt_tokens}` : '?';
-        const tokOut = rec.completion_tokens != null ? `${rec.completion_tokens}` : '?';
-        detail += `<span style="color:var(--muted);font-size:11px;margin-left:8px;">↑${tokIn} ↓${tokOut} tok</span>`;
-      }
-      return `
-      <div class="conv-card" style="margin-bottom:8px;">
-        <div class="conv-header" style="cursor:default;">
-          <span style="color:var(--muted);font-size:12px;font-family:var(--mono);white-space:nowrap;">${ts}</span>
-          <span class="tag">${rec.instance||'?'}</span>
-          ${badge}
-          <span style="flex:1;">${detail}</span>
-          ${rec.error ? `<span style="color:var(--red);font-size:11px;">${escHtml(rec.error.substring(0,60))}</span>` : ''}
-        </div>
-      </div>`;
-    }).join('');
+    _logAllFiles = files;
+    renderLogDays(files);
   } catch(e) {
-    list.innerHTML = `<div class="empty-state"><div class="icon">!</div><div>${e.message}</div></div>`;
+    list.innerHTML = `<div class="empty-state"><div class="icon">!</div><div>${escHtml(e.message)}</div></div>`;
   }
 }
 
-// ── Download / Löschen ──────────────────────────────────────────────────────
+// ── Render Day Cards ──────────────────────────────────────────────────────────
+function renderLogDays(files) {
+  const list    = document.getElementById('log-day-list');
+  if (!list) return;
 
-function downloadLogs(scope) {
-  window.location.href = `/api/logs-download?scope=${encodeURIComponent(scope)}`;
+  const fromVal  = document.getElementById('log-date-from')?.value || '';
+  const toVal    = document.getElementById('log-date-to')?.value   || '';
+  const query    = (document.getElementById('log-search')?.value || '').toLowerCase().trim();
+
+  // Filter by date range
+  let filtered = files.filter(f => {
+    if (fromVal && f.date < fromVal) return false;
+    if (toVal   && f.date > toVal)   return false;
+    return true;
+  });
+
+  // Group by date (descending), then by instance within each date
+  const byDate = {};
+  filtered.forEach(f => {
+    if (!byDate[f.date]) byDate[f.date] = [];
+    byDate[f.date].push(f);
+  });
+
+  const sortedDates = Object.keys(byDate).sort().reverse();
+
+  if (!sortedDates.length) {
+    list.innerHTML = `<div class="empty-state"><div class="icon">&#8212;</div><div>${t('logs.no_logs')}</div></div>`;
+    return;
+  }
+
+  list.innerHTML = sortedDates.map(date => {
+    const dayFiles = byDate[date];
+    const totalEntries = dayFiles.reduce((s, f) => s + (f.entries || 0), 0);
+    const totalKb      = dayFiles.reduce((s, f) => s + (f.size_kb || 0), 0);
+
+    // For "Alle" view show all instances; for single instance just one
+    const instanceTags = _logCurrentInst === '__all__'
+      ? dayFiles.map(f => `<span class="tag" style="font-size:10px;">${escHtml(f.instance)}</span>`).join(' ')
+      : '';
+
+    // Actions: only for single-instance view or when exactly one instance for this date
+    const actInst = _logCurrentInst !== '__all__' ? _logCurrentInst
+      : (dayFiles.length === 1 ? dayFiles[0].instance : null);
+
+    const dayActions = actInst ? `
+      <button class="btn btn-sm btn-secondary log-day-btn"
+        onclick="event.stopPropagation();logDeleteDay('${escAttr(actInst)}','${escAttr(date)}')"
+        title="${t('logs.day.delete')}">
+        <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M6 2h4a1 1 0 0 1 1 1v1H5V3a1 1 0 0 1 1-1zM3 5h10l-.8 8H3.8L3 5zm3 2v5h1V7H6zm3 0v5h1V7H9z"/></svg>
+        ${t('logs.day.delete')}
+      </button>
+      <button class="btn btn-sm btn-secondary log-day-btn" id="rebuild-day-btn-${escAttr(date)}"
+        onclick="event.stopPropagation();logRebuildDay('${escAttr(actInst)}','${escAttr(date)}')"
+        title="${t('logs.day.rebuild')}">
+        <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M8 2a6 6 0 1 0 6 6h-2a4 4 0 1 1-4-4V2z"/><path d="M8 0l3 3-3 3V0z"/></svg>
+        ${t('logs.day.rebuild')}
+      </button>` : '';
+
+    // Build file rows (one per instance)
+    const fileRows = dayFiles.map((f, idx) => {
+      const dateLabel = _formatDate(date);
+      return `
+        <div class="log-file-row log-alt-${idx % 2}" data-search="${escAttr(f.instance + ' ' + date)}">
+          ${_logCurrentInst === '__all__' ? `<span class="tag" style="font-size:10px;flex-shrink:0;">${escHtml(f.instance)}</span>` : ''}
+          <span class="log-file-date">${escHtml(dateLabel)}</span>
+          <span class="log-file-meta">
+            <span class="log-file-entries">${f.entries || 0} ${t('logs.day.messages')}</span>
+            ${f.size_kb ? `<span class="log-file-size">${f.size_kb} KB</span>` : ''}
+          </span>
+          <button class="btn btn-sm btn-secondary log-day-btn"
+            onclick="event.stopPropagation();openLogEditor('${escAttr(f.instance)}','${escAttr(f.date)}')"
+            title="${f.entries} ${t('logs.entries')}, ${f.size_kb||0} KB">
+            <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M11.5 1.5a1.5 1.5 0 0 1 2.1 2.1L5 12.2l-3 .8.8-3 8.7-8.5z"/></svg>
+            ${t('logs.entries')}
+          </button>
+        </div>`;
+    }).join('');
+
+    return `
+    <div class="log-day-card" id="log-day-${escAttr(date)}">
+      <div class="log-day-header" onclick="toggleLogDay('${escAttr(date)}')">
+        <svg class="log-day-chevron" viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
+          <path d="M6 4l4 4-4 4V4z"/>
+        </svg>
+        <span class="log-day-date">${_formatDateLong(date)}</span>
+        ${instanceTags}
+        <span class="log-day-count">${totalEntries} ${t('logs.day.messages')}</span>
+        ${totalKb ? `<span class="log-file-size">${totalKb} KB</span>` : ''}
+        <div class="log-day-actions" onclick="event.stopPropagation()">
+          ${dayActions}
+        </div>
+      </div>
+      <div class="log-day-body" id="log-day-body-${escAttr(date)}" style="display:none;">
+        ${fileRows}
+      </div>
+    </div>`;
+  }).join('');
+
+  // Apply text search after render (hide non-matching cards)
+  if (query) {
+    list.querySelectorAll('.log-day-card').forEach(card => {
+      const text = card.textContent.toLowerCase();
+      card.style.display = text.includes(query) ? '' : 'none';
+    });
+  }
 }
 
-async function confirmDeleteLogs(scope) {
-  const labels = {
-    all: t('logs.scope_all'),
-    system: t('logs.scope_system'),
-    conversations: t('logs.scope_conversations'),
-  };
-  const label = labels[scope] || scope;
-  if (!confirm(t('logs.delete_confirm').replace('{scope}', label))) return;
+function toggleLogDay(date) {
+  const body    = document.getElementById(`log-day-body-${date}`);
+  const card    = document.getElementById(`log-day-${date}`);
+  if (!body || !card) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : '';
+  card.classList.toggle('log-day-open', !open);
+}
+
+// ── Day Actions ───────────────────────────────────────────────────────────────
+async function logDeleteDay(inst, date) {
+  const ok = await modalConfirm(
+    `${t('logs.day.delete')}: ${inst} / ${date}`,
+    `${t('logs.delete_confirm').replace('{scope}', `${inst}/${date}`)}`
+  );
+  if (!ok) return;
   try {
-    const r = await fetch('/api/logs-delete', {
-      method: 'DELETE',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ scope }),
-    });
+    const r = await fetch(`/api/logs/day/${encodeURIComponent(inst)}/${encodeURIComponent(date)}`, { method: 'DELETE' });
     const d = await r.json();
-    if (d.ok) {
-      toast(t('logs.deleted_success').replace('{count}', d.deleted), 'ok');
-      loadLogs(currentLogCat);
-      loadLogFiles(currentInstance);
+    if (d.ok || r.ok) {
+      toast(t('logs.deleted_success').replace('{count}', 1), 'ok');
+      loadLogDays();
     } else {
       toast(d.error || t('logs.error'), 'error');
     }
@@ -88,35 +248,161 @@ async function confirmDeleteLogs(scope) {
   }
 }
 
-// ── Log-Dateien ─────────────────────────────────────────────────────────────
-function selectLogFileInstance(inst) {
-  currentInstance = inst;
-  document.querySelectorAll('.inst-btn[id^="logfilebtn-"]').forEach(b => b.classList.remove('active'));
-  document.getElementById('logfilebtn-' + inst)?.classList.add('active');
-  loadLogFiles(inst);
-}
-
-async function loadLogFiles(inst) {
-  const el = document.getElementById('log-files-list');
-  if (!el) return;
+async function logRebuildDay(inst, date) {
+  const btnId = `rebuild-day-btn-${date}`;
+  const btn   = document.getElementById(btnId);
+  if (btn) { btn.disabled = true; btn.textContent = t('logs.day.rebuild_running'); }
   try {
-    const r = await fetch(`/api/conversations/${inst}/files`);
-    const files = await r.json();
-    if (!files.length) {
-      el.innerHTML = '<span style="font-size:12px;color:var(--muted);">' + t('logs.no_files') + '</span>';
-      return;
+    const r = await fetch(`/api/logs/rebuild/${encodeURIComponent(inst)}/${encodeURIComponent(date)}`, { method: 'POST' });
+    const d = await r.json();
+    if (d.ok || r.ok) {
+      toast(`${inst}/${date}: ${t('logs.day.rebuild')} OK`, 'ok');
+    } else {
+      toast(d.error || t('logs.error'), 'error');
     }
-    el.innerHTML = files.map(f => `
-      <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;"
-        onclick="openLogEditor('${escAttr(inst)}', '${escAttr(f.date)}')" title="${f.entries} ${t('logs.entries')}, ${f.size_kb} KB">
-        ${escHtml(f.date)} <span style="color:var(--muted);">(${f.entries})</span>
-      </button>`).join('');
   } catch(e) {
-    el.innerHTML = `<span style="font-size:12px;color:var(--red);">${e.message}</span>`;
+    toast(e.message, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M8 2a6 6 0 1 0 6 6h-2a4 4 0 1 1-4-4V2z"/><path d="M8 0l3 3-3 3V0z"/></svg> ${t('logs.day.rebuild')}`;
+    }
   }
 }
 
-// ── Konversations-Log Editor ────────────────────────────────────────────────
+// ── User-Level Actions ────────────────────────────────────────────────────────
+function logExportUser() {
+  const inst = _logCurrentInst;
+  if (!inst || inst === '__all__') return;
+  window.location.href = `/api/logs/export/${encodeURIComponent(inst)}`;
+}
+
+async function logDeleteAllUser() {
+  const inst = _logCurrentInst;
+  if (!inst || inst === '__all__') return;
+
+  // Strong confirmation: type instance name
+  const confirmed = await _confirmTypeName(inst);
+  if (!confirmed) return;
+
+  try {
+    const r = await fetch(`/api/logs/user/${encodeURIComponent(inst)}?confirm=true`, { method: 'DELETE' });
+    const d = await r.json();
+    if (d.ok || r.ok) {
+      toast(t('logs.deleted_success').replace('{count}', d.deleted || '?'), 'ok');
+      loadLogDays();
+    } else {
+      toast(d.error || t('logs.error'), 'error');
+    }
+  } catch(e) {
+    toast(e.message, 'error');
+  }
+}
+
+async function logCheckRebuild() {
+  const inst   = _logCurrentInst;
+  if (!inst || inst === '__all__') return;
+  const btn    = document.getElementById('log-check-btn');
+  const banner = document.getElementById('log-check-result');
+  if (btn) { btn.disabled = true; btn.textContent = t('common.loading'); }
+  if (banner) { banner.style.display = 'none'; banner.innerHTML = ''; }
+
+  try {
+    const r = await fetch(`/api/logs/check-rebuild/${encodeURIComponent(inst)}`, { method: 'POST' });
+    const d = await r.json();
+    if (r.ok) {
+      const count = Array.isArray(d.changed) ? d.changed.length : (d.count || 0);
+      const msg   = t('logs.user.check_result').replace('{count}', count);
+      const files = Array.isArray(d.changed) && d.changed.length
+        ? `<ul class="log-check-list">${d.changed.map(f => `<li>${escHtml(f)}</li>`).join('')}</ul>` : '';
+      const rebuildBtn = count > 0
+        ? `<button class="btn btn-sm btn-secondary" style="margin-top:8px;" onclick="logRebuildAllUser('${escAttr(inst)}')" data-i18n="logs.user.rebuild_all">${t('logs.user.rebuild_all')}</button>`
+        : '';
+      if (banner) {
+        banner.innerHTML = `<div class="log-check-msg">${escHtml(msg)}</div>${files}${rebuildBtn}`;
+        banner.style.display = 'block';
+      }
+    } else {
+      toast(d.error || t('logs.error'), 'error');
+    }
+  } catch(e) {
+    toast(e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = t('logs.user.check_rebuild'); }
+  }
+}
+
+async function logRebuildAllUser(inst) {
+  try {
+    const r = await fetch(`/api/logs/check-rebuild/${encodeURIComponent(inst)}?rebuild=true`, { method: 'POST' });
+    const d = await r.json();
+    if (d.ok || r.ok) {
+      toast(t('logs.day.rebuild') + ' OK', 'ok');
+      const banner = document.getElementById('log-check-result');
+      if (banner) { banner.style.display = 'none'; }
+    } else {
+      toast(d.error || t('logs.error'), 'error');
+    }
+  } catch(e) {
+    toast(e.message, 'error');
+  }
+}
+
+// Strong confirm dialog: user must type the instance name
+function _confirmTypeName(inst) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay active';
+    overlay.innerHTML = `
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <span class="modal-title">${t('logs.user.delete_all')}</span>
+          <button class="btn btn-sm btn-secondary modal-close-btn" id="_ctm-close">&#10005;</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-message" style="margin-bottom:12px;">${t('logs.user.delete_confirm')}</p>
+          <code class="tag" style="display:block;margin-bottom:12px;font-size:13px;">${escHtml(inst)}</code>
+          <input type="text" id="_ctm-input" class="form-group input" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;width:100%;font-size:13px;" placeholder="${escAttr(inst)}">
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-danger" id="_ctm-confirm" disabled>${t('common.confirm')}</button>
+          <button class="btn btn-secondary" id="_ctm-cancel">${t('common.cancel')}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const input   = overlay.querySelector('#_ctm-input');
+    const confirm = overlay.querySelector('#_ctm-confirm');
+    const cancel  = overlay.querySelector('#_ctm-cancel');
+    const close   = overlay.querySelector('#_ctm-close');
+
+    input.addEventListener('input', () => {
+      confirm.disabled = input.value !== inst;
+    });
+    const done = val => { document.body.removeChild(overlay); resolve(val); };
+    confirm.addEventListener('click', () => done(true));
+    cancel.addEventListener('click',  () => done(false));
+    close.addEventListener('click',   () => done(false));
+  });
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function _formatDate(dateStr) {
+  if (!dateStr) return dateStr;
+  // dateStr is YYYY-MM-DD
+  try {
+    return new Date(dateStr + 'T00:00:00').toLocaleDateString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit' });
+  } catch(_) { return dateStr; }
+}
+
+function _formatDateLong(dateStr) {
+  if (!dateStr) return dateStr;
+  try {
+    return new Date(dateStr + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric' });
+  } catch(_) { return dateStr; }
+}
+
+// ── Log Editor (kept from previous version) ───────────────────────────────────
 let _logEditorInst = null;
 let _logEditorDate = null;
 
@@ -135,7 +421,7 @@ async function openLogEditor(inst, date) {
     const d = await r.json();
     area.value = d.content;
     info.textContent = d.entries + ' ' + t('logs.entries');
-  } catch(e) { area.value = ''; info.textContent = '❌ ' + e.message; }
+  } catch(e) { area.value = ''; info.textContent = '! ' + e.message; }
 }
 
 function closeLogEditor() {
@@ -147,7 +433,7 @@ async function saveLogEditor() {
   const info = document.getElementById('log-editor-info');
   try {
     const r = await fetch(`/api/conversations/${_logEditorInst}/raw/${_logEditorDate}`, {
-      method: 'PUT', headers: {'Content-Type':'application/json'},
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: area.value }),
     });
     const d = await r.json();
@@ -155,9 +441,15 @@ async function saveLogEditor() {
       info.textContent = '\u2713 ' + d.entries + ' ' + t('logs.entries_saved');
       toast(t('logs.log_saved'), 'ok');
       closeLogEditor();
-      loadConversations(currentInstance);
+      loadLogDays();
     } else {
       info.textContent = '\u274c ' + t('logs.error');
     }
   } catch(e) { info.textContent = '\u274c ' + e.message; }
 }
+
+// ── Legacy stubs (called from app.js or other places) ────────────────────────
+function loadLogFiles(inst) { /* superseded by loadLogDays */ }
+function selectLogFileInstance(inst) { selectLogInstance(inst); }
+function loadLogs(cat) { /* superseded – system logs removed from this view */ }
+function selectLogCat(cat) { /* no-op */ }

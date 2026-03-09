@@ -66,7 +66,35 @@
     "deleted_success": "{count} file(s) deleted",
     "scope_all": "all logs",
     "scope_system": "system logs",
-    "scope_conversations": "all conversations"
+    "scope_conversations": "all conversations",
+    "tabs": {
+      "all": "All"
+    },
+    "filter": {
+      "from": "From",
+      "to": "To",
+      "today": "Today",
+      "7days": "7 Days",
+      "30days": "30 Days",
+      "all": "All",
+      "search": "Search logs..."
+    },
+    "day": {
+      "messages": "Messages",
+      "delete": "Delete day",
+      "rebuild": "Rebuild memories",
+      "rebuild_running": "Rebuilding memories..."
+    },
+    "user": {
+      "export": "Export (ZIP)",
+      "delete_all": "Delete all data",
+      "delete_confirm": "Type instance name to confirm:",
+      "check_rebuild": "Check for changes",
+      "check_result": "{count} changed files found",
+      "rebuild_all": "Rebuild all"
+    },
+    "no_logs": "No logs found",
+    "conv_logs_title": "Conversation Logs"
   },
   "config": {
     "save": "Save configuration",

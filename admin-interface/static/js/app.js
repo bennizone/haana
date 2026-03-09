@@ -17,7 +17,7 @@ function showTab(name, e) {
   else document.querySelector(`.tab-btn[onclick*="'${name}'"]`)?.classList.add('active');
 
   if (name === 'chat')   { loadConversations(currentInstance); }
-  if (name === 'logs')   { loadLogs(currentLogCat); loadLogFiles(currentInstance); }
+  if (name === 'logs')   { initLogView(); }
   if (name === 'config') { loadConfig(); loadMemoryStats(); }
   if (name === 'users')  loadUsers();
   if (name === 'status') loadStatus();

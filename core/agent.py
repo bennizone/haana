@@ -85,8 +85,15 @@ def _extract_date_references(message: str) -> list[str]:
     if "vorgestern" in lower:
         dates.append((today - timedelta(days=2)).isoformat())
 
+    # "heute" / "today"
+    if "heute" in lower or "today" in lower:
+        dates.append(today.isoformat())
+
     # Explizite Datumsangaben: "am 1.2.", "am 01.02.", "am 1.2.2026"
-    for m in re.finditer(r'(\d{1,2})\.(\d{1,2})\.?(\d{2,4})?', message):
+    # Kontextwörter verhindern False Positives wie "1.2 Millionen"
+    for m in re.finditer(
+        r'(?:am|vom|den|seit|bis|ab)\s+(\d{1,2})\.(\d{1,2})\.(\d{2,4})?', lower
+    ):
         day, month = int(m.group(1)), int(m.group(2))
         year = int(m.group(3)) if m.group(3) else today.year
         if year < 100:
@@ -101,7 +108,8 @@ def _extract_date_references(message: str) -> list[str]:
 
 def _load_dream_summaries(instance: str, date_refs: list[str]) -> str:
     """Lädt Dream-Zusammenfassungen für die angegebenen Daten."""
-    log_root = Path(os.environ.get("HAANA_LOG_DIR", "data/logs"))
+    from core.logger import _log_root as _get_log_root
+    log_root = _get_log_root()
     dream_dir = log_root / "dream" / instance
     if not dream_dir.exists():
         return ""
