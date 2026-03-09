@@ -116,64 +116,6 @@ def log_tool_call(
     })
 
 
-def log_llm_call(
-    instance: str,
-    model: str,
-    prompt_tokens: Optional[int] = None,
-    completion_tokens: Optional[int] = None,
-    latency_s: Optional[float] = None,
-    use_case: Optional[str] = None,
-    success: bool = True,
-    error: Optional[str] = None,
-) -> None:
-    """Loggt einen LLM-Aufruf (Modell, Token, Latenz)."""
-    _write("llm-calls", None, {
-        "instance": instance,
-        "model": model,
-        "prompt_tokens": prompt_tokens,
-        "completion_tokens": completion_tokens,
-        "latency_s": round(latency_s, 3) if latency_s is not None else None,
-        "use_case": use_case,
-        "success": success,
-        "error": error,
-    })
-
-
-# ── Lese-API (für Admin-Interface) ───────────────────────────────────────────
-
-def read_recent(
-    category: str,
-    sub: Optional[str] = None,
-    limit: int = 100,
-) -> list[dict]:
-    """
-    Liest die letzten N Einträge einer Log-Kategorie (neueste zuerst).
-    Durchsucht täglich rotierende Dateien rückwärts.
-    """
-    import glob
-    root = _log_root()
-    pattern = str((root / category / sub / "*.jsonl") if sub else (root / category / "*.jsonl"))
-    files = sorted(glob.glob(pattern), reverse=True)
-
-    records: list[dict] = []
-    for filepath in files:
-        try:
-            lines = Path(filepath).read_text(encoding="utf-8").splitlines()
-        except Exception:
-            continue
-        for line in reversed(lines):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                records.append(json.loads(line))
-            except json.JSONDecodeError:
-                pass
-            if len(records) >= limit:
-                return records
-    return records
-
-
 def list_instances() -> list[str]:
     """Gibt alle Instanzen zurück für die Konversations-Logs existieren."""
     conv_dir = _log_root() / "conversations"

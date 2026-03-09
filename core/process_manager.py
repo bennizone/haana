@@ -304,7 +304,7 @@ class DockerAgentManager:
         # Host-Pfade
         host_claude_md = f"{self._host_base}/instanzen/{uid}/CLAUDE.md"
         host_skills = f"{self._host_base}/skills"
-        host_claude_config = "/root/.claude"
+        host_claude_config = "/home/haana/.claude"
 
         volumes = {
             host_claude_md:    {"bind": "/app/CLAUDE.md", "mode": "ro"},

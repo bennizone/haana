@@ -589,13 +589,6 @@ def read_recent_logs(category: str, sub: Optional[str] = None, limit: int = 100)
     return records
 
 
-def log_file_for(instance: str) -> Optional[Path]:
-    """Gibt den Pfad zur heutigen Konversations-Log-Datei zurück."""
-    today = datetime.now().strftime("%Y-%m-%d")
-    p = LOG_ROOT / "conversations" / instance / f"{today}.jsonl"
-    return p if p.exists() else None
-
-
 # ── HTML ─────────────────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
