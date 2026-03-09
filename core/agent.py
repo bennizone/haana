@@ -78,6 +78,10 @@ class HaanaAgent:
             self._cli_model = None
         self.session_id: Optional[str] = None
 
+        # Fallback-LLM: Wird aktiviert bei Auth/Connection-Fehlern
+        self._fallback_available = bool(self._env.get("HAANA_FALLBACK_MODEL"))
+        self._fallback_active = False
+
         # OAuth: Credentials aus Data-Volume symlinken.
         # Nicht bei Ollama/MiniMax — dort übernimmt ANTHROPIC_AUTH_TOKEN die Auth.
         oauth_dir = self._env.get("HAANA_OAUTH_DIR")
@@ -166,6 +170,102 @@ class HaanaAgent:
         self._allowed_tools.extend(tools)
         logger.debug(f"[{self.instance}] Tools erweitert: {tools}")
 
+    # ── Fallback-LLM ────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _is_fallback_error(error) -> bool:
+        """Prüft ob ein Fehler einen Fallback-Wechsel rechtfertigt.
+
+        Relevante Fehler: Auth-Fehler (401/403), Connection-Fehler,
+        Prozess-Abbrüche die auf Provider-Probleme hindeuten.
+        """
+        err_str = str(error).lower()
+        # Auth-bezogene Fehlermuster
+        auth_patterns = (
+            "401", "403", "unauthorized", "forbidden",
+            "authentication", "auth", "invalid api key",
+            "invalid_api_key", "api key", "token",
+            "permission denied", "access denied",
+            "overloaded", "rate limit", "rate_limit",
+            "quota", "billing", "insufficient",
+        )
+        return any(p in err_str for p in auth_patterns)
+
+    async def _activate_fallback(self):
+        """Wechselt auf den Fallback-LLM.
+
+        Schließt den aktuellen Client, setzt die Env-Vars auf Fallback-Werte
+        und markiert den Fallback als aktiv. Beim nächsten _ensure_connected()
+        wird der Client mit den neuen Env-Vars erstellt.
+        """
+        if self._fallback_active or not self._fallback_available:
+            return False
+
+        await self.close()  # Client schließen
+
+        fb_model = self._env.get("HAANA_FALLBACK_MODEL", "")
+        fb_type = self._env.get("HAANA_FALLBACK_PROVIDER_TYPE", "")
+        fb_base_url = self._env.get("HAANA_FALLBACK_BASE_URL", "")
+        fb_auth_token = self._env.get("HAANA_FALLBACK_AUTH_TOKEN", "")
+        fb_api_key = self._env.get("HAANA_FALLBACK_API_KEY", "")
+        fb_oauth_dir = self._env.get("HAANA_FALLBACK_OAUTH_DIR", "")
+
+        logger.warning(
+            f"[{self.instance}] Wechsle auf Fallback-LLM: {fb_model} "
+            f"(Provider: {fb_type})"
+        )
+
+        # Alte Provider-Env-Vars entfernen
+        for key in ("ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN",
+                     "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL",
+                     "OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL",
+                     "GEMINI_API_KEY", "GEMINI_MODEL"):
+            self._env.pop(key, None)
+
+        # Neue Provider-Env-Vars setzen
+        self.model = fb_model
+        self._env["HAANA_MODEL"] = fb_model
+
+        if fb_type == "minimax":
+            self._env["ANTHROPIC_BASE_URL"] = fb_base_url
+            self._env["ANTHROPIC_AUTH_TOKEN"] = fb_auth_token
+            self._env["ANTHROPIC_MODEL"] = fb_model
+            self._cli_model = None
+        elif fb_type == "ollama":
+            self._env["ANTHROPIC_BASE_URL"] = fb_base_url
+            self._env["ANTHROPIC_AUTH_TOKEN"] = "ollama"
+            self._cli_model = fb_model
+        elif fb_type == "openai":
+            if fb_api_key:
+                self._env["OPENAI_API_KEY"] = fb_api_key
+            if fb_base_url:
+                self._env["OPENAI_BASE_URL"] = fb_base_url
+            self._env["OPENAI_MODEL"] = fb_model
+            self._cli_model = None
+        elif fb_type == "gemini":
+            if fb_api_key:
+                self._env["GEMINI_API_KEY"] = fb_api_key
+            self._env["GEMINI_MODEL"] = fb_model
+            self._cli_model = None
+        else:
+            # anthropic / custom
+            if fb_api_key:
+                self._env["ANTHROPIC_API_KEY"] = fb_api_key
+            if fb_base_url:
+                self._env["ANTHROPIC_BASE_URL"] = fb_base_url
+            self._cli_model = fb_model
+
+        # OAuth für Fallback
+        if fb_oauth_dir and not fb_auth_token:
+            self._env["HAANA_OAUTH_DIR"] = fb_oauth_dir
+
+        # Session zurücksetzen (neuer Provider = neue Session)
+        self.session_id = None
+        self._fallback_active = True
+
+        logger.info(f"[{self.instance}] Fallback-LLM aktiviert: {fb_model}")
+        return True
+
     # ── Verbindungsverwaltung ─────────────────────────────────────────────────
 
     def _build_options(self) -> ClaudeAgentOptions:
@@ -202,6 +302,75 @@ class HaanaAgent:
             finally:
                 self._client = None
             logger.info(f"[{self.instance}] Claude subprocess geschlossen")
+
+    async def _run_with_fallback_notice(self, user_message: str, channel: str,
+                                         memory_context: str, prompt: str) -> str:
+        """Führt einen Agent-Turn mit dem Fallback-LLM aus und fügt Hinweis hinzu."""
+        # Neuen Client mit Fallback-Env aufbauen
+        await self._ensure_connected()
+
+        response_parts: list[str] = []
+        tool_calls_log: list[dict] = []
+        t_start = time.monotonic()
+
+        await self._client.query(prompt)
+
+        async for message in self._client.receive_response():
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        response_parts.append(block.text)
+                    elif isinstance(block, ToolUseBlock):
+                        logger.info(
+                            f"[{self.instance}] Tool-Aufruf (Fallback): {block.name}"
+                        )
+                        tool_calls_log.append({
+                            "tool": block.name,
+                            "input": str(block.input)[:300],
+                        })
+                        haana_log.log_tool_call(
+                            instance=self.instance,
+                            tool_name=block.name,
+                            tool_input=block.input,
+                        )
+            elif isinstance(message, ResultMessage):
+                if message.session_id:
+                    self.session_id = message.session_id
+                if message.result and not response_parts:
+                    response_parts.append(str(message.result))
+
+        elapsed = time.monotonic() - t_start
+        response_text = "".join(response_parts).strip()
+
+        logger.info(
+            f"[{self.instance}] Fallback-Antwort in {elapsed:.2f}s "
+            f"(model={self.model})"
+        )
+
+        # Memory speichern
+        if response_text and _should_extract_memory(user_message, channel):
+            await self.memory.add_conversation_async(user_message, response_text)
+
+        memory_lines = memory_context.splitlines() if memory_context else []
+        haana_log.log_conversation(
+            instance=self.instance,
+            channel=channel,
+            user_message=user_message,
+            assistant_response=response_text,
+            latency_s=elapsed,
+            memory_used=bool(memory_context),
+            memory_hits=self.memory._last_search_hits,
+            tool_calls=tool_calls_log,
+            model=self.model,
+            memory_results=memory_lines,
+        )
+
+        # Fallback-Hinweis voranstellen (nicht bei Voice-Channels)
+        notice = ""
+        if channel not in ("whatsapp_voice", "ha_voice"):
+            notice = f"[Fallback-LLM aktiv: {self.model}] "
+
+        return notice + (response_text or "[Keine Antwort]")
 
     # ── Startup / Shutdown ────────────────────────────────────────────────────
 
@@ -333,6 +502,24 @@ class HaanaAgent:
                         logger.error(
                             f"[{self.instance}] ResultMessage Fehler: {message.result}"
                         )
+                        # Auth-Fehler in ResultMessage → Fallback versuchen
+                        if (self._fallback_available and not self._fallback_active
+                                and self._is_fallback_error(message.result)):
+                            switched = await self._activate_fallback()
+                            if switched:
+                                logger.info(f"[{self.instance}] Retry mit Fallback-LLM (ResultMessage-Fehler)...")
+                                try:
+                                    return await self._run_with_fallback_notice(
+                                        user_message, channel, memory_context, prompt
+                                    )
+                                except Exception as retry_err:
+                                    logger.error(
+                                        f"[{self.instance}] Fallback-Retry fehlgeschlagen: {retry_err}"
+                                    )
+                                    return (
+                                        f"Fehler: Primary-LLM Fehler ({message.result}). "
+                                        f"Fallback-LLM ebenfalls fehlgeschlagen: {retry_err}"
+                                    )
                     # Fallback: manche Provider liefern Text in ResultMessage statt TextBlock
                     if message.result and not response_parts:
                         logger.info(f"[{self.instance}] Text aus ResultMessage übernommen")
@@ -342,14 +529,33 @@ class HaanaAgent:
             self._client = None
             logger.error("Claude Code CLI nicht gefunden.")
             return "Fehler: Claude Code CLI nicht gefunden."
-        except CLIConnectionError as e:
+        except (CLIConnectionError, ProcessError) as e:
             self._client = None
-            logger.error(f"[{self.instance}] Verbindungsfehler: {e}")
+            is_process = isinstance(e, ProcessError)
+            if is_process:
+                logger.error(f"[{self.instance}] CLI-Prozess Fehler (exit {e.exit_code}): {e}")
+            else:
+                logger.error(f"[{self.instance}] Verbindungsfehler: {e}")
+
+            # Fallback-LLM versuchen bei Auth/Connection-Fehlern
+            if self._fallback_available and not self._fallback_active and self._is_fallback_error(e):
+                switched = await self._activate_fallback()
+                if switched:
+                    logger.info(f"[{self.instance}] Retry mit Fallback-LLM...")
+                    try:
+                        return await self._run_with_fallback_notice(
+                            user_message, channel, memory_context, prompt
+                        )
+                    except Exception as retry_err:
+                        logger.error(f"[{self.instance}] Fallback-Retry fehlgeschlagen: {retry_err}")
+                        return (
+                            f"Fehler: Primary-LLM nicht erreichbar ({e}). "
+                            f"Fallback-LLM ebenfalls fehlgeschlagen: {retry_err}"
+                        )
+
+            if is_process:
+                return f"Fehler: Agent-Prozess beendet mit Code {e.exit_code}."
             return "Fehler: Verbindung zum Agent verloren. Nächste Nachricht startet neu."
-        except ProcessError as e:
-            self._client = None
-            logger.error(f"[{self.instance}] CLI-Prozess Fehler (exit {e.exit_code}): {e}")
-            return f"Fehler: Agent-Prozess beendet mit Code {e.exit_code}."
         except CLIJSONDecodeError as e:
             logger.error(f"[{self.instance}] JSON-Parse-Fehler: {e}")
             return "Fehler: Ungültige Antwort vom Agent."
@@ -387,7 +593,13 @@ class HaanaAgent:
             memory_results=memory_lines,
         )
 
-        return response_text or "[Keine Antwort]"
+        result = response_text or "[Keine Antwort]"
+
+        # Fallback-Hinweis bei aktiver Fallback-Nutzung (nicht bei Voice)
+        if self._fallback_active and channel not in ("whatsapp_voice", "ha_voice"):
+            result = f"[Fallback-LLM aktiv: {self.model}] " + result
+
+        return result
 
     def run(self, user_message: str) -> str:
         """Synchroner Wrapper für run_async() – für einfache Skripte."""

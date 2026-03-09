@@ -425,3 +425,173 @@ def test_should_extract_memory_voice_explicit_save():
     assert _should_extract_memory("Remember that we like 21 degrees", "ha_voice") is True
     assert _should_extract_memory("Denk dran, morgen kommt der Handwerker", "ha_voice") is True
     assert _should_extract_memory("Notiere: Pizza bestellen am Freitag", "ha_voice") is True
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Tests: Fallback-LLM
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def test_fallback_available_when_env_set():
+    """Fallback ist verfügbar wenn HAANA_FALLBACK_MODEL gesetzt."""
+    agent = _make_agent({
+        "HAANA_FALLBACK_MODEL": "fallback-model",
+        "HAANA_FALLBACK_PROVIDER_TYPE": "anthropic",
+    })
+    assert agent._fallback_available is True
+    assert agent._fallback_active is False
+
+
+def test_fallback_not_available_when_no_env():
+    """Fallback ist nicht verfügbar ohne HAANA_FALLBACK_MODEL."""
+    agent = _make_agent({})
+    assert agent._fallback_available is False
+
+
+def test_is_fallback_error_auth_patterns():
+    """_is_fallback_error erkennt Auth-Fehler korrekt."""
+    assert HaanaAgent._is_fallback_error("401 Unauthorized") is True
+    assert HaanaAgent._is_fallback_error("403 Forbidden") is True
+    assert HaanaAgent._is_fallback_error("invalid api key") is True
+    assert HaanaAgent._is_fallback_error("authentication failed") is True
+    assert HaanaAgent._is_fallback_error("rate limit exceeded") is True
+    assert HaanaAgent._is_fallback_error("overloaded_error") is True
+    assert HaanaAgent._is_fallback_error("insufficient quota") is True
+
+
+def test_is_fallback_error_non_auth():
+    """_is_fallback_error ignoriert nicht-auth Fehler."""
+    assert HaanaAgent._is_fallback_error("timeout after 30s") is False
+    assert HaanaAgent._is_fallback_error("JSON parse error") is False
+    assert HaanaAgent._is_fallback_error("model not found") is False
+
+
+@pytest.mark.asyncio
+async def test_activate_fallback_switches_env():
+    """_activate_fallback() setzt die Env-Vars auf Fallback-Werte."""
+    agent = _make_agent({
+        "HAANA_MODEL": "primary-model",
+        "HAANA_FALLBACK_MODEL": "fallback-model",
+        "HAANA_FALLBACK_PROVIDER_TYPE": "anthropic",
+        "HAANA_FALLBACK_API_KEY": "fb-key-123",
+        "HAANA_FALLBACK_BASE_URL": "https://fallback.api.com",
+    })
+
+    assert agent.model == "primary-model"
+    assert agent._fallback_active is False
+
+    result = await agent._activate_fallback()
+
+    assert result is True
+    assert agent._fallback_active is True
+    assert agent.model == "fallback-model"
+    assert agent._env.get("ANTHROPIC_API_KEY") == "fb-key-123"
+    assert agent._env.get("ANTHROPIC_BASE_URL") == "https://fallback.api.com"
+    assert agent._cli_model == "fallback-model"
+
+
+@pytest.mark.asyncio
+async def test_activate_fallback_minimax():
+    """_activate_fallback() setzt MiniMax-spezifische Env-Vars."""
+    agent = _make_agent({
+        "HAANA_FALLBACK_MODEL": "MiniMax-M2.5",
+        "HAANA_FALLBACK_PROVIDER_TYPE": "minimax",
+        "HAANA_FALLBACK_BASE_URL": "https://api.minimax.io/anthropic",
+        "HAANA_FALLBACK_AUTH_TOKEN": "mm-key",
+    })
+
+    await agent._activate_fallback()
+
+    assert agent.model == "MiniMax-M2.5"
+    assert agent._env.get("ANTHROPIC_BASE_URL") == "https://api.minimax.io/anthropic"
+    assert agent._env.get("ANTHROPIC_AUTH_TOKEN") == "mm-key"
+    assert agent._env.get("ANTHROPIC_MODEL") == "MiniMax-M2.5"
+    assert agent._cli_model is None
+
+
+@pytest.mark.asyncio
+async def test_activate_fallback_ollama():
+    """_activate_fallback() setzt Ollama-spezifische Env-Vars."""
+    agent = _make_agent({
+        "HAANA_FALLBACK_MODEL": "llama3:8b",
+        "HAANA_FALLBACK_PROVIDER_TYPE": "ollama",
+        "HAANA_FALLBACK_BASE_URL": "http://10.0.0.1:11434",
+        "HAANA_FALLBACK_AUTH_TOKEN": "ollama",
+    })
+
+    await agent._activate_fallback()
+
+    assert agent.model == "llama3:8b"
+    assert agent._env.get("ANTHROPIC_BASE_URL") == "http://10.0.0.1:11434"
+    assert agent._env.get("ANTHROPIC_AUTH_TOKEN") == "ollama"
+    assert agent._cli_model == "llama3:8b"
+
+
+@pytest.mark.asyncio
+async def test_activate_fallback_openai():
+    """_activate_fallback() setzt OpenAI-spezifische Env-Vars."""
+    agent = _make_agent({
+        "HAANA_FALLBACK_MODEL": "gpt-4o",
+        "HAANA_FALLBACK_PROVIDER_TYPE": "openai",
+        "HAANA_FALLBACK_API_KEY": "sk-test",
+        "HAANA_FALLBACK_BASE_URL": "",
+    })
+
+    await agent._activate_fallback()
+
+    assert agent.model == "gpt-4o"
+    assert agent._env.get("OPENAI_API_KEY") == "sk-test"
+    assert agent._env.get("OPENAI_MODEL") == "gpt-4o"
+    assert agent._cli_model is None
+
+
+@pytest.mark.asyncio
+async def test_activate_fallback_gemini():
+    """_activate_fallback() setzt Gemini-spezifische Env-Vars."""
+    agent = _make_agent({
+        "HAANA_FALLBACK_MODEL": "gemini-2.0-flash",
+        "HAANA_FALLBACK_PROVIDER_TYPE": "gemini",
+        "HAANA_FALLBACK_API_KEY": "gem-key",
+    })
+
+    await agent._activate_fallback()
+
+    assert agent.model == "gemini-2.0-flash"
+    assert agent._env.get("GEMINI_API_KEY") == "gem-key"
+    assert agent._env.get("GEMINI_MODEL") == "gemini-2.0-flash"
+    assert agent._cli_model is None
+
+
+@pytest.mark.asyncio
+async def test_activate_fallback_only_once():
+    """_activate_fallback() funktioniert nur einmal (kein Doppel-Fallback)."""
+    agent = _make_agent({
+        "HAANA_FALLBACK_MODEL": "fb-model",
+        "HAANA_FALLBACK_PROVIDER_TYPE": "anthropic",
+    })
+
+    result1 = await agent._activate_fallback()
+    assert result1 is True
+
+    result2 = await agent._activate_fallback()
+    assert result2 is False
+
+
+@pytest.mark.asyncio
+async def test_activate_fallback_clears_old_provider_env():
+    """_activate_fallback() entfernt alte Provider-Env-Vars."""
+    agent = _make_agent({
+        "OPENAI_API_KEY": "old-key",
+        "OPENAI_MODEL": "old-model",
+        "HAANA_FALLBACK_MODEL": "claude-haiku",
+        "HAANA_FALLBACK_PROVIDER_TYPE": "anthropic",
+        "HAANA_FALLBACK_API_KEY": "new-key",
+    })
+
+    await agent._activate_fallback()
+
+    # Alte OpenAI-Vars müssen weg sein
+    assert "OPENAI_API_KEY" not in agent._env
+    assert "OPENAI_MODEL" not in agent._env
+    # Neue Anthropic-Vars gesetzt
+    assert agent._env.get("ANTHROPIC_API_KEY") == "new-key"

@@ -54,6 +54,51 @@ class AgentManager(Protocol):
         ...
 
 
+def _build_fallback_env(f_llm: dict, f_prov: dict, ollama_url: str, cfg: dict) -> dict:
+    """Baut HAANA_FALLBACK_* Env-Vars für den Fallback-LLM auf.
+
+    Diese Vars werden vom Agent gelesen und bei Auth/Connection-Fehlern
+    für einen automatischen Retry mit dem Fallback-LLM genutzt.
+    """
+    fb = {
+        "HAANA_FALLBACK_MODEL": f_llm.get("model", ""),
+    }
+
+    ptype = f_prov.get("type", "")
+    fb["HAANA_FALLBACK_PROVIDER_TYPE"] = ptype
+
+    if ptype == "minimax":
+        fb["HAANA_FALLBACK_BASE_URL"] = f_prov.get("url") or "https://api.minimax.io/anthropic"
+        fb["HAANA_FALLBACK_AUTH_TOKEN"] = f_prov.get("key", "")
+        fb["HAANA_FALLBACK_API_KEY"] = ""
+    elif ptype == "ollama":
+        ollama_base = (f_prov.get("url") or ollama_url or "http://localhost:11434").rstrip("/")
+        fb["HAANA_FALLBACK_BASE_URL"] = ollama_base
+        fb["HAANA_FALLBACK_AUTH_TOKEN"] = "ollama"
+        fb["HAANA_FALLBACK_API_KEY"] = ""
+    elif ptype == "openai":
+        fb["HAANA_FALLBACK_API_KEY"] = f_prov.get("key", "")
+        fb["HAANA_FALLBACK_BASE_URL"] = f_prov.get("url", "")
+    elif ptype == "gemini":
+        fb["HAANA_FALLBACK_API_KEY"] = f_prov.get("key", "")
+        fb["HAANA_FALLBACK_BASE_URL"] = ""
+    elif ptype == "anthropic":
+        fb["HAANA_FALLBACK_API_KEY"] = f_prov.get("key", "")
+        fb["HAANA_FALLBACK_BASE_URL"] = f_prov.get("url", "")
+        # OAuth
+        if not f_prov.get("key") and f_prov.get("auth_method") == "oauth" and f_prov.get("oauth_dir"):
+            fb["HAANA_FALLBACK_OAUTH_DIR"] = f_prov["oauth_dir"]
+
+    # OAuth-Suche: Drittanbieter brauchen trotzdem Anthropic-Auth für Claude CLI
+    if ptype in ("gemini", "openai", "ollama"):
+        for prov in cfg.get("providers", []):
+            if prov.get("type") == "anthropic" and prov.get("auth_method") == "oauth" and prov.get("oauth_dir"):
+                fb["HAANA_FALLBACK_OAUTH_DIR"] = prov["oauth_dir"]
+                break
+
+    return fb
+
+
 def _build_agent_env(user: dict, cfg: dict, resolve_llm_fn, find_ollama_url_fn) -> dict:
     """Baut die Env-Vars für einen Agent-Prozess auf.
 
@@ -67,8 +112,10 @@ def _build_agent_env(user: dict, cfg: dict, resolve_llm_fn, find_ollama_url_fn) 
     read_scopes = f"{uid}_memory,household_memory"
 
     primary_llm_id = user.get("primary_llm", "")
+    fallback_llm_id = user.get("fallback_llm", "")
     extract_llm_id = cfg.get("memory", {}).get("extraction_llm", "")
     p_llm, p_prov = resolve_llm_fn(primary_llm_id, cfg)
+    f_llm, f_prov = resolve_llm_fn(fallback_llm_id, cfg)
     e_llm, e_prov = resolve_llm_fn(extract_llm_id, cfg)
 
     ollama_url = find_ollama_url_fn(cfg)
@@ -135,6 +182,11 @@ def _build_agent_env(user: dict, cfg: dict, resolve_llm_fn, find_ollama_url_fn) 
         "HAANA_EMBED_URL":             embed_url,
         "HAANA_EMBED_KEY":             embed_key,
     }
+
+    # Fallback-LLM Env-Vars (für automatisches Umschalten bei Auth/Connection-Fehlern)
+    if f_llm and f_prov:
+        fb_env = _build_fallback_env(f_llm, f_prov, ollama_url, cfg)
+        env.update(fb_env)
 
     # HA MCP-Server URL
     services = cfg.get("services", {})

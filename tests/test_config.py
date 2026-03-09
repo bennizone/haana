@@ -684,6 +684,74 @@ def test_build_env_gemini_provider():
     assert "ANTHROPIC_API_KEY" not in env
 
 
+def test_build_env_fallback_llm_anthropic():
+    """Fallback-LLM mit Anthropic-Provider setzt HAANA_FALLBACK_* Env-Vars."""
+    cfg = _make_cfg()
+    user = _make_user(fallback_llm="claude-primary")
+    env = _build_env(user, cfg)
+    assert env["HAANA_FALLBACK_MODEL"] == "claude-sonnet-4-6"
+    assert env["HAANA_FALLBACK_PROVIDER_TYPE"] == "anthropic"
+    assert env["HAANA_FALLBACK_API_KEY"] == "sk-test"
+
+
+def test_build_env_fallback_llm_ollama():
+    """Fallback-LLM mit Ollama-Provider setzt korrekte Env-Vars."""
+    cfg = _make_cfg()
+    user = _make_user(primary_llm="claude-primary", fallback_llm="ollama-extract")
+    env = _build_env(user, cfg)
+    assert env["HAANA_FALLBACK_MODEL"] == "ministral-3-32k:3b"
+    assert env["HAANA_FALLBACK_PROVIDER_TYPE"] == "ollama"
+    assert env["HAANA_FALLBACK_BASE_URL"] == "http://ollama:11434"
+    assert env["HAANA_FALLBACK_AUTH_TOKEN"] == "ollama"
+
+
+def test_build_env_no_fallback_when_empty():
+    """Ohne Fallback-LLM werden keine HAANA_FALLBACK_* Vars gesetzt."""
+    cfg = _make_cfg()
+    user = _make_user(fallback_llm="")
+    env = _build_env(user, cfg)
+    assert "HAANA_FALLBACK_MODEL" not in env
+    assert "HAANA_FALLBACK_PROVIDER_TYPE" not in env
+
+
+def test_build_env_fallback_minimax():
+    """Fallback-LLM mit MiniMax-Provider setzt korrekte Env-Vars."""
+    cfg = _make_cfg(providers=[
+        {"id": "anthropic-1", "name": "Anthropic", "type": "anthropic", "url": "", "key": "sk-test"},
+        {"id": "mm-1", "name": "MiniMax", "type": "minimax",
+         "url": "https://api.minimax.io/anthropic", "key": "mm-key"},
+        {"id": "ollama-home", "name": "Ollama", "type": "ollama", "url": "http://ollama:11434", "key": ""},
+    ], llms=[
+        {"id": "claude-primary", "name": "Claude", "provider_id": "anthropic-1", "model": "claude-sonnet-4-6"},
+        {"id": "mm-llm", "name": "MiniMax M2.5", "provider_id": "mm-1", "model": "MiniMax-M2.5"},
+        {"id": "ollama-extract", "name": "Ministral", "provider_id": "ollama-home", "model": "ministral-3-32k:3b"},
+    ])
+    user = _make_user(fallback_llm="mm-llm")
+    env = _build_env(user, cfg)
+    assert env["HAANA_FALLBACK_MODEL"] == "MiniMax-M2.5"
+    assert env["HAANA_FALLBACK_PROVIDER_TYPE"] == "minimax"
+    assert env["HAANA_FALLBACK_BASE_URL"] == "https://api.minimax.io/anthropic"
+    assert env["HAANA_FALLBACK_AUTH_TOKEN"] == "mm-key"
+
+
+def test_build_env_fallback_openai():
+    """Fallback-LLM mit OpenAI-Provider setzt korrekte Env-Vars."""
+    cfg = _make_cfg(providers=[
+        {"id": "anthropic-1", "name": "Anthropic", "type": "anthropic", "url": "", "key": "sk-test"},
+        {"id": "oa-1", "name": "OpenAI", "type": "openai", "key": "sk-openai", "url": ""},
+        {"id": "ollama-home", "name": "Ollama", "type": "ollama", "url": "http://ollama:11434", "key": ""},
+    ], llms=[
+        {"id": "claude-primary", "name": "Claude", "provider_id": "anthropic-1", "model": "claude-sonnet-4-6"},
+        {"id": "gpt", "name": "GPT-4o", "provider_id": "oa-1", "model": "gpt-4o"},
+        {"id": "ollama-extract", "name": "Ministral", "provider_id": "ollama-home", "model": "ministral-3-32k:3b"},
+    ])
+    user = _make_user(fallback_llm="gpt")
+    env = _build_env(user, cfg)
+    assert env["HAANA_FALLBACK_MODEL"] == "gpt-4o"
+    assert env["HAANA_FALLBACK_PROVIDER_TYPE"] == "openai"
+    assert env["HAANA_FALLBACK_API_KEY"] == "sk-openai"
+
+
 def test_build_env_ollama_primary_provider():
     """Ollama als Primary-LLM setzt ANTHROPIC_BASE_URL (offizielle Ollama-Doku)."""
     cfg = _make_cfg(providers=[
