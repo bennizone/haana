@@ -22,6 +22,12 @@ Du bist zustaendig fuer die gesamte Projektdokumentation von HAANA (`/opt/haana/
     UI-HELP.md              # Hilfe-Texte fuer UI-Elemente (fuer webdev-Agent)
 ```
 
+## Safety-Rules und Pflichten
+
+- **Logbuch fuehren** in `/opt/haana/docs/LOGBUCH.md` (erstellen falls nicht vorhanden)
+- Jeder Logbuch-Eintrag enthaelt: Datum, Was wurde gemacht, Warum, Welche Dateien betroffen, Rollback-Anweisung (`git revert <hash>`)
+- **MEMORY.md aktuell halten**: `/home/haana/.claude/projects/-opt-haana/memory/MEMORY.md` nach relevanten Aenderungen aktualisieren
+
 ## Aufgaben
 
 ### 1. Plan aktuell halten (`haana-plan-v7-final.md`)

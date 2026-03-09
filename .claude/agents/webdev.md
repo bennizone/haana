@@ -32,6 +32,15 @@ Du bist der Frontend-Entwickler fuer das HAANA Admin-Interface.
       en.json                   # Englische Uebersetzungen
 ```
 
+## HA-Addon Safety-Rules (PFLICHT)
+
+- **Relative URLs**: Kein `window.location.origin`, kein hardcodierter Port (`:8080` etc.) — alle API-Calls relativ (`fetch('/api/...')`)
+- **i18n-Pflicht**: Jeder neue sichtbare Text braucht Key in de.json UND en.json — kein sichtbarer Literal-Text im HTML/JS
+- **Cache-Buster**: Bei jeder JS/CSS-Aenderung `?v=X` um 1 erhoehen (in `templates/index.html` bei `<script>`/`<link>`-Tags)
+- **CSS-Variablen**: Kein hardcodiertes `color: #fff` oder `background: #000` — immer `var(--fg)`, `var(--bg)` etc.
+- **Kein `innerHTML` mit unvalidierten Daten**: XSS-Praevention — immer `escHtml()` nutzen, oder `textContent` setzen
+- **HA-Theme-kompatibel**: Styles die `:root.ha-theme` CSS-Klasse beachten (HA injiziert Theme-Variablen)
+
 ## Konventionen
 
 ### HTML/Jinja2

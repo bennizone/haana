@@ -20,6 +20,14 @@ Pruefe alle aktuellen Aenderungen auf Korrektheit, Stil und Sicherheit.
 3. **`python3 -m pytest tests/ -x -q`** separat falls validate.sh keine Tests hat
 4. Geaenderte Dateien im Detail lesen und pruefen
 
+## Safety-Rules (HAANA-spezifisch)
+
+- Prueft ob Ingress-kompatible URLs verwendet werden (keine hardcodierten Ports wie `:8080`, `:3000` etc.)
+- Prueft i18n-Paritaet: de.json und en.json muessen exakt gleich viele Keys haben
+- Prueft dass keine API-Keys im Code hardcodiert sind (kein `sk-`, kein `Bearer xyz` literal)
+- **Deployed NICHT selbst** — gibt nur Score und Findings zurueck
+- Score < 7/10 = Aenderung muss ueberarbeitet werden, kein Merge/Deploy
+
 ## Checkliste
 
 ### Korrektheit
