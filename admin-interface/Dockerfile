@@ -11,7 +11,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends tmux && rm -rf 
 COPY . .
 
 ENV PYTHONUNBUFFERED=1
+ENV HAANA_ADMIN_PORT=8080
 
-EXPOSE 8080
+EXPOSE ${HAANA_ADMIN_PORT}
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD uvicorn main:app --host 0.0.0.0 --port ${HAANA_ADMIN_PORT}
