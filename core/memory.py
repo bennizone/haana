@@ -305,6 +305,7 @@ class _WindowEntry:
     timestamp: float = field(default_factory=time.time)
     extracting: bool = False  # True = Hintergrund-Task läuft gerade
     classify_retries: int = 0  # Fehlversuche bei Scope-Klassifikation
+    already_extracted: bool = False  # True = bereits via add_immediate() extrahiert
 
 
 class ConversationWindow:
@@ -399,6 +400,7 @@ class ConversationWindow:
                     # War der Task aktiv als gespeichert wurde? → pending auf nächsten Start
                     "pending_extraction": e.extracting,
                     "classify_retries": e.classify_retries,
+                    "already_extracted": e.already_extracted,
                 }
                 for e in self._entries
             ],
@@ -422,6 +424,7 @@ class ConversationWindow:
                 timestamp=item["timestamp"],
                 extracting=False,
                 classify_retries=item.get("classify_retries", 0),
+                already_extracted=item.get("already_extracted", False),
             )
             self._entries.append(entry)
             if item.get("pending_extraction", False):
@@ -1297,6 +1300,15 @@ class HaanaMemory:
         Bei Fehler: Eintrag bleibt im Window (kein Datenverlust).
         Bei fehlendem Scope: Klassifikation nochmal versuchen, bei Dauerfehler Admins warnen.
         """
+        # Bereits via add_immediate() extrahiert → nur aus Window entfernen
+        if entry.already_extracted:
+            self._window.mark_extracted(entry)
+            logger.debug(
+                f"[{self.instance}] Überspringe Extraktion (already_extracted) | "
+                f"window={self._window.size()}"
+            )
+            return
+
         # Scope noch nicht klassifiziert → nochmal versuchen
         if entry.scope is None:
             entry.scope = self._resolve_scope(entry.assistant, None)
@@ -1352,11 +1364,39 @@ class HaanaMemory:
         task = asyncio.create_task(self._extract_entry(entry))
         self._track_task(task)
 
+    async def add_immediate(self, user_message: str, assistant_response: str, scope: Optional[str] = None):
+        """Sofortige Memory-Extraktion für explizite 'merke dir' Anfragen.
+        Bypassed das Sliding Window — schreibt direkt via Mem0."""
+        resolved_scope = self._resolve_scope(assistant_response, scope)
+        if resolved_scope is None:
+            # Fallback: ersten Write-Scope nehmen
+            if self.write_scopes:
+                resolved_scope = next(iter(self.write_scopes))
+            else:
+                logger.warning(f"[{self.instance}] Kein Write-Scope für immediate memory")
+                return False
+
+        messages = [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": assistant_response},
+        ]
+
+        loop = asyncio.get_running_loop()
+        try:
+            success = await loop.run_in_executor(None, self.add, messages, resolved_scope)
+        except Exception as e:
+            logger.error(f"[{self.instance}] add_immediate Fehler: {e}", exc_info=True)
+            return False
+        if success:
+            logger.info(f"[{self.instance}] Explicit memory write → {resolved_scope}")
+        return success
+
     async def add_conversation_async(
         self,
         user_message: str,
         assistant_response: str,
         scope: Optional[str] = None,
+        already_extracted: bool = False,
     ):
         """
         Fügt Konversation zum Sliding Window hinzu und extrahiert Overflow async.
@@ -1364,12 +1404,20 @@ class HaanaMemory:
         Non-blocking: kehrt sofort zurück. Mem0-Write (LLM-Inferenz + Embedding)
         läuft als asyncio.Task im Hintergrund, ohne den Event-Loop zu blockieren.
         ha-assist (keine write_scopes) → no-op.
+
+        already_extracted: Wenn True, wird der Eintrag im Window als bereits
+        extrahiert markiert (z.B. nach add_immediate()). Bei Overflow wird er
+        nur aus dem Window entfernt, ohne erneute Mem0-Extraktion.
         """
         if not self.write_scopes:
             return
 
         scope = self._resolve_scope(assistant_response, scope)
         overflow = self._window.add(user_message, assistant_response, scope)
+
+        # Flag auf den soeben hinzugefügten Eintrag setzen
+        if already_extracted and self._window._entries:
+            self._window._entries[-1].already_extracted = True
 
         for entry in overflow:
             self._schedule_extraction(entry)

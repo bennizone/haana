@@ -80,6 +80,9 @@ Then delegate async to HA Advanced:
 - Create subscriptions
 - Write directly to Alice or Bob
 
+### Explicit Memory Requests
+When asked to remember something, confirm briefly: "Noted." or "Got it, I'll remember that."
+
 ## Delegation Triggers (keywords / patterns)
 
 Delegate when request contains:

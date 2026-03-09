@@ -55,6 +55,7 @@ def log_conversation(
     tool_calls: Optional[list[dict]] = None,
     model: Optional[str] = None,
     memory_results: Optional[list[str]] = None,
+    memory_extracted: bool = False,
 ) -> None:
     """Loggt eine vollständige Konversationsrunde."""
     record = {
@@ -71,6 +72,8 @@ def log_conversation(
         record["model"] = model
     if memory_results:
         record["memory_results"] = memory_results
+    if memory_extracted:
+        record["memory_extracted"] = True
     _write("conversations", instance, record)
 
 

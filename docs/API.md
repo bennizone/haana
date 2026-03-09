@@ -77,6 +77,20 @@ Base-URL: `http://<host>:8080`
 - `limit` (Query, optional, default 50) — Max. Anzahl Eintraege
 **Response:** `[{"user": "...", "assistant": "...", "timestamp": "...", ...}, ...]`
 
+**Log-Eintrag Felder (JSONL):**
+
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `instance` | string | Instanz-ID |
+| `channel` | string | `chat`, `whatsapp`, `ha_voice` etc. |
+| `user` | string | User-Nachricht |
+| `assistant` | string | Agent-Antwort |
+| `timestamp` | string | ISO-8601 |
+| `memory_hits` | int | Anzahl Memory-Treffer im Kontext |
+| `model` | string | Verwendetes Modell (optional) |
+| `memory_results` | list | Memory-Snippets die in den Kontext flossen (optional) |
+| `memory_extracted` | bool | `true` wenn Explicit Memory Write ausgeloest wurde (nur gesetzt wenn `true`) |
+
 ### GET /api/conversations/{instance}/files
 **Beschreibung:** Listet alle vorhandenen Datumsdateien (JSONL) fuer eine Instanz.
 **Parameter:** `instance` (Path)
@@ -223,6 +237,7 @@ Base-URL: `http://<host>:8080`
 **Beschreibung:** Startet den Memory-Rebuild aus Konversations-Logs.
 **Body:** `{"skip_trivial": true, "delay_ms": 100, "resume": false}`
 **Response:** `{"ok": true, "total": 380, "skipped_trivial": 120, "resumed_from": 0}`
+**Hinweis zu `memory_extracted`:** Eintraege die urspruenglich mit `"memory_extracted": true` geloggt wurden (Explicit Memory Write), werden beim Rebuild **nicht** uebersprungen. Der `/rebuild-entry`-Endpunkt ignoriert das Flag und fuehrt immer volle Mem0-Extraktion durch.
 
 ### POST /api/rebuild-cancel/{instance}
 **Beschreibung:** Pausiert/bricht einen laufenden Rebuild ab. Progress wird gespeichert.

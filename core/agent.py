@@ -58,6 +58,19 @@ def _should_extract_memory(user_message: str, channel: str) -> bool:
     return any(trigger in msg_lower for trigger in _MEMORY_TRIGGERS)
 
 
+def _is_explicit_memory_request(user_message: str) -> bool:
+    """Erkennt ob der User explizit etwas ins Memory schreiben will."""
+    lower = user_message.lower()
+    patterns = (
+        "merk dir", "merke dir", "merken:", "vergiss nicht",
+        "remember that", "remember this", "don't forget",
+        "speicher dir", "speichere das", "speicher das",
+        "notier dir", "notiere dir", "notiere das",
+        "behalte im kopf",
+    )
+    return any(p in lower for p in patterns)
+
+
 class HaanaAgent:
     def __init__(self, instance_name: str):
         self.instance = instance_name
@@ -686,8 +699,18 @@ class HaanaAgent:
 
         # Memory: Konversation async im Hintergrund speichern (non-blocking)
         # ha_voice: Nur bei expliziten "merke dir"-Befehlen extrahieren
+        memory_extracted = False
         if response_text and _should_extract_memory(user_message, channel):
-            await self.memory.add_conversation_async(user_message, response_text)
+            if _is_explicit_memory_request(user_message):
+                # Explicit Memory: sofort in Mem0 schreiben, dann ins Window
+                # (mit already_extracted=True → keine erneute Extraktion)
+                success = await self.memory.add_immediate(user_message, response_text)
+                await self.memory.add_conversation_async(
+                    user_message, response_text, already_extracted=success
+                )
+                memory_extracted = True
+            else:
+                await self.memory.add_conversation_async(user_message, response_text)
 
         # Memory-Ergebnisse als Liste (für Log-Anzeige im UI)
         memory_lines = memory_context.splitlines() if memory_context else []
@@ -704,6 +727,7 @@ class HaanaAgent:
             tool_calls=tool_calls_log,
             model=self.model,
             memory_results=memory_lines,
+            memory_extracted=memory_extracted,
         )
 
         result = response_text or "[Keine Antwort]"

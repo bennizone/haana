@@ -4,6 +4,27 @@ Chronologische Dokumentation der wichtigsten Aenderungen am HAANA-Projekt.
 
 ---
 
+## 2026-03-09 — Explicit Memory Write
+
+**Aenderungen:**
+- `_is_explicit_memory_request()` in `core/agent.py`: erkennt explizite Speicher-Befehle ("merke dir", "vergiss nicht", "remember that" etc.) per Keyword-Matching
+- Bei Treffer: `memory.add_immediate()` schreibt sofort direkt in Mem0/Qdrant (kein Sliding-Window-Delay)
+- Danach: `memory.add_conversation_async(already_extracted=True)` legt den Eintrag ins Window, ohne ihn erneut zu extrahieren (Doppel-Extraktion verhindert)
+- Log-Eintrag erhaelt `"memory_extracted": true` Flag (`core/logger.py`, Feld optional — nur gesetzt wenn `True`)
+- `_should_extract_memory()` bleibt unveraendert: steuert ob ueberhaupt extrahiert wird (ha_voice: nur bei Trigger-Keywords; alle anderen Channels: immer)
+- Natuerliche Bestaetigung erfolgt durch den Agenten via normales CLAUDE.md-Verhalten (kein Code-seitiges Forced-Response)
+
+**Entscheidungen:**
+- `add_immediate()` statt Window: Explizite Befehle sollen ohne Wartezeit auf Window-Flush wirksam sein
+- `already_extracted=True` verhindert doppelte LLM-Extraktion; das Ergebnis liegt bereits in Qdrant
+- `memory_extracted` Flag im Log: ermoeooglicht spaetere Analyse (wie oft wird explizit gespeichert?) und UI-Anzeige ohne erneutes Parsen des Nachrichtentexts
+- `memory_extracted` wird von `/rebuild-entry` (Agent-API) ignoriert — Rebuild fuehrt immer volle Mem0-Extraktion durch, unabhaengig vom Original-Flag
+
+**Offene Punkte:**
+- Fallback-Pfad (Zeile 476 `core/agent.py`): `_is_explicit_memory_request()` wird dort nicht geprueft; explizite Befehle bei Fallback-LLM landen nur im Window, nicht sofort in Mem0
+
+---
+
 ## 2026-03-09 — Sprach-Feature: users[].language, CLAUDE.md auf Englisch, Sprach-Dropdown
 
 **Aenderungen:**

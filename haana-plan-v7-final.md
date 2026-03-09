@@ -852,6 +852,7 @@ Schritt 7: Privacy
 - Delegation: `[DELEGATE]`-Marker loest Weiterleitung an konfigurierten Agent aus (ha-assist → ha-advanced)
 - ha_voice Channel: TTS-freundlich, keine Emojis/Markdown, keine automatische Memory-Extraktion
 - ha_voice Memory: Nur explizite Befehle ("merke dir", "vergiss nicht") loesen Extraktion aus
+- Explicit Memory Write: FERTIG — `_is_explicit_memory_request()` erkennt Befehle, `add_immediate()` schreibt sofort in Mem0, Log-Flag `memory_extracted: true`
 - ha_voice Instruktionen in alle CLAUDE.md Templates integriert
 - Log-Download (ZIP) und Loesch-Funktion im Admin-Interface (`/api/logs-download`, `/api/logs-delete`)
 - Sub-Agenten eingerichtet: Review (`validate.sh`), Webinterface, Test, Dokumentation
