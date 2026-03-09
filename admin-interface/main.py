@@ -1316,20 +1316,27 @@ async def ha_pipelines():
     ha_token = cfg.get("services", {}).get("ha_token", "").strip()
     if not ha_url or not ha_token:
         return {"ok": False, "error": "HA URL oder Token nicht konfiguriert", "pipelines": []}
-    import httpx
+    import websockets, ssl as _ssl
     try:
-        async with httpx.AsyncClient(timeout=8.0) as client:
-            r = await client.get(
-                f"{ha_url}/api/assist/pipelines",
-                headers={"Authorization": f"Bearer {ha_token}"},
-            )
-            if r.status_code == 401:
+        # HA Pipelines sind nur per WebSocket abrufbar
+        ws_url = ha_url.replace("https://", "wss://").replace("http://", "ws://")
+        ws_url = f"{ws_url}/api/websocket"
+        ssl_ctx = _ssl.create_default_context()
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = _ssl.CERT_NONE
+        async with websockets.connect(ws_url, ssl=ssl_ctx, open_timeout=8) as ws:
+            # Auth-Phase
+            msg = json.loads(await ws.recv())  # auth_required
+            await ws.send(json.dumps({"type": "auth", "access_token": ha_token}))
+            msg = json.loads(await ws.recv())  # auth_ok oder auth_invalid
+            if msg.get("type") != "auth_ok":
                 return {"ok": False, "error": "HA Token ungültig", "pipelines": []}
-            if r.status_code == 404:
-                return {"ok": False, "error": "Pipelines-API nicht verfügbar (HA zu alt?)", "pipelines": []}
-            r.raise_for_status()
-            data = r.json()
-            raw_pipelines = data.get("pipelines", data) if isinstance(data, dict) else data
+            # Pipelines abrufen
+            await ws.send(json.dumps({"id": 1, "type": "assist_pipeline/pipeline/list"}))
+            msg = json.loads(await ws.recv())
+            if not msg.get("success"):
+                return {"ok": False, "error": "Pipelines nicht verfügbar", "pipelines": []}
+            raw_pipelines = msg.get("result", {}).get("pipelines", [])
             pipelines = []
             for p in raw_pipelines:
                 pipelines.append({
@@ -1342,7 +1349,7 @@ async def ha_pipelines():
                     "tts_voice":    p.get("tts_voice", ""),
                 })
             return {"ok": True, "pipelines": pipelines}
-    except httpx.ConnectError:
+    except (websockets.exceptions.WebSocketException, OSError, asyncio.TimeoutError):
         return {"ok": False, "error": "HA nicht erreichbar", "pipelines": []}
     except Exception as e:
         return {"ok": False, "error": str(e)[:200], "pipelines": []}
