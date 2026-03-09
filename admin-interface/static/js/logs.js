@@ -1,40 +1,22 @@
 // logs.js – Konversations-Log Viewer (strukturierte Tag-Karten)
-// v5 – Redesign: User-Tabs, Datumsfilter, Suche, Tag-Akkordeons, User-Aktionen
+// v6 – Unified with Conversations panel; _logCurrentInst mirrors currentInstance
 
 // ── State ────────────────────────────────────────────────────────────────────
-let _logCurrentInst   = '__all__';   // active instance tab
+// NOTE: _logCurrentInst is kept as an alias — app.js sets it before calling
+// loadLogDays() so the two variables stay in sync.
+let _logCurrentInst   = '__all__';   // mirrors currentInstance in archiv mode
 let _logAllFiles      = [];          // all loaded log file records
 let _logSearchTimer   = null;        // debounce handle
 
-// ── Init ─────────────────────────────────────────────────────────────────────
+// ── Legacy Init stub (called from nowhere now, kept for safety) ───────────
 function initLogView() {
-  _logCurrentInst = '__all__';
-  // Activate "Alle" tab
-  document.querySelectorAll('.log-user-tab').forEach(b => {
-    b.classList.toggle('active', b.dataset.inst === '__all__');
-  });
-  _updateToolbarVisibility();
-  loadLogDays();
+  // No-op: unified view is managed by app.js initConversationsView()
 }
 
-// ── Instance Tab ─────────────────────────────────────────────────────────────
+// ── Instance Tab (legacy, kept for external callers) ─────────────────────
 function selectLogInstance(inst) {
-  _logCurrentInst = inst;
-  document.querySelectorAll('.log-user-tab').forEach(b => {
-    b.classList.toggle('active', b.dataset.inst === inst);
-  });
-  _updateToolbarVisibility();
-  // Reset check-result banner
-  const banner = document.getElementById('log-check-result');
-  if (banner) { banner.style.display = 'none'; banner.innerHTML = ''; }
-  loadLogDays();
-}
-
-function _updateToolbarVisibility() {
-  const actions = document.getElementById('log-toolbar-actions');
-  if (!actions) return;
-  // User-level actions only shown when a specific instance is selected
-  actions.style.display = _logCurrentInst === '__all__' ? 'none' : 'flex';
+  // Delegate to unified selectInstance in app.js
+  selectInstance(inst);
 }
 
 // ── Date Filter ──────────────────────────────────────────────────────────────
@@ -64,12 +46,6 @@ function setLogDateRange(range) {
 }
 
 function applyLogFilters() {
-  // Mark quick-filter buttons: deselect all when manually picking dates
-  const fromEl = document.getElementById('log-date-from');
-  const toEl   = document.getElementById('log-date-to');
-  if (fromEl.value || toEl.value) {
-    // keep existing quick-btn state but don't auto-select one
-  }
   renderLogDays(_logAllFiles);
 }
 
@@ -86,10 +62,8 @@ async function loadLogDays() {
   list.innerHTML = `<div class="empty-state"><div class="icon">&#8230;</div><div>${t('logs.loading')}</div></div>`;
 
   try {
-    // Use the existing files API — fetch for all instances or specific one
     let files = [];
     if (_logCurrentInst === '__all__') {
-      // Fetch for every instance in parallel
       const results = await Promise.all(
         INSTANCES.map(inst =>
           fetch(`/api/conversations/${inst}/files`)
@@ -113,21 +87,19 @@ async function loadLogDays() {
 
 // ── Render Day Cards ──────────────────────────────────────────────────────────
 function renderLogDays(files) {
-  const list    = document.getElementById('log-day-list');
+  const list = document.getElementById('log-day-list');
   if (!list) return;
 
-  const fromVal  = document.getElementById('log-date-from')?.value || '';
-  const toVal    = document.getElementById('log-date-to')?.value   || '';
-  const query    = (document.getElementById('log-search')?.value || '').toLowerCase().trim();
+  const fromVal = document.getElementById('log-date-from')?.value || '';
+  const toVal   = document.getElementById('log-date-to')?.value   || '';
+  const query   = (document.getElementById('log-search')?.value || '').toLowerCase().trim();
 
-  // Filter by date range
   let filtered = files.filter(f => {
     if (fromVal && f.date < fromVal) return false;
     if (toVal   && f.date > toVal)   return false;
     return true;
   });
 
-  // Group by date (descending), then by instance within each date
   const byDate = {};
   filtered.forEach(f => {
     if (!byDate[f.date]) byDate[f.date] = [];
@@ -142,16 +114,14 @@ function renderLogDays(files) {
   }
 
   list.innerHTML = sortedDates.map(date => {
-    const dayFiles = byDate[date];
+    const dayFiles     = byDate[date];
     const totalEntries = dayFiles.reduce((s, f) => s + (f.entries || 0), 0);
     const totalKb      = dayFiles.reduce((s, f) => s + (f.size_kb || 0), 0);
 
-    // For "Alle" view show all instances; for single instance just one
     const instanceTags = _logCurrentInst === '__all__'
       ? dayFiles.map(f => `<span class="tag" style="font-size:10px;">${escHtml(f.instance)}</span>`).join(' ')
       : '';
 
-    // Actions: only for single-instance view or when exactly one instance for this date
     const actInst = _logCurrentInst !== '__all__' ? _logCurrentInst
       : (dayFiles.length === 1 ? dayFiles[0].instance : null);
 
@@ -169,7 +139,6 @@ function renderLogDays(files) {
         ${t('logs.day.rebuild')}
       </button>` : '';
 
-    // Build file rows (one per instance)
     const fileRows = dayFiles.map((f, idx) => {
       const dateLabel = _formatDate(date);
       return `
@@ -209,7 +178,6 @@ function renderLogDays(files) {
     </div>`;
   }).join('');
 
-  // Apply text search after render (hide non-matching cards)
   if (query) {
     list.querySelectorAll('.log-day-card').forEach(card => {
       const text = card.textContent.toLowerCase();
@@ -219,19 +187,32 @@ function renderLogDays(files) {
 }
 
 function toggleLogDay(date) {
-  const body    = document.getElementById(`log-day-body-${date}`);
-  const card    = document.getElementById(`log-day-${date}`);
+  const body = document.getElementById(`log-day-body-${date}`);
+  const card = document.getElementById(`log-day-${date}`);
   if (!body || !card) return;
   const open = body.style.display !== 'none';
   body.style.display = open ? 'none' : '';
   card.classList.toggle('log-day-open', !open);
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function _modalConfirmPromise(title, message) {
+  return new Promise(resolve => {
+    Modal.show({
+      title,
+      body: `<p class="modal-message">${escHtml(message)}</p>`,
+      onConfirm: () => resolve(true),
+      onCancel:  () => resolve(false),
+      confirmClass: 'btn-danger',
+    });
+  });
+}
+
 // ── Day Actions ───────────────────────────────────────────────────────────────
 async function logDeleteDay(inst, date) {
-  const ok = await modalConfirm(
+  const ok = await _modalConfirmPromise(
     `${t('logs.day.delete')}: ${inst} / ${date}`,
-    `${t('logs.delete_confirm').replace('{scope}', `${inst}/${date}`)}`
+    `${t('logs.day.delete')}: ${inst} / ${date}?`
   );
   if (!ok) return;
   try {
@@ -281,7 +262,6 @@ async function logDeleteAllUser() {
   const inst = _logCurrentInst;
   if (!inst || inst === '__all__') return;
 
-  // Strong confirmation: type instance name
   const confirmed = await _confirmTypeName(inst);
   if (!confirmed) return;
 
@@ -389,7 +369,6 @@ function _confirmTypeName(inst) {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function _formatDate(dateStr) {
   if (!dateStr) return dateStr;
-  // dateStr is YYYY-MM-DD
   try {
     return new Date(dateStr + 'T00:00:00').toLocaleDateString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit' });
   } catch(_) { return dateStr; }
@@ -402,7 +381,7 @@ function _formatDateLong(dateStr) {
   } catch(_) { return dateStr; }
 }
 
-// ── Log Editor (kept from previous version) ───────────────────────────────────
+// ── Log Editor ────────────────────────────────────────────────────────────────
 let _logEditorInst = null;
 let _logEditorDate = null;
 
@@ -448,8 +427,8 @@ async function saveLogEditor() {
   } catch(e) { info.textContent = '\u274c ' + e.message; }
 }
 
-// ── Legacy stubs (called from app.js or other places) ────────────────────────
+// ── Legacy stubs ──────────────────────────────────────────────────────────────
 function loadLogFiles(inst) { /* superseded by loadLogDays */ }
 function selectLogFileInstance(inst) { selectLogInstance(inst); }
-function loadLogs(cat) { /* superseded – system logs removed from this view */ }
+function loadLogs(cat) { /* no-op */ }
 function selectLogCat(cat) { /* no-op */ }

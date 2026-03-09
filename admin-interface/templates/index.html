@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HAANA Admin</title>
-<link rel="stylesheet" href="/static/css/admin.css?v=5">
+<link rel="stylesheet" href="/static/css/admin.css?v=6">
 </head>
 <body>
 
@@ -19,92 +19,89 @@
 </header>
 
 <div class="tabs">
-  <button class="tab-btn active" onclick="showTab('chat', event)" data-i18n="tabs.chat">Chat</button>
-  <button class="tab-btn" onclick="showTab('logs', event)" data-i18n="tabs.logs">Logs</button>
+  <button class="tab-btn active" onclick="showTab('conversations', event)" data-i18n="tabs.conversations">Konversationen</button>
   <button class="tab-btn" onclick="showTab('config', event)" data-i18n="tabs.config">Config</button>
   <button class="tab-btn" onclick="showTab('users', event)" data-i18n="tabs.users">Users</button>
   <button class="tab-btn" onclick="showTab('status', event)" data-i18n="tabs.status">Status</button>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════════ CHAT -->
-<div id="panel-chat" class="panel active">
-  <div class="instance-bar">
+<!-- ══════════════════════════════════════════ CONVERSATIONS (Chat + Logs) -->
+<div id="panel-conversations" class="panel active">
+
+  <!-- ── Unified Instance Tabs ── -->
+  <div class="conv-inst-tabs" id="conv-inst-tabs">
+    <button class="conv-inst-tab" data-inst="__all__"
+            onclick="selectInstance('__all__')" data-i18n="logs.tabs.all">Alle</button>
     {% for inst in instances %}
-    <button class="inst-btn {% if loop.first %}active{% endif %}"
-            onclick="selectInstance('{{ inst }}')" id="btn-{{ inst }}">
-      {{ inst }}
-    </button>
+    <button class="conv-inst-tab" data-inst="{{ inst }}"
+            onclick="selectInstance('{{ inst }}')">{{ inst }}</button>
     {% endfor %}
-    <div class="limit-selector">
-      <label>Letzte</label>
-      <select id="conv-limit" onchange="loadConversations(currentInstance)">
-        <option value="10">10</option>
-        <option value="25">25</option>
-        <option value="50" selected>50</option>
-        <option value="100">100</option>
-        <option value="200">200</option>
-      </select>
+  </div>
+
+  <!-- ── Top bar: View toggle + Live indicators + Limit selector ── -->
+  <div class="conv-top-bar">
+    <!-- View Mode Toggle -->
+    <div class="view-toggle">
+      <button class="view-toggle-btn active" data-mode="live"
+              onclick="switchViewMode('live')" data-i18n="chat.view_live">Live</button>
+      <button class="view-toggle-btn" data-mode="archiv"
+              onclick="switchViewMode('archiv')" data-i18n="chat.view_archiv">Archiv</button>
     </div>
-    <div class="live-bar">
-      <div class="live-dot offline" id="live-dot"></div>
-      <span id="live-label">Live</span>
-      <span id="agent-status" class="agent-status"></span>
+
+    <!-- Live mode extras -->
+    <div class="conv-limit-wrap">
+      <div class="limit-selector">
+        <label data-i18n="chat.last">Letzte</label>
+        <select id="conv-limit" onchange="loadConversations(currentInstance)">
+          <option value="10">10</option>
+          <option value="25">25</option>
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+          <option value="200">200</option>
+        </select>
+      </div>
+      <div class="live-bar">
+        <div class="live-dot offline" id="live-dot"></div>
+        <span id="live-label">Live</span>
+        <span id="agent-status" class="agent-status"></span>
+      </div>
     </div>
   </div>
 
-  <!-- Rebuild-Banner -->
+  <!-- ── Rebuild-Banner ── -->
   <div id="rebuild-banner" class="rebuild-banner">
-    <span class="rebuild-banner-text">Qdrant ist leer – Memory kann aus Konversations-Logs neu aufgebaut werden.</span>
+    <span class="rebuild-banner-text" data-i18n="chat.rebuild_banner">Qdrant ist leer – Memory kann aus Konversations-Logs neu aufgebaut werden.</span>
     <div class="rebuild-banner-actions">
-      <button class="btn btn-sm btn-secondary" onclick="showTab('config');scrollToRebuild()">Jetzt rebuilden</button>
-      <button class="btn btn-sm btn-secondary" onclick="document.getElementById('rebuild-banner').classList.remove('active')">✕</button>
+      <button class="btn btn-sm btn-secondary" onclick="showTab('config');scrollToRebuild()" data-i18n="chat.rebuild_now">Jetzt rebuilden</button>
+      <button class="btn btn-sm btn-secondary" onclick="document.getElementById('rebuild-banner').classList.remove('active')">&#10005;</button>
     </div>
   </div>
 
-  <!-- Chat-Eingabe -->
+  <!-- ── Chat-Eingabe (hidden for "Alle") ── -->
   <div class="chat-box">
     <div class="chat-input-row">
       <textarea id="chat-input" class="chat-input"
+        data-i18n-placeholder="chat.placeholder"
         placeholder="Nachricht an HAANA... (Enter senden, Shift+Enter Zeilenumbruch)"
         rows="2"
         onkeydown="handleChatKey(event)"
       ></textarea>
-      <button class="btn btn-primary chat-send-btn" id="send-btn" onclick="sendChat()">
-        Senden ↵
+      <button class="btn btn-primary chat-send-btn" id="send-btn" onclick="sendChat()" data-i18n="chat.send_btn">
+        Senden &#8629;
       </button>
     </div>
     <div id="chat-status" class="chat-status"></div>
   </div>
 
-  <div id="conv-list">
-    <div class="empty-state">
-      <div class="icon">...</div>
-      <div>Konversationen werden geladen...</div>
-    </div>
-  </div>
-
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════════ LOGS -->
-<div id="panel-logs" class="panel">
-
-  <!-- ── Konversations-Logs ── -->
-  <div class="log-section-title" data-i18n="logs.conv_logs_title">Konversations-Logs</div>
-
-  <!-- User/Instance tabs -->
-  <div class="log-user-tabs" id="log-user-tabs">
-    <button class="log-user-tab active" data-inst="__all__" onclick="selectLogInstance('__all__')" data-i18n="logs.tabs.all">Alle</button>
-    {% for inst in instances %}
-    <button class="log-user-tab" data-inst="{{ inst }}" onclick="selectLogInstance('{{ inst }}')">{{ inst }}</button>
-    {% endfor %}
-  </div>
-
-  <!-- User-level toolbar -->
-  <div class="log-toolbar" id="log-toolbar">
-    <div class="log-toolbar-actions" id="log-toolbar-actions">
-      <button class="btn btn-sm btn-secondary" id="log-export-btn" onclick="logExportUser()" data-i18n="logs.user.export">Export (ZIP)</button>
-      <button class="btn btn-sm btn-secondary" id="log-check-btn" onclick="logCheckRebuild()" data-i18n="logs.user.check_rebuild">Änderungen prüfen</button>
-      <button class="btn btn-sm btn-danger" id="log-delete-all-btn" onclick="logDeleteAllUser()" data-i18n="logs.user.delete_all">Alle Daten löschen</button>
+  <!-- ── Archiv toolbar + filter (hidden in live mode) ── -->
+  <div class="conv-archiv-toolbar" id="conv-archiv-toolbar" style="display:none;">
+    <div class="log-toolbar-actions" id="log-toolbar-actions" style="display:none;">
+      <button class="btn btn-sm btn-secondary" id="log-export-btn"
+              onclick="logExportUser()" data-i18n="logs.user.export">Export (ZIP)</button>
+      <button class="btn btn-sm btn-secondary" id="log-check-btn"
+              onclick="logCheckRebuild()" data-i18n="logs.user.check_rebuild">Änderungen prüfen</button>
+      <button class="btn btn-sm btn-danger" id="log-delete-all-btn"
+              onclick="logDeleteAllUser()" data-i18n="logs.user.delete_all">Alle Daten löschen</button>
     </div>
     <!-- Date filter -->
     <div class="log-filter-bar">
@@ -124,17 +121,32 @@
         <svg class="log-search-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="8.5" cy="8.5" r="5.5"/><line x1="13" y1="13" x2="18" y2="18"/>
         </svg>
-        <input type="text" id="log-search" class="log-search-input" placeholder="Logs durchsuchen..."
-               data-i18n-placeholder="logs.filter.search" oninput="debounceLogSearch()">
+        <input type="text" id="log-search" class="log-search-input"
+               placeholder="Logs durchsuchen..."
+               data-i18n-placeholder="logs.filter.search"
+               oninput="debounceLogSearch()">
       </div>
+    </div>
+    <!-- Check-rebuild result banner -->
+    <div id="log-check-result" class="log-check-banner" style="display:none;"></div>
+  </div>
+
+  <!-- ── Live content ── -->
+  <!-- "select instance" hint for "Alle" in live mode -->
+  <div id="conv-select-hint" class="empty-state" style="display:none;">
+    <div class="icon">&#8594;</div>
+    <div data-i18n="chat.select_instance">Instanz auswählen um den Chat zu nutzen</div>
+  </div>
+
+  <div id="conv-list" style="display:flex;flex-direction:column;gap:var(--sp-3);">
+    <div class="empty-state">
+      <div class="icon">&#8230;</div>
+      <div data-i18n="chat.loading">Konversationen werden geladen...</div>
     </div>
   </div>
 
-  <!-- Check-rebuild result banner -->
-  <div id="log-check-result" class="log-check-banner" style="display:none;"></div>
-
-  <!-- Day-card list -->
-  <div id="log-day-list">
+  <!-- ── Archiv content (day-accordion) ── -->
+  <div id="log-day-list" style="display:none;">
     <div class="empty-state">
       <div class="icon">&#8230;</div>
       <div data-i18n="logs.loading">Logs werden geladen...</div>
@@ -829,14 +841,14 @@
 <script src="/static/js/modal.js?v=3"></script>
 
 <!-- App-Kern (globaler State, Tabs, Init) -->
-<script src="/static/js/app.js?v=5"></script>
+<script src="/static/js/app.js?v=6"></script>
 
 <!-- Feature-Module -->
-<script src="/static/js/chat.js?v=4"></script>
+<script src="/static/js/chat.js?v=5"></script>
 <script src="/static/js/config.js?v=5"></script>
 <script src="/static/js/users.js?v=5"></script>
 <script src="/static/js/status.js?v=3"></script>
-<script src="/static/js/logs.js?v=5"></script>
+<script src="/static/js/logs.js?v=6"></script>
 <script src="/static/js/whatsapp.js?v=3"></script>
 </body>
 </html>

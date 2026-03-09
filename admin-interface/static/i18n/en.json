@@ -5,6 +5,7 @@
   },
   "tabs": {
     "chat": "Chat",
+    "conversations": "Conversations",
     "logs": "Logs",
     "config": "Config",
     "users": "Users",
@@ -40,7 +41,11 @@
     "model": "Model",
     "memories_used": "Memories used",
     "tools_used": "Tools used",
-    "no_memories": "none"
+    "no_memories": "none",
+    "view_live": "Live",
+    "view_archiv": "Archive",
+    "select_instance": "Select an instance to use chat",
+    "model_used": "Model"
   },
   "logs": {
     "memory": "Memory",
@@ -486,7 +491,8 @@
     "agent_instances": "Agent Instances",
     "action_failed": "failed",
     "delete_label": "Delete",
-    "dims_mismatch": "Embedding dimensions mismatch – collections need to be rebuilt (Memory tab)."
+    "dims_mismatch": "Embedding dimensions mismatch – collections need to be rebuilt (Memory tab).",
+    "rebuild_banner": "Qdrant is empty – memory can be rebuilt from conversation logs."
   },
   "whatsapp": {
     "connected": "Connected",

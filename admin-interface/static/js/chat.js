@@ -3,13 +3,16 @@
 // ── Konversationen laden ───────────────────────────────────────────────────
 async function loadConversations(inst) {
   const limit = document.getElementById('conv-limit')?.value || 50;
+  const list  = document.getElementById('conv-list');
+  if (!list) return;
+  list.innerHTML = `<div class="empty-state"><div class="icon">&#8230;</div><div>${t('chat.loading')}</div></div>`;
   try {
     const r = await fetch(`/api/conversations/${inst}?limit=${limit}`);
     const data = await r.json();
     renderConversations(data);
   } catch(e) {
-    document.getElementById('conv-list').innerHTML =
-      `<div class="empty-state"><div class="icon">!</div><div>${e.message}</div></div>`;
+    list.innerHTML =
+      `<div class="empty-state"><div class="icon">!</div><div>${escHtml(e.message)}</div></div>`;
   }
 }
 
@@ -69,6 +72,7 @@ function _renderDetailSections(r) {
 
 function renderConversations(records) {
   const list = document.getElementById('conv-list');
+  if (!list) return;
   if (!records.length) {
     list.innerHTML = '<div class="empty-state"><div class="icon">--</div><div>' + t('chat.no_conversations_instance') + '</div></div>';
     return;
@@ -117,20 +121,21 @@ function startSSE(inst) {
   sse.onmessage = (e) => {
     const msg = JSON.parse(e.data);
     if (msg.type === 'connected') {
-      dot.classList.remove('offline');
-      label.textContent = t('chat.live');
+      if (dot)   dot.classList.remove('offline');
+      if (label) label.textContent = t('chat.live');
     } else if (msg.type === 'conversation') {
       prependConversation(msg.record);
     }
   };
   sse.onerror = () => {
-    dot.classList.add('offline');
-    label.textContent = t('chat.sse_offline');
+    if (dot)   dot.classList.add('offline');
+    if (label) label.textContent = t('chat.sse_offline');
   };
 }
 
 function prependConversation(record) {
   const list = document.getElementById('conv-list');
+  if (!list) return;
   const emptyState = list.querySelector('.empty-state');
   if (emptyState) list.innerHTML = '';
 
@@ -180,6 +185,10 @@ async function sendChat() {
   const btn    = document.getElementById('send-btn');
   const msg    = input.value.trim();
   if (!msg) return;
+  if (!currentInstance || currentInstance === '__all__') {
+    toast(t('chat.select_instance'), 'error');
+    return;
+  }
 
   input.value = '';
   input.style.borderColor = 'var(--border)';
@@ -220,6 +229,7 @@ async function sendChat() {
 
 function prependPendingMessage(userMsg, cardId) {
   const list = document.getElementById('conv-list');
+  if (!list) return;
   const empty = list.querySelector('.empty-state');
   if (empty) list.innerHTML = '';
 
@@ -252,7 +262,6 @@ function updatePendingMessage(cardId, userMsg, response, isError) {
     respEl.style.color = isError ? 'var(--red)' : '';
     respEl.innerHTML = `<em>${escHtml(response)}</em>`;
   }
-  // Expandierbar machen
   const header = card.querySelector('.conv-header');
   if (header && !isError) {
     header.style.cursor = 'pointer';
@@ -273,6 +282,7 @@ function updatePendingMessage(cardId, userMsg, response, isError) {
 
 async function checkAgentHealth(inst) {
   const el = document.getElementById('agent-status');
+  if (!el) return;
   try {
     const r = await fetch(`/api/agent-health/${inst}`);
     const d = await r.json();
