@@ -1308,6 +1308,46 @@ async def test_ha_mcp(request: Request):
         return {"ok": False, "detail": str(e)[:200]}
 
 
+@app.get("/api/ha-pipelines")
+async def ha_pipelines():
+    """Listet verfügbare Voice-Pipelines (Sprachassistenten) aus Home Assistant auf."""
+    cfg = load_config()
+    ha_url   = cfg.get("services", {}).get("ha_url",   "").rstrip("/")
+    ha_token = cfg.get("services", {}).get("ha_token", "").strip()
+    if not ha_url or not ha_token:
+        return {"ok": False, "error": "HA URL oder Token nicht konfiguriert", "pipelines": []}
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            r = await client.get(
+                f"{ha_url}/api/assist/pipelines",
+                headers={"Authorization": f"Bearer {ha_token}"},
+            )
+            if r.status_code == 401:
+                return {"ok": False, "error": "HA Token ungültig", "pipelines": []}
+            if r.status_code == 404:
+                return {"ok": False, "error": "Pipelines-API nicht verfügbar (HA zu alt?)", "pipelines": []}
+            r.raise_for_status()
+            data = r.json()
+            raw_pipelines = data.get("pipelines", data) if isinstance(data, dict) else data
+            pipelines = []
+            for p in raw_pipelines:
+                pipelines.append({
+                    "id":           p.get("id", ""),
+                    "name":         p.get("name", ""),
+                    "stt_engine":   p.get("stt_engine", ""),
+                    "stt_language":  p.get("stt_language", ""),
+                    "tts_engine":   p.get("tts_engine", ""),
+                    "tts_language":  p.get("tts_language", ""),
+                    "tts_voice":    p.get("tts_voice", ""),
+                })
+            return {"ok": True, "pipelines": pipelines}
+    except httpx.ConnectError:
+        return {"ok": False, "error": "HA nicht erreichbar", "pipelines": []}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200], "pipelines": []}
+
+
 @app.get("/api/ha-stt-tts")
 async def ha_stt_tts():
     """Listet verfügbare STT- und TTS-Entitäten aus Home Assistant auf."""

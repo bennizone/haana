@@ -490,6 +490,23 @@
         <p class="form-hint" style="margin-bottom:14px;">
           Speech-to-Text und Text-to-Speech über Home Assistant. Entities werden automatisch aus HA geladen.
         </p>
+
+        <!-- Pipeline Picker -->
+        <div style="margin-bottom:18px;">
+          <label data-i18n="config_services.pipeline">Sprachassistent</label>
+          <div class="pipeline-picker-row">
+            <select id="svc-pipeline-select">
+              <option value="" data-i18n="config_services.pipeline_select">Bitte wählen...</option>
+            </select>
+            <button class="btn btn-sm btn-secondary" onclick="loadHaPipelines()" data-i18n="config_services.pipeline_load">Laden</button>
+            <button class="btn btn-sm btn-primary" onclick="applyPipeline()" data-i18n="config_services.pipeline_apply">Übernehmen</button>
+            <span id="pipeline-load-status" class="form-hint"></span>
+          </div>
+          <div id="pipeline-details" class="pipeline-details" style="display:none;"></div>
+        </div>
+
+        <hr style="border:none;border-top:1px solid var(--border);margin-bottom:14px;">
+
         <div class="form-inline" style="margin-bottom:14px;">
           <button class="btn btn-sm btn-secondary" onclick="loadSttTtsEntities()">Entities laden</button>
           <span id="stt-tts-load-status" class="form-hint"></span>

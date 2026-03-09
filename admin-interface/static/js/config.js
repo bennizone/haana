@@ -105,7 +105,7 @@ function renderConfig(c) {
   const autoBackupEl = document.getElementById('svc-ha-auto-backup');
   if (autoBackupEl) autoBackupEl.checked = !!sv.ha_auto_backup;
 
-  if (sv.ha_url && sv.ha_token) loadSttTtsEntities();
+  if (sv.ha_url && sv.ha_token) { loadSttTtsEntities(); loadHaPipelines(); }
 
   // WhatsApp global
   const wa = c.whatsapp || {};
@@ -1287,6 +1287,115 @@ async function loadSttTtsEntities() {
     statusEl.textContent = '\u2717 ' + e.message;
     statusEl.style.color = 'var(--red)';
   }
+}
+
+// ── Pipeline Picker ──
+
+let _pipelinesCache = [];
+
+async function loadHaPipelines() {
+  const statusEl = document.getElementById('pipeline-load-status');
+  const selectEl = document.getElementById('svc-pipeline-select');
+  const detailsEl = document.getElementById('pipeline-details');
+  statusEl.textContent = t('config_services.stt_tts_loading');
+  statusEl.style.color = 'var(--muted)';
+  detailsEl.style.display = 'none';
+  try {
+    const r = await fetch('/api/ha-pipelines');
+    const d = await r.json();
+    if (!d.ok) {
+      statusEl.textContent = '\u2717 ' + (d.error || t('config_services.pipeline_error'));
+      statusEl.style.color = 'var(--red)';
+      return;
+    }
+    _pipelinesCache = d.pipelines || [];
+    selectEl.innerHTML = '<option value="">' + t('config_services.pipeline_select') + '</option>';
+    if (_pipelinesCache.length === 0) {
+      statusEl.textContent = t('config_services.pipeline_none');
+      statusEl.style.color = 'var(--yellow)';
+      return;
+    }
+    _pipelinesCache.forEach(p => {
+      selectEl.add(new Option(p.name, p.id));
+    });
+    statusEl.textContent = '\u2713 ' + _pipelinesCache.length + ' Pipelines';
+    statusEl.style.color = 'var(--green)';
+  } catch(e) {
+    statusEl.textContent = '\u2717 ' + e.message;
+    statusEl.style.color = 'var(--red)';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const sel = document.getElementById('svc-pipeline-select');
+  if (sel) sel.addEventListener('change', showPipelineDetails);
+});
+
+function showPipelineDetails() {
+  const selectEl = document.getElementById('svc-pipeline-select');
+  const detailsEl = document.getElementById('pipeline-details');
+  const id = selectEl.value;
+  const p = _pipelinesCache.find(x => x.id === id);
+  if (!p) { detailsEl.style.display = 'none'; return; }
+  detailsEl.style.display = 'block';
+  detailsEl.innerHTML =
+    '<strong>' + escHtml(t('config_services.pipeline_details')) + ':</strong><br>' +
+    'STT: ' + escHtml(p.stt_engine || '–') + ' (' + escHtml(p.stt_language || '–') + ')<br>' +
+    'TTS: ' + escHtml(p.tts_engine || '–') + ' (' + escHtml(p.tts_language || '–') + ')' +
+    (p.tts_voice ? '<br>Voice: ' + escHtml(p.tts_voice) : '');
+}
+
+function applyPipeline() {
+  const selectEl = document.getElementById('svc-pipeline-select');
+  const statusEl = document.getElementById('pipeline-load-status');
+  const id = selectEl.value;
+  const p = _pipelinesCache.find(x => x.id === id);
+  if (!p) {
+    if (statusEl) { statusEl.textContent = t('config_services.pipeline_select'); statusEl.style.color = 'var(--muted)'; }
+    return;
+  }
+
+  // Map engine to entity id (stt.xxx / tts.xxx)
+  const sttEntity = p.stt_engine || '';
+  const ttsEntity = p.tts_engine || '';
+  const sttLang   = p.stt_language || '';
+  const ttsVoice  = p.tts_voice || '';
+
+  // Pre-fill existing STT/TTS fields
+  const sttEl = document.getElementById('svc-stt-entity');
+  if (sttEl && sttEntity) {
+    if (![...sttEl.options].some(o => o.value === sttEntity)) {
+      sttEl.add(new Option(sttEntity, sttEntity));
+    }
+    sttEl.value = sttEntity;
+  }
+  const ttsEl = document.getElementById('svc-tts-entity');
+  if (ttsEl && ttsEntity) {
+    if (![...ttsEl.options].some(o => o.value === ttsEntity)) {
+      ttsEl.add(new Option(ttsEntity, ttsEntity));
+    }
+    ttsEl.value = ttsEntity;
+  }
+  const langEl = document.getElementById('svc-stt-language');
+  if (langEl && sttLang) {
+    // Add language option if not present
+    if (![...langEl.options].some(o => o.value === sttLang)) {
+      langEl.add(new Option(sttLang, sttLang));
+    }
+    langEl.value = sttLang;
+  }
+  const ttsLangEl = document.getElementById('svc-tts-language');
+  if (ttsLangEl && p.tts_language) {
+    if (![...ttsLangEl.options].some(o => o.value === p.tts_language)) {
+      ttsLangEl.add(new Option(p.tts_language, p.tts_language));
+    }
+    ttsLangEl.value = p.tts_language;
+  }
+  const voiceEl = document.getElementById('svc-tts-voice');
+  if (voiceEl) voiceEl.value = ttsVoice;
+
+  statusEl.textContent = '\u2713 ' + t('config_services.pipeline_applied');
+  statusEl.style.color = 'var(--green)';
 }
 
 async function testHaConnection() {
