@@ -294,7 +294,11 @@
     "dream_consolidated": "consolidated",
     "dream_contradictions": "contradictions resolved",
     "dream_diary": "Diary",
-    "dream_diary_empty": "No entries yet"
+    "dream_diary_empty": "No entries yet",
+    "embed_local": "Local (CPU)",
+    "embed_local_hint": "No external service needed. Model downloaded on first use.",
+    "embed_model_bge_small": "English optimized, fast, ~50MB RAM",
+    "embed_model_bge_m3": "Multilingual, better quality, ~600MB RAM"
   },
   "config_services": {
     "ha_title": "Home Assistant",

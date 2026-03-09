@@ -617,25 +617,65 @@ function _renderEmbeddingProviderDropdowns(c, em) {
   const fbEl    = document.getElementById('embed-fallback-provider');
   if (!embedEl) return;
 
-  const opts = providers.map(p =>
+  // Lokal (CPU/fastembed) als erste Option
+  const localSelected = em.provider_id === '__local__' ? 'selected' : '';
+  let opts = `<option value="__local__" ${localSelected}>${t('config_memory.embed_local')} (fastembed)</option>`;
+  opts += providers.map(p =>
     `<option value="${escAttr(p.id)}" ${p.id === em.provider_id ? 'selected' : ''}>${escHtml(p.name)} (${escHtml(p.type)})</option>`
   ).join('');
   embedEl.innerHTML = opts;
 
   if (fbEl) {
-    fbEl.innerHTML = '<option value="">--</option>' + providers.map(p =>
-      `<option value="${escAttr(p.id)}" ${p.id === em.fallback_provider_id ? 'selected' : ''}>${escHtml(p.name)} (${escHtml(p.type)})</option>`
-    ).join('');
+    fbEl.innerHTML = '<option value="">--</option>' +
+      `<option value="__local__" ${em.fallback_provider_id === '__local__' ? 'selected' : ''}>${t('config_memory.embed_local')} (fastembed)</option>` +
+      providers.map(p =>
+        `<option value="${escAttr(p.id)}" ${p.id === em.fallback_provider_id ? 'selected' : ''}>${escHtml(p.name)} (${escHtml(p.type)})</option>`
+      ).join('');
   }
 
   // Modell-Feld setzen
   const modelEl = document.getElementById('embed-model');
   if (modelEl) modelEl.value = em.model || 'bge-m3';
   updateEmbedDims();
+  _updateEmbedLocalUI();
+}
+
+function _updateEmbedLocalUI() {
+  const provId = document.getElementById('embed-provider')?.value;
+  const isLocal = provId === '__local__';
+  const hintEl = document.getElementById('embed-local-hint');
+  const modelSelectEl = document.getElementById('embed-local-model-select');
+
+  if (hintEl) hintEl.style.display = isLocal ? '' : 'none';
+  if (modelSelectEl) modelSelectEl.style.display = isLocal ? '' : 'none';
+
+  // Wenn lokal gewählt, Modell-Dropdown mit fastembed-Modellen füllen
+  if (isLocal && modelSelectEl) {
+    const currentModel = document.getElementById('embed-model')?.value || '';
+    const models = [
+      { id: 'BAAI/bge-small-en-v1.5', dims: 384, hint: t('config_memory.embed_model_bge_small') },
+      { id: 'BAAI/bge-m3', dims: 1024, hint: t('config_memory.embed_model_bge_m3') },
+    ];
+    modelSelectEl.innerHTML = models.map(m =>
+      `<option value="${escAttr(m.id)}" data-dims="${m.dims}" ${m.id === currentModel ? 'selected' : ''}>${escHtml(m.id)} — ${escHtml(m.hint)}</option>`
+    ).join('');
+  }
+}
+
+function selectLocalEmbedModel(selectEl) {
+  const val = selectEl.value;
+  if (!val) return;
+  const modelInput = document.getElementById('embed-model');
+  if (modelInput) modelInput.value = val;
+  const opt = selectEl.selectedOptions[0];
+  const dims = parseInt(opt?.dataset?.dims) || _EMBED_DIMS[val] || 384;
+  const dimsEl = document.getElementById('embed-dims');
+  if (dimsEl) dimsEl.value = dims;
 }
 
 // Bekannte Embedding-Modell Dimensionen (Fallback wenn API keine liefert)
 const _EMBED_DIMS = {
+  'BAAI/bge-small-en-v1.5': 384, 'BAAI/bge-m3': 1024,
   'bge-m3': 1024, 'bge-m3:latest': 1024,
   'nomic-embed-text': 768, 'nomic-embed-text:latest': 768,
   'all-minilm': 384, 'all-minilm:latest': 384,
@@ -649,6 +689,10 @@ const _EMBED_DIMS = {
 };
 
 function _getProviderById(provId) {
+  // Lokaler fastembed-Provider – kein externer Service
+  if (provId === '__local__') {
+    return { id: '__local__', type: 'fastembed', url: '', key: '', name: 'Local (CPU)' };
+  }
   // Provider aus cfg lesen (wird bei Save aktualisiert)
   // Dann aktuelle DOM-Werte drüberlegen falls vorhanden
   const providers = cfg?.providers || [];

@@ -258,9 +258,9 @@ DEFAULT_CONFIG = {
         "min_messages":   5,
     },
     "embedding": {
-        "provider_id":          "ollama-home",
-        "model":                os.environ.get("HAANA_EMBEDDING_MODEL", "bge-m3"),
-        "dims":                 int(os.environ.get("HAANA_EMBEDDING_DIMS", "1024")),
+        "provider_id":          "__local__",
+        "model":                os.environ.get("HAANA_EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5"),
+        "dims":                 int(os.environ.get("HAANA_EMBEDDING_DIMS", "384")),
         "fallback_provider_id": "",
     },
     "log_retention": {
@@ -383,6 +383,12 @@ def _ensure_user_defaults(cfg: dict) -> None:
     """Stellt sicher, dass alle User neu hinzugefügte Felder mit Defaults haben."""
     for user in cfg.get("users", []):
         user.setdefault("language", "de")
+    # Embedding-Defaults für bestehende Configs ohne embedding-Sektion
+    if "embedding" not in cfg:
+        cfg["embedding"] = dict(DEFAULT_CONFIG["embedding"])
+    else:
+        for k, v in DEFAULT_CONFIG["embedding"].items():
+            cfg["embedding"].setdefault(k, v)
 
 
 def _slugify(text: str) -> str:
@@ -1893,11 +1899,33 @@ async def fetch_models(request: Request):
         return {"models": [], "error": str(e)[:200]}
 
 
+# ── Embedding-Modell-Konstanten ────────────────────────────────────────────────
+_OPENAI_EMBEDDINGS = [
+    {"id": "text-embedding-3-small", "dims": 1536},
+    {"id": "text-embedding-3-large", "dims": 3072},
+    {"id": "text-embedding-ada-002", "dims": 1536},
+]
+_GEMINI_EMBEDDINGS = [
+    {"id": "models/gemini-embedding-001", "dims": 3072},
+    {"id": "models/text-embedding-004", "dims": 768},
+]
+_FASTEMBED_MODELS = [
+    {"id": "BAAI/bge-small-en-v1.5", "dims": 384, "is_embed": True},
+    {"id": "BAAI/bge-m3", "dims": 1024, "is_embed": True},
+]
+_OLLAMA_EMBED_PATTERN = re.compile(r"embed|bge|minilm|nomic|mxbai|snowflake|arctic", re.I)
+_OLLAMA_DIMS = {
+    "bge-m3": 1024, "nomic-embed-text": 768, "all-minilm": 384,
+    "bge-small-en-v1.5": 384, "mxbai-embed-large": 1024,
+    "snowflake-arctic-embed": 1024,
+}
+
+
 @app.post("/api/fetch-embedding-models")
 async def fetch_embedding_models(request: Request):
     """
     Gibt Embedding-Modelle für einen Provider zurück.
-    Body: {"type": "ollama"|"openai"|"gemini", "url": "...", "key": "..."}
+    Body: {"type": "ollama"|"openai"|"gemini"|"fastembed", "url": "...", "key": "..."}
     Returns: {"models": [{"id": "model-id", "dims": 768}, ...]}
     """
     try:
@@ -1908,23 +1936,6 @@ async def fetch_embedding_models(request: Request):
     type_ = (body.get("type") or "").strip()
     url   = (body.get("url")  or "").strip()
     key   = (body.get("key")  or "").strip()
-
-    # Bekannte Embedding-Modelle mit Dimensionen
-    _OPENAI_EMBEDDINGS = [
-        {"id": "text-embedding-3-small", "dims": 1536},
-        {"id": "text-embedding-3-large", "dims": 3072},
-        {"id": "text-embedding-ada-002", "dims": 1536},
-    ]
-    _GEMINI_EMBEDDINGS = [
-        {"id": "models/gemini-embedding-001", "dims": 3072},
-        {"id": "models/text-embedding-004", "dims": 768},
-    ]
-    _OLLAMA_EMBED_PATTERN = re.compile(r"embed|bge|minilm|nomic|mxbai|snowflake|arctic", re.I)
-    _OLLAMA_DIMS = {
-        "bge-m3": 1024, "nomic-embed-text": 768, "all-minilm": 384,
-        "bge-small-en-v1.5": 384, "mxbai-embed-large": 1024,
-        "snowflake-arctic-embed": 1024,
-    }
 
     import httpx
     try:
@@ -1966,6 +1977,9 @@ async def fetch_embedding_models(request: Request):
 
             elif type_ == "gemini":
                 return {"models": _GEMINI_EMBEDDINGS, "fallback": True}
+
+            elif type_ == "fastembed":
+                return {"models": _FASTEMBED_MODELS}
 
             else:
                 return {"models": []}
@@ -2027,6 +2041,19 @@ async def test_embedding(request: Request):
                 data = r.json()
                 emb = data.get("embedding", {}).get("values", [])
                 dims = len(emb)
+
+            elif type_ == "fastembed":
+                # Lokales Embedding via fastembed – kein externer Service
+                try:
+                    from fastembed import TextEmbedding
+                    fe_model = model or "BAAI/bge-small-en-v1.5"
+                    embedding_model = TextEmbedding(model_name=fe_model)
+                    embeddings = list(embedding_model.embed(["Test embedding"]))
+                    dims = len(embeddings[0]) if embeddings else 0
+                except ImportError:
+                    return {"ok": False, "error": "fastembed nicht installiert"}
+                except Exception as fe_err:
+                    return {"ok": False, "error": f"FastEmbed Fehler: {str(fe_err)[:100]}"}
 
             else:
                 return {"ok": False, "error": f"Unbekannter Provider-Typ: {type_}"}

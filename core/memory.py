@@ -7,7 +7,7 @@ Drei Scopes mit separaten Qdrant-Collections:
   household_memory    – gemeinsamer Haushaltskontext
 
 LLM für Memory-Extraktion: Ollama (kein API-Key nötig).
-Embedder: Ollama bge-m3, Fallback HuggingFace wenn OLLAMA_URL fehlt.
+Embedder: Ollama bge-m3, FastEmbed (lokal/CPU) oder OpenAI/Gemini.
 Wenn kein Ollama verfügbar: Memory deaktiviert mit Warn-Log.
 
 Sliding Window:
@@ -136,6 +136,7 @@ def _build_mem0_config(collection_name: str, *,
       - "ollama": Lokales Embedding via Ollama (default)
       - "openai": OpenAI-kompatible API (auch für Custom-Endpoints)
       - "gemini": Google Gemini Embeddings
+      - "fastembed"/"local": Lokales CPU-Embedding via fastembed (kein externer Service)
     """
     host, port = _get_qdrant_host_port(qdrant_url)
     ollama_url = ollama_url or os.environ.get("OLLAMA_URL", "").strip()
@@ -267,6 +268,18 @@ def _build_mem0_config(collection_name: str, *,
             },
         }
         embed_label = f"Gemini/{embed_model}"
+    elif embed_type in ("fastembed", "local"):
+        # Lokales CPU-Embedding via fastembed – kein externer Service nötig
+        fastembed_model = embed_model or "BAAI/bge-small-en-v1.5"
+        fastembed_dims = embed_dims or 384
+        embedder_config = {
+            "provider": "fastembed",
+            "config": {
+                "model": fastembed_model,
+                "embedding_dims": fastembed_dims,
+            },
+        }
+        embed_label = f"FastEmbed/{fastembed_model} (lokal)"
     else:
         logger.warning(f"[{collection_name}] Unbekannter embed_type: {embed_type}")
         return None
@@ -281,7 +294,7 @@ def _build_mem0_config(collection_name: str, *,
                 "collection_name": collection_name,
                 "host": host,
                 "port": port,
-                "embedding_model_dims": embed_dims,
+                "embedding_model_dims": fastembed_dims if embed_type in ("fastembed", "local") else embed_dims,
             },
         },
     }
