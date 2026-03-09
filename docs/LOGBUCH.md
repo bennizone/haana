@@ -5,6 +5,19 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ---
 
+## 2026-03-09 — MS5: Git-Integration + Beta-Readiness
+
+**Anderungen:**
+- `admin-interface/git_integration.py` (NEU): Pull, Push, Status, Connect, Log
+- `admin-interface/static/js/git.js` (NEU): Git-UI im Config-Tab
+- `README.md` + `BETA-GUIDE.md`: Beta-Dokumentation
+- Dockerfile: `git` installiert
+- Token-Maskierung in allen Git-Ausgaben
+
+**Rollback:** `git revert HEAD~2..HEAD`
+
+---
+
 ## 2026-03-09 — CLAUDE.md verschärft: absolutes Verbot für direkte Edits
 
 **Änderungen:** `/opt/haana/CLAUDE.md` — Ausnahme-Klausel entfernt, strenge Trennung Plan/Delegation
