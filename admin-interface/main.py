@@ -186,6 +186,16 @@ async def startup_event():
     asyncio.create_task(_dream_scheduler())
     _sync_rebuild_state()
     _auth.log_startup_info()
+    # Skills-Verzeichnis in /data/ sicherstellen (update-resistent)
+    _data_skills = Path("/data/skills")
+    if not _data_skills.exists():
+        _data_skills.mkdir(parents=True, exist_ok=True)
+        logger.info(
+            "[Startup] /data/skills/ erstellt. "
+            "Eigene Skills hier ablegen – sie überschreiben /app/skills/ beim nächsten Agent-Start."
+        )
+    else:
+        logger.debug("[Startup] /data/skills/ vorhanden (update-resistent)")
     # AgentManager initialisieren (nach Config-Laden, damit _resolve_llm verfügbar ist)
     _agent_manager = create_agent_manager(
         HAANA_MODE,

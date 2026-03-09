@@ -327,14 +327,24 @@ class DockerAgentManager:
 
         # Host-Pfade
         host_claude_md = f"{self._host_base}/instanzen/{uid}/CLAUDE.md"
-        host_skills = f"{self._host_base}/skills"
+        host_skills_data = f"{self._host_base}/data/skills"
+        host_skills_app  = f"{self._host_base}/skills"
         host_claude_config = "/home/haana/.claude"
 
+        # Skills: /data/skills/ bevorzugen (update-resistent), Fallback auf /app/skills/
+        data_skills_path = Path(host_skills_data)
+        if data_skills_path.exists() and any(data_skills_path.iterdir()):
+            active_skills_host = host_skills_data
+            logger.debug(f"[Docker] Skills aus /data/skills/ für Agent '{uid}'")
+        else:
+            active_skills_host = host_skills_app
+            logger.debug(f"[Docker] Skills aus /app/skills/ (Fallback) für Agent '{uid}'")
+
         volumes = {
-            host_claude_md:      {"bind": "/app/CLAUDE.md",  "mode": "ro"},
-            host_skills:         {"bind": "/app/skills",     "mode": "ro"},
-            self._data_volume:   {"bind": "/data",           "mode": "rw"},
-            self._media_volume:  {"bind": "/media/haana",    "mode": "rw"},
+            host_claude_md:       {"bind": "/app/CLAUDE.md",  "mode": "ro"},
+            active_skills_host:   {"bind": "/app/skills",     "mode": "ro"},
+            self._data_volume:    {"bind": "/data",           "mode": "rw"},
+            self._media_volume:   {"bind": "/media/haana",    "mode": "rw"},
         }
 
         # Provider aus env rekonstruieren für OAuth-Mount
