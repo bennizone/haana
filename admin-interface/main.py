@@ -63,6 +63,7 @@ from terminal import (
     set_provider as _term_set_provider,
     get_status as _term_status,
 )
+from core import whatsapp_router as _wa_router
 
 try:
     from dotenv import load_dotenv
@@ -90,7 +91,7 @@ templates = Jinja2Templates(directory="templates")
 # ── Auth-Middleware ───────────────────────────────────────────────────────────
 
 # Pfade die OHNE Authentifizierung zugänglich sind
-_AUTH_EXEMPT_PREFIXES = ("/static/", "/ws/")  # WICHTIG: WS-Endpoints müssen intern selbst auth prüfen!
+_AUTH_EXEMPT_PREFIXES = ("/static/", "/ws/", "/api/wa-proxy/")  # WICHTIG: WS-Endpoints müssen intern selbst auth prüfen!
 _AUTH_EXEMPT_EXACT = {"/", "/api/auth/login", "/api/auth/logout", "/api/auth/status", "/api/health", "/api/setup-status"}
 
 
@@ -122,7 +123,7 @@ app.add_middleware(AuthMiddleware)
 # status: "idle" | "running" | "done" | "error" | "cancelled"
 _rebuild: dict[str, dict] = {
     inst: {"status": "idle", "done": 0, "total": 0, "started": 0.0, "error": ""}
-    for inst in ["alice", "bob", "ha-assist", "ha-advanced"]
+    for inst in ["alice", "bob", "ha-assist", "ha-advanced", "haana-admin"]
 }
 
 
@@ -262,7 +263,7 @@ def _get_log_root() -> Path:
 
 LOG_ROOT = _get_log_root()
 
-INSTANCES = ["alice", "bob", "ha-assist", "ha-advanced"]  # statische Basis-Instanzen
+INSTANCES = ["alice", "bob", "ha-assist", "ha-advanced", "haana-admin"]  # statische Basis-Instanzen
 
 def get_all_instances() -> list[str]:
     """Alle Instanzen: statische + dynamische User aus config.json."""
@@ -277,11 +278,15 @@ def get_all_instances() -> list[str]:
 
 # Agent-API URLs (aus Env, Fallback für lokale Entwicklung)
 AGENT_URLS: dict[str, str] = {
-    "alice":       os.environ.get("AGENT_URL_BENNI",       "http://localhost:8001"),
-    "bob":        os.environ.get("AGENT_URL_DOMI",        "http://localhost:8002"),
-    "ha-assist":   os.environ.get("AGENT_URL_HA_ASSIST",   "http://localhost:8003"),
-    "ha-advanced": os.environ.get("AGENT_URL_HA_ADVANCED", "http://localhost:8004"),
+    "alice":        os.environ.get("AGENT_URL_BENNI",        "http://localhost:8001"),
+    "bob":         os.environ.get("AGENT_URL_DOMI",         "http://localhost:8002"),
+    "ha-assist":    os.environ.get("AGENT_URL_HA_ASSIST",    "http://localhost:8003"),
+    "ha-advanced":  os.environ.get("AGENT_URL_HA_ADVANCED",  "http://localhost:8004"),
+    "haana-admin":  os.environ.get("AGENT_URL_HAANA_ADMIN",  "http://localhost:8005"),
 }
+
+# URL dieser Admin-Interface-Instanz (für WA-Proxy-Routing)
+_ADMIN_SELF_URL = os.environ.get("HAANA_ADMIN_SELF_URL", "http://haana-admin-interface-1:8080")
 
 # Docker-Management Konstanten
 HOST_BASE       = os.environ.get("HAANA_HOST_BASE",        "/opt/haana")
@@ -354,6 +359,19 @@ DEFAULT_CONFIG = {
             "imap_host": "", "imap_port": 993, "imap_user": "", "imap_pass": "",
             "smtp_host": "", "smtp_port": 587, "smtp_user": "", "smtp_pass": "",
         },
+        {
+            "id": "haana-admin", "display_name": "HAANA Admin", "role": "admin",
+            "system": True,
+            "language": "de",
+            "primary_llm": "", "fallback_llm": "",
+
+            "ha_user": "", "whatsapp_phone": "",
+            "api_port": 8005, "container_name": "haana-instanz-haana-admin-1",
+            "claude_md_template": "haana-admin",
+            "caldav_url": "", "caldav_user": "", "caldav_pass": "",
+            "imap_host": "", "imap_port": 993, "imap_user": "", "imap_pass": "",
+            "smtp_host": "", "smtp_port": 587, "smtp_user": "", "smtp_pass": "",
+        },
     ],
     "ollama_compat": {
         "enabled": False,
@@ -377,6 +395,7 @@ DEFAULT_CONFIG = {
 _SYSTEM_USERS = {
     "ha-assist":   DEFAULT_CONFIG["users"][0],  # HAANA Voice
     "ha-advanced": DEFAULT_CONFIG["users"][1],  # HAANA Advanced
+    "haana-admin": DEFAULT_CONFIG["users"][2],  # HAANA Admin (geteilte Systeminstanz)
 }
 _SYSTEM_USER_IDS = set(_SYSTEM_USERS.keys())
 
@@ -1049,11 +1068,14 @@ async def setup_current_config():
 
     ha_assist_llm   = ""
     ha_advanced_llm = ""
+    haana_admin_llm = ""
     for u in cfg.get("users", []):
         if u.get("id") == "ha-assist":
             ha_assist_llm = u.get("primary_llm", "")
         if u.get("id") == "ha-advanced":
             ha_advanced_llm = u.get("primary_llm", "")
+        if u.get("id") == "haana-admin":
+            haana_admin_llm = u.get("primary_llm", "")
 
     return {
         "providers":       providers_out,
@@ -1061,6 +1083,7 @@ async def setup_current_config():
         "users":           users_out,
         "ha_assist_llm":   ha_assist_llm,
         "ha_advanced_llm": ha_advanced_llm,
+        "haana_admin_llm": haana_admin_llm,
         "extraction_llm":  cfg.get("memory", {}).get("extraction_llm", ""),
         "dream_enabled":   cfg.get("dream", {}).get("enabled", False),
     }
@@ -1163,11 +1186,14 @@ async def setup_complete(request: Request):
     # 4. System-User LLMs zuweisen
     ha_assist_llm = body.get("ha_assist_llm", "")
     ha_advanced_llm = body.get("ha_advanced_llm", "")
+    haana_admin_llm = body.get("haana_admin_llm", "")
     for u in cfg.get("users", []):
         if u["id"] == "ha-assist" and ha_assist_llm:
             u["primary_llm"] = ha_assist_llm
         if u["id"] == "ha-advanced" and ha_advanced_llm:
             u["primary_llm"] = ha_advanced_llm
+        if u["id"] == "haana-admin" and haana_admin_llm:
+            u["primary_llm"] = haana_admin_llm
 
     # 5. Memory extraction LLM
     extraction_llm = body.get("extraction_llm", "")
@@ -1847,12 +1873,9 @@ async def whatsapp_config_endpoint():
         jid = phone if "@" in phone else f"{phone}@s.whatsapp.net"
         uid = user["id"]
         if HAANA_MODE == "addon":
-            # Add-on: Agents laufen als Sub-App im selben Prozess
-            agent_url = f"http://localhost:8080/agent/{uid}"
+            agent_url = f"http://localhost:8080/api/wa-proxy/{uid}"
         else:
-            container = user.get("container_name", f"haana-instanz-{uid}-1")
-            port      = user.get("api_port", 8001)
-            agent_url = f"http://{container}:{port}"
+            agent_url = f"{_ADMIN_SELF_URL}/api/wa-proxy/{uid}"
         target = {"agent_url": agent_url, "user_id": uid}
         routes.append({"jid": jid, **target})
         # Optionale LID als zweite Route registrieren
@@ -1887,6 +1910,106 @@ async def whatsapp_config_endpoint():
             }
 
     return {"mode": wa.get("mode", "separate"), "self_prefix": wa.get("self_prefix", "!h "), "routes": routes, "stt": stt, "tts": tts}
+
+
+# ── WhatsApp Proxy (Admin-Modus-Router) ────────────────────────────────────────
+
+
+@app.post("/api/wa-proxy/{user_id}/chat")
+async def wa_proxy_chat(user_id: str, request: Request):
+    """
+    WhatsApp-Proxy: Empfängt Nachrichten von der Bridge und routet sie.
+
+    - Slash-Befehle (/admin, /user) werden direkt beantwortet (kein LLM)
+    - Im Admin-Modus → Nachricht geht an haana-admin mit [Name]: Prefix
+    - Im User-Modus → Nachricht geht an den eigenen User-Agenten
+    - Admin-Antworten bekommen [Admin] Prefix
+    - Nach Auto-Timeout wird eine Bestätigungsmeldung zurückgegeben
+    """
+    import httpx
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Ungültiges JSON")
+
+    message = (body.get("message") or "").strip()[:4000]
+    channel = body.get("channel", "whatsapp")
+    if not message:
+        raise HTTPException(400, "message darf nicht leer sein")
+
+    cfg = load_config()
+    users = cfg.get("users", [])
+
+    # User anhand der user_id finden
+    user = next((u for u in users if u.get("id") == user_id), None)
+    if not user:
+        raise HTTPException(404, f"User '{user_id}' nicht gefunden")
+
+    phone = user.get("whatsapp_phone", "").strip()
+    if not phone:
+        raise HTTPException(400, f"User '{user_id}' hat keine whatsapp_phone konfiguriert")
+
+    # Slash-Befehl prüfen
+    if message.startswith("/"):
+        handled, response = _wa_router.handle_slash_command(phone, message, users)
+        if handled:
+            return {"response": response, "instance": user_id, "command": True}
+
+    # Auto-Timeout prüfen (get_mode setzt ggf. Modus zurück)
+    current_mode = _wa_router.get_mode(phone)
+    if current_mode == "admin-timeout":
+        timeout_note = "Admin-Modus nach 30 Min beendet."
+        target_instance = user_id
+        msg_to_send = message
+        agent_url = _get_agent_url(target_instance)
+        if not agent_url:
+            return {"response": timeout_note, "instance": user_id}
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                r = await client.post(
+                    f"{agent_url}/chat",
+                    json={"message": msg_to_send, "channel": channel},
+                )
+                r.raise_for_status()
+                agent_resp = r.json().get("response", "")
+            return {"response": f"{timeout_note}\n\n{agent_resp}", "instance": target_instance}
+        except Exception:
+            return {"response": timeout_note, "instance": user_id}
+
+    # Modus und Ziel bestimmen
+    target_instance = _wa_router.resolve_instance(phone, users)
+    msg_to_send = _wa_router.build_message(phone, message, users)
+    is_admin_mode = current_mode == "admin"
+    _wa_router.update_activity(phone)
+
+    if not target_instance:
+        raise HTTPException(503, f"Kein Routing für User '{user_id}' möglich")
+
+    agent_url = _get_agent_url(target_instance)
+    if not agent_url:
+        raise HTTPException(503, f"Keine Agent-URL für '{target_instance}' konfiguriert")
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            r = await client.post(
+                f"{agent_url}/chat",
+                json={"message": msg_to_send, "channel": channel},
+            )
+            r.raise_for_status()
+            agent_response = r.json().get("response", "")
+    except httpx.ConnectError:
+        raise HTTPException(503, f"Agent '{target_instance}' nicht erreichbar")
+    except httpx.TimeoutException:
+        raise HTTPException(504, "Agent hat nicht rechtzeitig geantwortet")
+    except Exception as e:
+        raise HTTPException(502, f"Agent-Fehler: {str(e)[:200]}")
+
+    # [Admin] Prefix hinzufügen wenn im Admin-Modus
+    if is_admin_mode and not agent_response.startswith("[Admin]"):
+        agent_response = f"[Admin] {agent_response}"
+
+    return {"response": agent_response, "instance": target_instance}
 
 
 # ── WhatsApp Bridge Proxy (Status / QR / Logout) ──────────────────────────────

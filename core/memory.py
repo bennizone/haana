@@ -39,22 +39,24 @@ import core.logger as haana_log
 
 logger = logging.getLogger(__name__)
 
-VALID_SCOPES = {"alice_memory", "bob_memory", "household_memory"}
+VALID_SCOPES = {"alice_memory", "bob_memory", "household_memory", "admin_memory"}
 
 # Schreibberechtigungen pro Instanz
 _WRITE_SCOPES: dict[str, set[str]] = {
-    "alice":       {"alice_memory", "household_memory"},
-    "bob":        {"bob_memory", "household_memory"},
-    "ha-assist":   set(),
-    "ha-advanced": {"household_memory"},
+    "alice":        {"alice_memory", "household_memory"},
+    "bob":         {"bob_memory", "household_memory"},
+    "ha-assist":    set(),
+    "ha-advanced":  {"household_memory"},
+    "haana-admin":  {"admin_memory", "household_memory"},
 }
 
 # Leseberechtigungen pro Instanz
 _READ_SCOPES: dict[str, set[str]] = {
-    "alice":       {"alice_memory", "household_memory"},
-    "bob":        {"bob_memory", "household_memory"},
-    "ha-assist":   {"alice_memory", "bob_memory", "household_memory"},
-    "ha-advanced": {"alice_memory", "bob_memory", "household_memory"},
+    "alice":        {"alice_memory", "household_memory"},
+    "bob":         {"bob_memory", "household_memory"},
+    "ha-assist":    {"alice_memory", "bob_memory", "household_memory"},
+    "ha-advanced":  {"alice_memory", "bob_memory", "household_memory"},
+    "haana-admin":  {"admin_memory", "household_memory"},
 }
 
 

@@ -115,6 +115,12 @@ function renderConfig(c) {
   if (waPfx) waPfx.value = wa.self_prefix || '!h ';
   const waPfxGrp = document.getElementById('svc-wa-prefix-group');
   if (waPfxGrp) waPfxGrp.style.display = (wa.mode === 'self') ? '' : 'none';
+
+  // Admin Instance LLM
+  const adminLlmEl = document.getElementById('cfg-haana-admin-llm');
+  if (adminLlmEl) {
+    adminLlmEl.innerHTML = '<option value="">(-- nicht konfiguriert --)</option>' + _llmSelectOpts(c.haana_admin_llm || '');
+  }
 }
 
 // ── Provider Rendering ────────────────────────────────────────────────────────
@@ -1297,6 +1303,40 @@ async function resetSectionRetention() {
     _setVal('ret-tool-calls', lr['tool-calls'] ?? 30);
     _setVal('ret-memory-ops', lr['memory-ops'] ?? 30);
     const st = document.getElementById('save-status-retention');
+    if (st) { st.textContent = '\u21ba ' + t('config.section_reset_done'); st.style.color = 'var(--muted)'; setTimeout(() => { st.textContent = ''; }, 2000); }
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+// ── Admin Instance Section ────────────────────────────────────────────────────
+async function saveSectionAdminInstance() {
+  if (!cfg) return;
+  const newCfg = { ...cfg, haana_admin_llm: document.getElementById('cfg-haana-admin-llm')?.value || '' };
+  try {
+    const r = await _patchConfig(newCfg);
+    if (r.ok) {
+      cfg.haana_admin_llm = newCfg.haana_admin_llm;
+      _sectionSaveOk('save-status-admin-instance', 'save-btn-admin-instance');
+      toast(t('config.section_saved'), 'ok');
+    } else {
+      _sectionSaveErr('save-status-admin-instance', t('config.save_error'));
+      toast(t('config.save_error'), 'err');
+    }
+  } catch(e) {
+    _sectionSaveErr('save-status-admin-instance', e.message);
+    toast(e.message, 'err');
+  }
+}
+
+async function resetSectionAdminInstance() {
+  try {
+    const r = await fetch('/api/config');
+    const fresh = await r.json();
+    cfg.haana_admin_llm = fresh.haana_admin_llm || '';
+    const adminLlmEl = document.getElementById('cfg-haana-admin-llm');
+    if (adminLlmEl) {
+      adminLlmEl.innerHTML = '<option value="">(-- nicht konfiguriert --)</option>' + _llmSelectOpts(cfg.haana_admin_llm);
+    }
+    const st = document.getElementById('save-status-admin-instance');
     if (st) { st.textContent = '\u21ba ' + t('config.section_reset_done'); st.style.color = 'var(--muted)'; setTimeout(() => { st.textContent = ''; }, 2000); }
   } catch(e) { toast(e.message, 'err'); }
 }
