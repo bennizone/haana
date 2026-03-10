@@ -10,5 +10,5 @@ export HAANA_ADMIN_URL="${HAANA_URL}"
 export SESSION_DIR="/data/session"
 mkdir -p /data/session
 
-cd /app/whatsapp-bridge
+cd /app
 exec node index.js

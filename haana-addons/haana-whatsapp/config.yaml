@@ -1,6 +1,6 @@
 name: "HAANA WhatsApp"
 description: "WhatsApp bridge for HAANA chat"
-version: "0.1.1"
+version: "0.1.2"
 slug: "haana-whatsapp"
 url: "https://github.com/benpro-haana/haana-addons"
 arch:
