@@ -523,12 +523,6 @@
     "error": "Error",
     "unknown": "Unknown"
   },
-  "admin_mode": {
-    "section_title": "Admin Instance",
-    "llm_label": "LLM for Admin Instance",
-    "llm_hint": "Strong model recommended (e.g. claude-opus-4-5, gpt-4o)",
-    "wa_info": "Admin mode via WhatsApp: /admin activates, /user ends it. Timeout: 30 min."
-  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",

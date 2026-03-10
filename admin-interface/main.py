@@ -1096,14 +1096,11 @@ async def setup_current_config():
 
     ha_assist_llm   = ""
     ha_advanced_llm = ""
-    haana_admin_llm = ""
     for u in cfg.get("users", []):
         if u.get("id") == "ha-assist":
             ha_assist_llm = u.get("primary_llm", "")
         if u.get("id") == "ha-advanced":
             ha_advanced_llm = u.get("primary_llm", "")
-        if u.get("id") == "haana-admin":
-            haana_admin_llm = u.get("primary_llm", "")
 
     return {
         "providers":       providers_out,
@@ -1111,7 +1108,6 @@ async def setup_current_config():
         "users":           users_out,
         "ha_assist_llm":   ha_assist_llm,
         "ha_advanced_llm": ha_advanced_llm,
-        "haana_admin_llm": haana_admin_llm,
         "extraction_llm":  cfg.get("memory", {}).get("extraction_llm", ""),
         "dream_enabled":   cfg.get("dream", {}).get("enabled", False),
     }
@@ -1214,14 +1210,11 @@ async def setup_complete(request: Request):
     # 4. System-User LLMs zuweisen
     ha_assist_llm = body.get("ha_assist_llm", "")
     ha_advanced_llm = body.get("ha_advanced_llm", "")
-    haana_admin_llm = body.get("haana_admin_llm", "")
     for u in cfg.get("users", []):
         if u["id"] == "ha-assist" and ha_assist_llm:
             u["primary_llm"] = ha_assist_llm
         if u["id"] == "ha-advanced" and ha_advanced_llm:
             u["primary_llm"] = ha_advanced_llm
-        if u["id"] == "haana-admin" and haana_admin_llm:
-            u["primary_llm"] = haana_admin_llm
 
     # 5. Memory extraction LLM
     extraction_llm = body.get("extraction_llm", "")

@@ -523,12 +523,6 @@
     "error": "Fehler",
     "unknown": "Unbekannt"
   },
-  "admin_mode": {
-    "section_title": "Admin-Instanz",
-    "llm_label": "LLM für Admin-Instanz",
-    "llm_hint": "Starkes Modell empfohlen (z.B. claude-opus-4-5, gpt-4o)",
-    "wa_info": "Admin-Modus via WhatsApp: /admin aktiviert, /user beendet ihn. Timeout: 30 Min."
-  },
   "common": {
     "save": "Speichern",
     "cancel": "Abbrechen",
