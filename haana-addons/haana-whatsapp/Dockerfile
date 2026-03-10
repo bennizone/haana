@@ -5,6 +5,6 @@ RUN apk add --no-cache nodejs npm
 
 COPY whatsapp-bridge/ /app/
 WORKDIR /app
-RUN npm ci --omit=dev
+RUN npm install --omit=dev
 
 COPY rootfs/ /
