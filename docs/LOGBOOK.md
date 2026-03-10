@@ -4,6 +4,42 @@ Chronologische Dokumentation der wichtigsten Aenderungen am HAANA-Projekt.
 
 ---
 
+## 2026-03-10 — Admin-Modus via WhatsApp + Terminal-Fixes
+
+**Features:**
+- `core/whatsapp_router.py` (neu): Mode-State pro Telefonnummer, Slash-Commands (/admin, /user, /exit), 30-Min-Inaktivitaets-Timeout, `resolve_instance()`, `build_message()`
+- `instanzen/templates/haana-admin.md` (neu): Generisches Admin-Prompt-Template, Multi-Admin via `[Name]:`-Prefix
+- `instanzen/templates/user.md`: HA-Identity-Sektion mit `person.{{HA_USER}}` (verhindert Entity-Verwechslung)
+- `core/memory.py`: `admin_memory` Scope, haana-admin write-only in admin_memory / read in household
+- `admin-interface/main.py`: haana-admin als Systeminstanz (Port 8005), `/api/wa-proxy/{id}/chat`, whatsapp-config Proxy-Routing, `haana_admin_llm` Config-Feld
+- Neue Standalone-Seite `/terminal` + `templates/terminal.html` (Terminal im eigenen Fenster)
+
+**Fixes:**
+- `/api/whatsapp-config` auth-exempt gesetzt (Bridge erhielt 401, 0 Routes konfiguriert)
+- Bridge-Secret `HAANA_BRIDGE_SECRET` als opt-in Schutz fuer ha_token
+- haana-admin INST_DIR + CLAUDE.md werden bei Startup automatisch erstellt
+- `update_user`: `mkdir` vor `write_text` (verhindert 500 bei neuen System-Usern)
+- Terminal: nur im Entwicklungs-Tab sichtbar (`display:none` + `.active`)
+- Terminal: `TERM=xterm-256color` behebt "does not support clear"-Fehler
+- Vollbild-Button durch Detach-Button ersetzt (oeffnet `/terminal` in eigenem Fenster)
+- Redundante Admin-Instanz-Sektion im Config-Tab entfernt (war doppelt mit User-Management)
+
+**Entscheidungen:**
+- Mode-State im RAM: kein persistenter Store, Timeout loescht automatisch, Verlust bei Neustart akzeptabel
+- Geteilte Systeminstanz statt pro-Admin-Instanzen: einfacher Betrieb, Identifikation via Nachrichtenprefix
+
+**Offene Punkte:**
+- Rate-Limiting fuer /admin Command (Brute-Force-Schutz) nicht implementiert
+- Audit-Log fuer Admin-Modus-Aktivierungen fehlt
+- `haana-addons/haana/` Sync ausstehend: neue Dateien (terminal.py, admin-interface/*.py, core/, instanzen/, skills/) noch nicht ins Addon-Verzeichnis uebertragen
+
+**Commits:** c0ac05b, d069865, a90678f, b46c7f6, de6f131, b526ec0, 3b40dfb
+
+**Rollback:**
+`git revert 3b40dfb b526ec0 de6f131 b46c7f6 a90678f d069865 c0ac05b`
+
+---
+
 ## 2026-03-09 — Traumprozess (Dream Process)
 
 **Aenderungen:**
