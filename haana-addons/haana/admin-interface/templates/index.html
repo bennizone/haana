@@ -459,6 +459,18 @@
             <select id="embed-fallback-provider"><!-- JS --></select>
           </div>
         </div>
+        <!-- Fallback-Modell (nur sichtbar wenn __local__ ausgewaehlt) -->
+        <div id="embed-fallback-local-row" style="display:none;margin-top:8px;">
+          <div class="form-group">
+            <label data-i18n="config_memory.embedding_fallback_model">Fallback-Modell (CPU)</label>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <select id="embed-fallback-model" style="flex:1;"><!-- JS --></select>
+              <button class="btn btn-secondary" style="font-size:11px;padding:4px 10px;flex-shrink:0;"
+                onclick="testFallbackEmbedding()" data-i18n="config_memory.embedding_test_fallback">Test</button>
+            </div>
+          </div>
+          <div id="embed-fallback-test-result" style="display:none;margin-top:6px;padding:8px 12px;border-radius:6px;font-size:12px;"></div>
+        </div>
         <div id="embed-test-result" style="display:none;margin-top:8px;padding:8px 12px;border-radius:6px;font-size:12px;"></div>
         <p class="form-warning" data-i18n="config_memory.embedding_warning">
           Beim Wechsel des Embedding-Modells muessen alle Qdrant-Collections neu aufgebaut werden
@@ -1135,7 +1147,7 @@ window.HAANA_BASE = "{{ base_path }}";
 
 <!-- Feature-Module -->
 <script src="static/js/chat.js?v=5"></script>
-<script src="static/js/config.js?v=12"></script>
+<script src="static/js/config.js?v=14"></script>
 <script src="static/js/users.js?v=7"></script>
 <script src="static/js/status.js?v=3"></script>
 <script src="static/js/logs.js?v=6"></script>

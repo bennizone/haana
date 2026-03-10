@@ -219,6 +219,8 @@
     "embedding_title": "Embedding-Modell",
     "embedding_provider": "Provider",
     "embedding_fallback_provider": "Fallback Embedding-Provider",
+    "embedding_fallback_model": "Fallback-Modell (CPU)",
+    "embedding_test_fallback": "Fallback testen",
     "embedding_model": "Modell",
     "embedding_dims": "Dimensions",
     "embedding_warning": "Beim Wechsel des Embedding-Modells müssen alle Qdrant-Collections neu aufgebaut werden (andere Dimensionen sind nicht kompatibel).",

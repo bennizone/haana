@@ -667,6 +667,8 @@ function _renderEmbeddingProviderDropdowns(c, em) {
       providers.map(p =>
         `<option value="${escAttr(p.id)}" ${p.id === em.fallback_provider_id ? 'selected' : ''}>${escHtml(p.name)} (${escHtml(p.type)})</option>`
       ).join('');
+    fbEl.onchange = () => _updateFallbackLocalUI(null);
+    _updateFallbackLocalUI(em);
   }
 
   // Modell-Feld setzen
@@ -695,6 +697,40 @@ function _updateEmbedLocalUI() {
     modelSelectEl.innerHTML = models.map(m =>
       `<option value="${escAttr(m.id)}" data-dims="${m.dims}" ${m.id === currentModel ? 'selected' : ''}>${escHtml(m.id)} — ${escHtml(m.hint)}</option>`
     ).join('');
+  }
+}
+
+async function _updateFallbackLocalUI(em) {
+  const fbEl = document.getElementById('embed-fallback-provider');
+  const rowEl = document.getElementById('embed-fallback-local-row');
+  if (!rowEl) return;
+  const fbVal = fbEl ? fbEl.value : (em ? em.fallback_provider_id : '');
+  if (fbVal === '__local__') {
+    rowEl.style.display = '';
+    const selEl = document.getElementById('embed-fallback-model');
+    if (selEl && selEl.options.length <= 1) {
+      // Load fastembed models
+      try {
+        const r = await fetch('/api/fetch-embedding-models', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ type: 'fastembed' }),
+        });
+        const d = await r.json();
+        const models = d.models || [];
+        selEl.innerHTML = models.map(m =>
+          `<option value="${escAttr(m.id)}" ${m.id === (em && em.fallback_model ? em.fallback_model : 'intfloat/multilingual-e5-large') ? 'selected' : ''}>${escHtml(m.id)} (${m.dims} dims)</option>`
+        ).join('');
+      } catch(e) {
+        selEl.innerHTML = `<option value="intfloat/multilingual-e5-large">intfloat/multilingual-e5-large (1024 dims)</option>`;
+      }
+    } else if (selEl && em && em.fallback_model) {
+      // Set the correct selection if already loaded
+      for (const opt of selEl.options) {
+        if (opt.value === em.fallback_model) { opt.selected = true; break; }
+      }
+    }
+  } else {
+    rowEl.style.display = 'none';
   }
 }
 
@@ -842,6 +878,35 @@ async function testEmbedding() {
       // Auto-Update Dims
       const dimsEl = document.getElementById('embed-dims');
       if (dimsEl && d.dims) dimsEl.value = d.dims;
+    } else {
+      resultEl.style.border = '1px solid var(--red)';
+      resultEl.textContent = '\u2717 ' + (d.error || t('common.error'));
+    }
+  } catch(e) {
+    resultEl.style.border = '1px solid var(--red)';
+    resultEl.textContent = '\u2717 ' + e.message;
+  }
+}
+
+async function testFallbackEmbedding() {
+  const model = document.getElementById('embed-fallback-model')?.value || '';
+  const resultEl = document.getElementById('embed-fallback-test-result');
+  if (!model || !resultEl) return;
+
+  resultEl.style.display = '';
+  resultEl.style.background = 'var(--bg)';
+  resultEl.style.border = '1px solid var(--border)';
+  resultEl.textContent = '\u2026 ' + t('config_memory.embedding_testing');
+
+  try {
+    const r = await fetch('/api/test-embedding', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ type: 'fastembed', model }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      resultEl.style.border = '1px solid var(--green)';
+      resultEl.innerHTML = `\u2713 ${t('config_memory.embedding_test_ok')} \u2013 ${d.dims} dims, ${d.time_ms}ms`;
     } else {
       resultEl.style.border = '1px solid var(--red)';
       resultEl.textContent = '\u2717 ' + (d.error || t('common.error'));
@@ -1044,6 +1109,9 @@ async function saveSectionMemory() {
     model:                document.getElementById('embed-model')?.value || 'BAAI/bge-small-en-v1.5',
     dims:                 parseInt(document.getElementById('embed-dims')?.value || '1024'),
     fallback_provider_id: document.getElementById('embed-fallback-provider')?.value || '',
+    fallback_model:       document.getElementById('embed-fallback-provider')?.value === '__local__'
+      ? (document.getElementById('embed-fallback-model')?.value || null)
+      : null,
   };
   const dream = {
     ...(cfg.dream || {}),
