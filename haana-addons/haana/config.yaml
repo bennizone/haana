@@ -1,6 +1,6 @@
 name: "HAANA"
 description: "AI Household Assistant with persistent memory"
-version: "0.1.14"
+version: "0.1.15"
 slug: "haana"
 url: "https://github.com/alicezone/haana-dev"
 arch:
