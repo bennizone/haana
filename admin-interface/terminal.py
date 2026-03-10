@@ -150,6 +150,7 @@ async def ws_terminal(websocket: WebSocket, load_config_fn, auth_fn):
     master_fd, slave_fd = pty.openpty()
 
     env = {**os.environ, **provider_env}
+    env.setdefault("TERM", "xterm-256color")
 
     proc = subprocess.Popen(
         ["tmux", "attach-session", "-t", TMUX_SESSION],

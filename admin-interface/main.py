@@ -218,6 +218,25 @@ async def startup_event():
     if HAANA_MODE == "addon":
         asyncio.create_task(_autostart_agents())
 
+    # System-User INST_DIRs sicherstellen (inkl. haana-admin, neu seit letztem Setup)
+    _startup_cfg = load_config()
+    for _sys_id in _SYSTEM_USER_IDS:
+        _sys_dir = INST_DIR / _sys_id
+        _sys_dir.mkdir(parents=True, exist_ok=True)
+        _sys_md = _sys_dir / "CLAUDE.md"
+        if not _sys_md.exists():
+            _sys_user = next((u for u in _startup_cfg.get("users", []) if u.get("id") == _sys_id), None)
+            if _sys_user:
+                _content = _render_claude_md(
+                    _sys_user.get("claude_md_template", "user"),
+                    _sys_user.get("display_name", _sys_id.capitalize()),
+                    _sys_id,
+                    _sys_user.get("ha_user", _sys_id),
+                    _sys_user.get("language", "de"),
+                )
+                _sys_md.write_text(_content, encoding="utf-8")
+                logger.info(f"[Startup] CLAUDE.md für System-User '{_sys_id}' erstellt")
+
 async def _autostart_agents():
     """Startet alle konfigurierten User-Agents im Add-on-Modus."""
     import logging as _log
@@ -754,6 +773,12 @@ async def index(request: Request):
         "request": request,
         "instances": get_all_instances(),
     })
+
+
+@app.get("/terminal", response_class=HTMLResponse)
+async def terminal_standalone(request: Request):
+    """Standalone-Terminal-Seite fuer Detach/Pop-out."""
+    return templates.TemplateResponse("terminal.html", {"request": request})
 
 
 # ── API: Konversationen ───────────────────────────────────────────────────────
@@ -2746,7 +2771,9 @@ async def update_user(user_id: str, request: Request):
             user["claude_md_template"], user["display_name"], user_id,
             user.get("ha_user", user_id), user.get("language", "de")
         )
-        (INST_DIR / user_id / "CLAUDE.md").write_text(claude_md_content, encoding="utf-8")
+        claude_md_dir = INST_DIR / user_id
+        claude_md_dir.mkdir(parents=True, exist_ok=True)
+        (claude_md_dir / "CLAUDE.md").write_text(claude_md_content, encoding="utf-8")
 
     container_result = None
     if needs_restart:

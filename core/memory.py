@@ -47,7 +47,7 @@ _WRITE_SCOPES: dict[str, set[str]] = {
     "bob":         {"bob_memory", "household_memory"},
     "ha-assist":    set(),
     "ha-advanced":  {"household_memory"},
-    "haana-admin":  {"admin_memory", "household_memory"},
+    "haana-admin":  {"admin_memory"},
 }
 
 # Leseberechtigungen pro Instanz
