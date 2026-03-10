@@ -1,9 +1,12 @@
 /* Terminal-Tab Styles */
 #panel-terminal {
-    display: flex;
+    display: none;
     flex-direction: column;
     height: calc(100vh - 120px);
     padding: 0;
+}
+#panel-terminal.active {
+    display: flex;
 }
 
 .terminal-toolbar {

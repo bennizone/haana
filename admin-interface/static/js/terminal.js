@@ -165,7 +165,13 @@ function _termSendResize() {
     _ws.send(msg);
 }
 
-function termToggleFullscreen() {
-    document.body.classList.toggle('terminal-fullscreen');
-    if (_fitAddon) setTimeout(() => _fitAddon.fit(), 50);
+function termDetach() {
+  const w = window.open(
+    '/terminal',
+    'haana-terminal',
+    'width=1200,height=800,menubar=no,toolbar=no,location=no,status=no'
+  );
+  if (!w) {
+    window.open('/terminal', '_blank');
+  }
 }

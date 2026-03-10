@@ -6,7 +6,7 @@
 <title>HAANA Admin</title>
 <link rel="stylesheet" href="/static/css/admin.css?v=8">
 <link rel="stylesheet" href="/static/lib/xterm.css">
-<link rel="stylesheet" href="/static/css/terminal.css?v=1">
+<link rel="stylesheet" href="/static/css/terminal.css?v=2">
 </head>
 <body>
 
@@ -1063,8 +1063,8 @@
             data-i18n="terminal.connect_btn">Verbinden</button>
     <div class="terminal-status-dot disconnected" id="term-status-dot"></div>
     <span id="term-status-text" style="font-size:12px;color:var(--muted);"></span>
-    <button class="btn btn-secondary btn-sm" onclick="termToggleFullscreen()"
-            style="margin-left:auto;" data-i18n="terminal.fullscreen">&#x26F6; Vollbild</button>
+    <button class="btn btn-secondary btn-sm" onclick="termDetach()"
+            style="margin-left:auto;" data-i18n="terminal.detach">&#x2197; Detach</button>
   </div>
   <div class="terminal-wrap">
     <div id="terminal-xterm"></div>
@@ -1119,6 +1119,6 @@
 <script src="/static/js/git.js?v=1"></script>
 <script src="/static/lib/xterm.min.js"></script>
 <script src="/static/lib/xterm-addon-fit.min.js"></script>
-<script src="/static/js/terminal.js?v=1"></script>
+<script src="/static/js/terminal.js?v=2"></script>
 </body>
 </html>

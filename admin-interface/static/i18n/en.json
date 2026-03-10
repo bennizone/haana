@@ -684,6 +684,7 @@
     "disconnect_btn": "Disconnect",
     "reconnect_btn": "Reconnect",
     "fullscreen": "Fullscreen",
+    "detach": "Detach",
     "session_active": "Session active",
     "no_session": "No session",
     "hint_claude": "Tip: type 'claude' to start Claude Code",

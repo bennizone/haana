@@ -684,6 +684,7 @@
     "disconnect_btn": "Trennen",
     "reconnect_btn": "Neu verbinden",
     "fullscreen": "Vollbild",
+    "detach": "Detach",
     "session_active": "Session aktiv",
     "no_session": "Keine Session",
     "hint_claude": "Tipp: 'claude' eingeben um Claude Code zu starten",
