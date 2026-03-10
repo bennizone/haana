@@ -104,7 +104,11 @@ async function translateJid(jid, sock) {
 
 async function refreshConfig() {
   try {
-    const r = await fetch(`${ADMIN_URL}/api/whatsapp-config`, { timeout: 5000 });
+    const headers = {};
+    if (process.env.HAANA_BRIDGE_SECRET) {
+      headers['X-Bridge-Token'] = process.env.HAANA_BRIDGE_SECRET;
+    }
+    const r = await fetch(`${ADMIN_URL}/api/whatsapp-config`, { timeout: 5000, headers });
     if (!r.ok) {
       log.warn({ status: r.status }, "whatsapp-config konnte nicht geladen werden");
       return;

@@ -307,6 +307,9 @@ AGENT_URLS: dict[str, str] = {
 # URL dieser Admin-Interface-Instanz (für WA-Proxy-Routing)
 _ADMIN_SELF_URL = os.environ.get("HAANA_ADMIN_SELF_URL", "http://haana-admin-interface-1:8080")
 
+# Bridge-Secret: Wenn gesetzt, müssen Requests an /api/whatsapp-config diesen Header senden
+_BRIDGE_SECRET = os.environ.get("HAANA_BRIDGE_SECRET", "").strip()
+
 # Docker-Management Konstanten
 HOST_BASE       = os.environ.get("HAANA_HOST_BASE",        "/opt/haana")
 DATA_VOLUME     = os.environ.get("HAANA_DATA_VOLUME",       "haana_haana-data")
@@ -1884,11 +1887,16 @@ async def ha_users():
 
 
 @app.get("/api/whatsapp-config")
-async def whatsapp_config_endpoint():
+async def whatsapp_config_endpoint(request: Request):
     """Liefert WhatsApp-Routing-Konfiguration für die Bridge.
     Pro User wird sowohl die Phone-JID als auch eine optionale LID als Route geliefert,
     da neuere WhatsApp-Versionen LID statt Phone-JID senden."""
     cfg = load_config()
+    # Bridge-Secret-Check (wenn konfiguriert)
+    if _BRIDGE_SECRET:
+        incoming = request.headers.get("X-Bridge-Token", "")
+        if not incoming or not secrets.compare_digest(incoming, _BRIDGE_SECRET):
+            raise HTTPException(403, "Bridge-Token ungültig")
     wa  = cfg.get("whatsapp", {"mode": "separate", "self_prefix": "!h "})
     routes = []
     for user in cfg.get("users", []):

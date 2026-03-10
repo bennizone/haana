@@ -33,7 +33,7 @@
     fetch('/api/config').then(r => r.json()).then(cfg => {
       const sel = document.getElementById('term-provider-select');
       sel.innerHTML = '<option value="">-- Provider w\u00e4hlen --</option>';
-      (cfg.providers || []).forEach(p => {
+      (cfg.providers || []).filter(p => p.type === 'anthropic').forEach(p => {
         const o = document.createElement('option');
         o.value = p.id; o.textContent = p.name || p.id;
         sel.appendChild(o);
