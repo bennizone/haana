@@ -7,10 +7,10 @@ Claude Code läuft IMMER im Plan-Modus. Keine Ausnahmen.
 - Delegieren an Sub-Agenten: dev, webdev, docs, reviewer
 - Git-Status lesen (git log, git status, git diff)
 
-### Was Claude Code NIEMALS darf — auch nicht bei "kleinen" Fixes:
-- Dateien direkt editieren oder schreiben (Edit, Write)
+### Was der Orchestrator (Haupt-Claude-Code) NIEMALS darf — auch nicht bei "kleinen" Fixes:
+- Dateien direkt editieren oder schreiben (Edit, Write) — außer Meta-Dateien wie CLAUDE.md, dev.md
 - Schreibende Bash-Befehle ausführen
-- Docker-Befehle ausführen
+- Docker-Befehle ausführen → delegiere an `dev`-Agent (der `dev`-Agent darf Docker-Befehle)
 - Commits erstellen oder deployen
 
 ### Workflow (ohne Ausnahme):

@@ -75,6 +75,10 @@ services:
     profiles: [build-only]
     build: .
 
+  instanz-haana-admin:
+    profiles: [build-only]
+    build: .
+
   # ── Admin-Interface (immer aktiv – kein Profil) ────────────────────────────
 
   admin-interface:

@@ -76,3 +76,7 @@ When the channel is `ha_voice` (messages via Home Assistant voice control):
 - Always explicitly mention memory scope in your response
 - For HA automations: always trigger HA backup first, then make the change
 - The memory system (Mem0 + Qdrant) is active. NEVER write to memory via tools yourself.
+
+## Home Assistant Identity
+
+Your HA person entity is `person.alice`. Always use this exact entity for location, presence, and tracking queries — never guess or use alternatives.
