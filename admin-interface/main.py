@@ -92,7 +92,7 @@ templates = Jinja2Templates(directory="templates")
 
 # Pfade die OHNE Authentifizierung zugänglich sind
 _AUTH_EXEMPT_PREFIXES = ("/static/", "/ws/", "/api/wa-proxy/")  # WICHTIG: WS-Endpoints müssen intern selbst auth prüfen!
-_AUTH_EXEMPT_EXACT = {"/", "/api/auth/login", "/api/auth/logout", "/api/auth/status", "/api/health", "/api/setup-status"}
+_AUTH_EXEMPT_EXACT = {"/", "/api/auth/login", "/api/auth/logout", "/api/auth/status", "/api/health", "/api/setup-status", "/api/whatsapp-config"}
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
