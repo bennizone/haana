@@ -2348,16 +2348,41 @@ _GEMINI_EMBEDDINGS = [
     {"id": "models/gemini-embedding-001", "dims": 3072},
     {"id": "models/text-embedding-004", "dims": 768},
 ]
-_FASTEMBED_MODELS = [
-    {"id": "BAAI/bge-small-en-v1.5", "dims": 384, "is_embed": True},
-    {"id": "intfloat/multilingual-e5-large", "dims": 1024, "is_embed": True},
+_LOCAL_CPU_MODELS = [
+    {"id": "BAAI/bge-m3", "dims": 1024, "is_embed": True, "backend": "sentence-transformers"},
+    {"id": "intfloat/multilingual-e5-large", "dims": 1024, "is_embed": True, "backend": "sentence-transformers"},
+    {"id": "BAAI/bge-small-en-v1.5", "dims": 384, "is_embed": True, "backend": "fastembed"},
 ]
+# Keep alias for existing code that references _FASTEMBED_MODELS
+_FASTEMBED_MODELS = _LOCAL_CPU_MODELS
 _OLLAMA_EMBED_PATTERN = re.compile(r"embed|bge|minilm|nomic|mxbai|snowflake|arctic", re.I)
 _OLLAMA_DIMS = {
     "bge-m3": 1024, "nomic-embed-text": 768, "all-minilm": 384,
     "bge-small-en-v1.5": 384, "mxbai-embed-large": 1024,
     "snowflake-arctic-embed": 1024,
 }
+
+
+def _embed_local_sync(model_id: str, text: str) -> list:
+    """Runs local CPU embedding. Tries fastembed first, falls back to sentence-transformers."""
+    # Try fastembed for supported models
+    try:
+        from fastembed import TextEmbedding
+        fe = TextEmbedding(model_name=model_id)
+        result = list(fe.embed([text]))
+        return list(result[0])
+    except Exception as fe_err:
+        if "not supported" not in str(fe_err).lower() and "no such" not in str(fe_err).lower():
+            raise  # Real error, not a "model not supported" error
+
+    # Fallback: sentence-transformers
+    try:
+        from sentence_transformers import SentenceTransformer
+        st_model = SentenceTransformer(model_id)
+        embedding = st_model.encode(text, normalize_embeddings=True)
+        return embedding.tolist()
+    except ImportError:
+        raise RuntimeError(f"Modell '{model_id}' wird von fastembed nicht unterstützt und sentence-transformers ist nicht installiert.")
 
 
 @app.post("/api/fetch-embedding-models")
@@ -2482,24 +2507,17 @@ async def test_embedding(request: Request):
                 dims = len(emb)
 
             elif type_ == "fastembed":
-                # Lokales Embedding via fastembed – kein externer Service
+                # Lokales CPU-Embedding – versucht fastembed, dann sentence-transformers
+                import asyncio
                 try:
-                    from fastembed import TextEmbedding
                     fe_model = model or "BAAI/bge-small-en-v1.5"
-                    embedding_model = TextEmbedding(model_name=fe_model)
-                    embeddings = list(embedding_model.embed(["Test embedding"]))
-                    dims = len(embeddings[0]) if embeddings else 0
-                except ImportError:
-                    return {"ok": False, "error": "fastembed nicht installiert"}
-                except (ValueError, Exception) as fe_err:
-                    err_msg = str(fe_err)
-                    if "not supported" in err_msg.lower():
-                        try:
-                            supported = [m.get("model", m.get("name", "?")) for m in TextEmbedding.list_supported_models()]
-                            return {"ok": False, "error": f"Modell '{fe_model}' nicht unterstützt. Verfügbar: {', '.join(supported[:6])}"}
-                        except Exception:
-                            pass
-                    return {"ok": False, "error": f"FastEmbed Fehler: {err_msg[:120]}"}
+                    loop = asyncio.get_event_loop()
+                    embedding = await loop.run_in_executor(None, _embed_local_sync, fe_model, "Test embedding")
+                    dims = len(embedding)
+                except RuntimeError as e:
+                    return {"ok": False, "error": str(e)}
+                except Exception as e:
+                    return {"ok": False, "error": f"Lokales Embedding Fehler: {str(e)[:120]}"}
 
             else:
                 return {"ok": False, "error": f"Unbekannter Provider-Typ: {type_}"}
