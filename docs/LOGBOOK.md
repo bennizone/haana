@@ -31,7 +31,7 @@ Chronologische Dokumentation der wichtigsten Aenderungen am HAANA-Projekt.
 - Timezone-Config-Feld im Admin-Interface noch nicht implementiert (derzeit nur via TZ-Env-Var)
 
 **Rollback:**
-`git revert <hash>` — nach Commit Hash eintragen
+`git revert 288fdbb`
 
 ---
 
