@@ -1,54 +1,73 @@
 # HAANA — KI-Haushaltsassistent
 
-HAANA ist ein selbst-hostbarer KI-Assistent für Home Assistant mit persistentem Gedächtnis,
-Sprachsteuerung und einem integrierten Entwicklungs-Terminal für Selbstanpassung.
+HAANA ist ein selbst-hostbarer KI-Assistent fuer Home Assistant mit persistentem Gedaechtnis,
+Sprachsteuerung und WhatsApp-Integration. Er laeuft als Docker-Stack auf einem Proxmox LXC
+und verbindet sich ueber ein leichtgewichtiges HA-Addon mit Home Assistant.
 
-## Features
+---
 
-- **Mehrere KI-Provider**: Anthropic, Ollama (lokal), OpenAI-kompatibel, MiniMax
-- **Persistentes Gedächtnis**: Qdrant-Vektordatenbank, automatische Konsolidierung (Dream-Prozess)
-- **Sprachassistent-Integration**: Verbindet sich mit HA Voice Pipelines
-- **Entwicklungs-Terminal**: Claude Code direkt im Browser, mit Safety-Net Agents
-- **Setup-Wizard**: Geführte Ersteinrichtung, jederzeit wiederholbar
+## Installation
 
-## Installation (Home Assistant Addon)
+### Schritt 1 — Proxmox LXC einrichten
 
-1. **HA → Einstellungen → Add-ons → Add-on Store → ⋮ → Repositories**
-2. URL hinzufügen: `https://github.com/[USER]/haana-addons`
-3. **HAANA** installieren → Konfigurieren → Starten
-4. Webinterface über HA-Seitenleiste öffnen
-
-## Installation (Standalone / Entwicklung)
+Auf dem Proxmox-Host als root ausfuehren:
 
 ```bash
-git clone https://github.com/[USER]/haana
-cd haana
-docker compose up -d
-# Admin-Interface: http://localhost:8080
-# Admin-Token: docker logs haana-admin-interface-1 | grep "Admin Token"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/alicezone/haana/main/install.sh)"
 ```
 
-## Erste Schritte
+Das Skript:
+- Erstellt ein Debian LXC
+- Installiert Docker und Claude Code
+- Deployt den HAANA-Stack
+- Gibt am Ende einen Setup-Token aus — diesen notieren
 
-Der Setup-Wizard führt durch:
-1. **Provider**: Anthropic API-Key oder Ollama-URL
-2. **Benutzer**: Name, Sprache, LLM-Zuweisung
-3. **Extras**: Voice-Pipeline, MCP, Dream-Prozess
+### Schritt 2 — HA Companion Addon installieren
 
-## Datenspeicherung (HA Addon)
+1. Home Assistant oeffnen → **Einstellungen → Add-ons → Add-on Store → Drei-Punkte-Menu → Repositories**
+2. Repository-URL eintragen: `https://github.com/alicezone/haana`
+3. Addon **"HAANA Companion"** installieren und starten
+4. Konfiguration:
+   - **HAANA-URL:** `http://<LXC-IP>:8080` (z.B. `http://192.168.1.100:8080`)
+   - **Setup-Token:** aus Schritt 1
 
-| Pfad | Inhalt | HA-Backup |
-|------|--------|-----------|
-| `/data/` | Config, Auth, Skills | Immer |
-| `/media/haana/` | Logs, Qdrant-Vektoren | Optional |
+Das Addon bindet das HAANA Admin-Interface in die HA-Seitenleiste ein (via Ingress).
 
-## Entwicklung & Selbstanpassung
+### Schritt 3 — Fertig
 
-HAANA kann sich über das integrierte Terminal selbst weiterentwickeln:
-- Tab "Entwicklung" → Claude Code Terminal
-- Safety-Net Agents (Reviewer, Webdev, Docs) verhindern fehlerhafte Deployments
-- Git-Integration für Versionskontrolle
+Admin-Interface direkt erreichbar unter: `http://<LXC-IP>:8080`
 
-## Beta-Status
+---
 
-HAANA ist aktuell in der Beta-Phase. Siehe [BETA-GUIDE.md](BETA-GUIDE.md) für Details.
+## HA Voice einrichten
+
+In Home Assistant unter **Einstellungen → Voice Assistants** einen neuen Assistenten anlegen:
+
+- **Spracherkennungs-Modell (STT):** Ollama-kompatible URL: `http://<LXC-IP>:11435`
+- **Sprachausgabe (TTS):** nach Bedarf konfigurieren
+
+HAANA verarbeitet die Anfragen und antwortet ueber die konfigurierte Voice Pipeline.
+
+---
+
+## Entwicklung
+
+SSH in das LXC, dann Benutzer wechseln:
+
+```bash
+ssh root@<lxc-ip>
+su - haana
+# Claude Code startet automatisch in /opt/haana
+```
+
+Fuer Updates des Stacks (als root im LXC):
+
+```bash
+bash /opt/haana/update.sh
+```
+
+---
+
+## Status
+
+HAANA befindet sich in der **Beta-Phase**. Rueckmeldungen und Issues sind willkommen.
