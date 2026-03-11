@@ -43,6 +43,34 @@ echo ""
 echo -e "${GREEN}HAANA Update wird gestartet...${NC}"
 echo ""
 
+# ── Self-Update ───────────────────────────────────────────────────────────────
+# Nur wenn Script lokal ausgeführt wird (nicht wenn es selbst schon per curl gestartet wurde)
+if [ "${HAANA_SELF_UPDATED:-0}" != "1" ]; then
+    echo -e "${YELLOW}→ Update-Script auf neue Version prüfen...${NC}"
+    REMOTE_URL="https://raw.githubusercontent.com/alicezone/haana/main/update.sh"
+    REMOTE_TMP=$(mktemp)
+    if curl -fsSL "$REMOTE_URL" -o "$REMOTE_TMP" 2>/dev/null; then
+        LOCAL_HASH=$(md5sum /opt/haana/update.sh 2>/dev/null | cut -d' ' -f1)
+        REMOTE_HASH=$(md5sum "$REMOTE_TMP" | cut -d' ' -f1)
+        if [ "$LOCAL_HASH" != "$REMOTE_HASH" ]; then
+            echo -e "  Neue Version gefunden — Update-Script wird aktualisiert."
+            cp "$REMOTE_TMP" /opt/haana/update.sh
+            chmod +x /opt/haana/update.sh
+            rm -f "$REMOTE_TMP"
+            echo -e "  Starte neue Version..."
+            echo ""
+            export HAANA_SELF_UPDATED=1
+            exec bash /opt/haana/update.sh
+        else
+            echo -e "  Update-Script ist aktuell."
+        fi
+    else
+        warn "Konnte Update-Script nicht prüfen (kein Internet?)"
+    fi
+    rm -f "$REMOTE_TMP"
+    echo ""
+fi
+
 # ── System-Update ─────────────────────────────────────────────────────────────
 echo -e "${YELLOW}→ System-Pakete aktualisieren...${NC}"
 DEBIAN_FRONTEND=noninteractive apt-get update -qq && \
