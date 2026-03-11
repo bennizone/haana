@@ -723,6 +723,8 @@ async function _updateFallbackLocalUI(em) {
       } catch(e) {
         selEl.innerHTML = `<option value="intfloat/multilingual-e5-large">intfloat/multilingual-e5-large (1024 dims)</option>`;
       }
+      // Sync fallback model to primary model
+      _syncFallbackModel();
     } else if (selEl && em && em.fallback_model) {
       // Set the correct selection if already loaded
       for (const opt of selEl.options) {
@@ -731,6 +733,32 @@ async function _updateFallbackLocalUI(em) {
     }
   } else {
     rowEl.style.display = 'none';
+  }
+}
+
+function _syncFallbackModel() {
+  const primaryModel = document.getElementById('embed-model')?.value?.trim() || '';
+  const fbSelEl = document.getElementById('embed-fallback-model');
+  const fbRowEl = document.getElementById('embed-fallback-local-row');
+  if (!fbSelEl || !fbRowEl || fbRowEl.style.display === 'none') return;
+
+  // Try to select the matching option
+  let found = false;
+  for (const opt of fbSelEl.options) {
+    if (opt.value === primaryModel) {
+      opt.selected = true;
+      found = true;
+      break;
+    }
+  }
+
+  // If primary model not in list, add it as first option and select it
+  if (!found && primaryModel) {
+    const opt = document.createElement('option');
+    opt.value = primaryModel;
+    opt.textContent = primaryModel + ' (wie Primary)';
+    opt.selected = true;
+    fbSelEl.insertBefore(opt, fbSelEl.firstChild);
   }
 }
 
@@ -1103,6 +1131,14 @@ async function saveSectionMemory() {
     window_minutes: parseInt(document.getElementById('mem-window-minutes')?.value || '60'),
     min_messages:   parseInt(document.getElementById('mem-min-messages')?.value || '5'),
   };
+  // Validate: fallback model must match primary model
+  const _fbProv = document.getElementById('embed-fallback-provider')?.value || '';
+  const _primaryMdl = document.getElementById('embed-model')?.value?.trim() || '';
+  const _fbMdl = document.getElementById('embed-fallback-model')?.value || '';
+  if (_fbProv && _fbMdl && _fbMdl !== _primaryMdl) {
+    showToast(t('config_memory.embedding_model_mismatch_warn'), 'warning');
+    // Don't block save, just warn
+  }
   const embedding = {
     ...(cfg.embedding || {}),
     provider_id:          document.getElementById('embed-provider')?.value || '',
@@ -1673,6 +1709,7 @@ function updateEmbedDims() {
   const modelName = sel.value;
   const knownDims = _EMBED_DIMS[modelName] || _EMBED_DIMS[modelName.split(':')[0]];
   if (knownDims) dims.value = knownDims;
+  _syncFallbackModel();
 }
 
 // ── Verbindungstest ────────────────────────────────────────────────────────
