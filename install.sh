@@ -194,6 +194,21 @@ configure() {
         NET_DISPLAY="DHCP"
     fi
 
+    # Root-Passwort
+    local PW1 PW2
+    PW1=$(whiptail --backtitle "$BT" --title "ROOT PASSWORT" \
+        --passwordbox "Root-Passwort fuer den Container:" 10 58 \
+        --ok-button "Weiter" --cancel-button "Abbrechen" \
+        3>&1 1>&2 2>&3) || { msg_error "Abgebrochen."; exit 0; }
+    PW2=$(whiptail --backtitle "$BT" --title "ROOT PASSWORT" \
+        --passwordbox "Passwort wiederholen:" 10 58 \
+        --ok-button "Weiter" --cancel-button "Abbrechen" \
+        3>&1 1>&2 2>&3) || { msg_error "Abgebrochen."; exit 0; }
+    if [ "$PW1" != "$PW2" ]; then
+        msg_error "Passwoerter stimmen nicht ueberein."; exit 1
+    fi
+    ROOT_PASSWORD="$PW1"
+
     ANTHROPIC_KEY=$(whiptail --backtitle "$BT" --title "ANTHROPIC API-KEY (OPTIONAL)" \
         --inputbox "API-Key (leer = spaeter im Admin UI eintragen):" 10 78 "" \
         --ok-button "Weiter" --cancel-button "Ueberspringen" \
@@ -247,6 +262,11 @@ create_lxc() {
 
     if [ "$IP_MODE" = "static" ] && [ -n "$DNS_SERVER" ]; then
         pct exec "$CTID" -- bash -c "echo 'nameserver $DNS_SERVER' > /etc/resolv.conf"
+    fi
+
+    if [ -n "$ROOT_PASSWORD" ]; then
+        pct exec "$CTID" -- bash -c "echo 'root:$ROOT_PASSWORD' | chpasswd"
+        msg_ok "Root-Passwort gesetzt."
     fi
 }
 
