@@ -218,7 +218,7 @@ async function processQueue(fromNorm, from, route) {
   // Nachrichten kombinieren
   const combined = msgs.length === 1
     ? msgs[0].text
-    : msgs.map((m, i) => `${i + 1}. ${m.text}`).join('\n');
+    : msgs.map((m) => m.text).join('\n');
 
   const channel = msgs[msgs.length - 1].channel;  // Channel der letzten Nachricht
   const wasVoice = channel === "whatsapp_voice";
