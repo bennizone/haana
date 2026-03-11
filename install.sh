@@ -365,7 +365,7 @@ finish() {
     sleep 2
     TOKEN=$(pct exec "$CTID" -- cat /tmp/haana_token 2>/dev/null || echo "unbekannt")
     IP=$(pct exec "$CTID" -- hostname -I 2>/dev/null | awk '{print $1}' || echo "unbekannt")
-    ADMIN_PORT=$(pct exec "$CTID" -- bash -c "grep -oP '(?<=\")\d+(?=:8080)' /opt/haana/docker-compose.yml 2>/dev/null | head -1 || echo '8080'")
+    ADMIN_PORT=8080
 
     echo ""
     msg_ok "HAANA LXC erfolgreich installiert!"
