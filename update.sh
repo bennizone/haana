@@ -62,9 +62,9 @@ echo ""
 echo -e "${YELLOW}→ HAANA Code aktualisieren...${NC}"
 cd /opt/haana
 
-OLD_HASH=$(git rev-parse --short HEAD)
-git pull
-NEW_HASH=$(git rev-parse --short HEAD)
+OLD_HASH=$(su -s /bin/bash haana -c "git -C /opt/haana rev-parse --short HEAD")
+su -s /bin/bash haana -c "git -C /opt/haana pull"
+NEW_HASH=$(su -s /bin/bash haana -c "git -C /opt/haana rev-parse --short HEAD")
 
 if [ "$OLD_HASH" = "$NEW_HASH" ]; then
     echo -e "  Kein Code-Update verfuegbar (bereits aktuell: ${GREEN}$NEW_HASH${NC})"
