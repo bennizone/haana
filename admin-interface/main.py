@@ -153,7 +153,7 @@ templates = Jinja2Templates(directory="templates")
 # ── Auth-Middleware ───────────────────────────────────────────────────────────
 
 # Pfade die OHNE Authentifizierung zugänglich sind
-_AUTH_EXEMPT_PREFIXES = ("/static/", "/ws/", "/api/wa-proxy/")  # WICHTIG: WS-Endpoints müssen intern selbst auth prüfen!
+_AUTH_EXEMPT_PREFIXES = ("/static/", "/ws/", "/api/wa-proxy/", "/api/companion/")  # WICHTIG: WS-Endpoints müssen intern selbst auth prüfen!
 _AUTH_EXEMPT_EXACT = {"/", "/api/auth/login", "/api/auth/logout", "/api/auth/status", "/api/health", "/api/setup-status", "/api/whatsapp-config"}
 
 
@@ -168,6 +168,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Exempt: Präfix-Matches (static, ws)
         if any(path.startswith(p) for p in _AUTH_EXEMPT_PREFIXES):
             return await call_next(request)
+
+        # Companion-Token als Auth akzeptieren (Requests via HA Ingress)
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            bearer = auth_header[7:].strip()
+            cfg = load_config()
+            companion_token = cfg.get("companion_token", "")
+            if companion_token and bearer and secrets.compare_digest(bearer, companion_token):
+                return await call_next(request)
 
         # Auth prüfen
         if not _auth.is_authenticated(request):
