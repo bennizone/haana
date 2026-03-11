@@ -1,304 +1,303 @@
 #!/usr/bin/env bash
 # HAANA Proxmox LXC Installer
+# Anlehnung an: https://github.com/community-scripts/ProxmoxVE
 # Ausfuehren auf dem Proxmox-Host:
 #   bash -c "$(curl -fsSL https://raw.githubusercontent.com/alicezone/haana/main/install.sh)"
-# Oder lokal:
-#   bash /opt/haana/install.sh
 
 set -eo pipefail
 
-# ── Farben ────────────────────────────────────────────────────────────────────
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-NC='\033[0m'
+# ── Farben & Icons ─────────────────────────────────────────────────────────────
+YW=$(printf '\033[33m')
+BL=$(printf '\033[36m')
+RD=$(printf '\033[01;31m')
+GN=$(printf '\033[1;92m')
+CL=$(printf '\033[m')
+CM="  ✔ "
+CROSS="  ✖ "
+INFO="  ℹ "
+
+msg_ok()    { echo -e "${CM}${GN}$*${CL}"; }
+msg_info()  { echo -e "${INFO}${BL}$*${CL}"; }
+msg_error() { echo -e "${CROSS}${RD}$*${CL}"; }
+msg_warn()  { echo -e "  ⚠ ${YW}$*${CL}"; }
 
 # ── Fehlerbehandlung ──────────────────────────────────────────────────────────
 CTID=""
-trap 'on_error $LINENO' ERR
+trap 'catch_error $LINENO' ERR
 
-on_error() {
-    echo ""
-    echo -e "${RED}╔══════════════════════════════════════════════════════╗${NC}"
-    echo -e "${RED}║  Fehler in Zeile $1 — Installation abgebrochen.      ║${NC}"
-    echo -e "${RED}╚══════════════════════════════════════════════════════╝${NC}"
-    if [ -n "$CTID" ]; then
-        echo -e "${YELLOW}  Hinweis: Container $CTID wurde ggf. teilweise erstellt.${NC}"
-        echo -e "${YELLOW}  Bereinigen mit: pct stop $CTID && pct destroy $CTID${NC}"
+catch_error() {
+    msg_error "Fehler in Zeile $1 — Installation abgebrochen."
+    if [ -n "$CTID" ] && pct status "$CTID" &>/dev/null; then
+        msg_warn "Container $CTID ggf. teilweise erstellt. Bereinigen mit:"
+        msg_warn "  pct stop $CTID && pct destroy $CTID"
     fi
     exit 1
 }
 
-step() {
-    local num="$1"
-    local total="$2"
-    local msg="$3"
-    echo -e "${GREEN}  → Schritt $num/$total: $msg${NC}"
+# ── Voraussetzungen ───────────────────────────────────────────────────────────
+check_prerequisites() {
+    if ! command -v pct &>/dev/null || ! command -v pvesh &>/dev/null; then
+        msg_error "Dieses Script muss auf einem Proxmox VE Host ausgefuehrt werden."
+        exit 1
+    fi
+    if ! command -v whiptail &>/dev/null; then
+        msg_error "whiptail nicht gefunden. Bitte installieren: apt install whiptail"
+        exit 1
+    fi
 }
 
-warn() {
-    echo -e "${YELLOW}  ⚠ $1${NC}"
-}
-
-# IP-Validierung (IPv4 mit optionalem CIDR-Suffix)
+# ── IP-Validierung ────────────────────────────────────────────────────────────
 validate_ip() {
-    local ip="$1"
-    local label="$2"
+    local ip="$1" label="$2"
     if [[ ! "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2})?$ ]]; then
-        echo -e "${RED}Fehler: '$ip' ist keine gueltige IP-Adresse fuer $label.${NC}"
+        msg_error "'$ip' ist keine gueltige IP fuer $label"
         exit 1
     fi
 }
 
-# ── Banner ────────────────────────────────────────────────────────────────────
-clear
-echo -e "${CYAN}${BOLD}"
-cat << 'EOF'
-    __  __   ___    ___   _  _   ___
-   / / / /  / _ |  / _ | / |/ / / _ |
-  / /_/ /  / __ | / __ |/ ,  / / __ |
-  \____/  /_/ |_|/_/ |_/_/|_/ /_/ |_|
+# ── Template ermitteln ────────────────────────────────────────────────────────
+get_template() {
+    local os_search="debian-12-standard"
+    local storage="local"
 
-  Proxmox LXC Installer
-  https://github.com/alicezone/haana
-EOF
-echo -e "${NC}"
-echo ""
+    msg_info "Suche Debian 12 Template..."
 
-# ── Voraussetzungen pruefen ───────────────────────────────────────────────────
-if ! command -v pct &>/dev/null; then
-    echo -e "${RED}Fehler: Dieses Script muss auf einem Proxmox-Host ausgefuehrt werden.${NC}"
-    echo -e "${RED}       'pct' wurde nicht gefunden.${NC}"
-    exit 1
-fi
-
-if ! command -v pvesh &>/dev/null; then
-    echo -e "${RED}Fehler: 'pvesh' wurde nicht gefunden. Proxmox VE erforderlich.${NC}"
-    exit 1
-fi
-
-# ── Hilfsfunktion: Eingabe mit Default ───────────────────────────────────────
-ask() {
-    # ask <variablenname> <prompt> <default>
-    local varname="$1"
-    local prompt="$2"
-    local default="$3"
-    local value=""
-
-    if [ -n "$default" ]; then
-        read -rp "  $prompt [$default]: " value
-        value="${value:-$default}"
-    else
-        read -rp "  $prompt []: " value
+    # 1. Lokal vorhanden?
+    local local_tmpl
+    local_tmpl=$(pveam list "$storage" 2>/dev/null | awk '{print $1}' | grep "$os_search" | sort -V | tail -1)
+    if [ -n "$local_tmpl" ]; then
+        TEMPLATE=$(basename "$local_tmpl")
+        msg_ok "Template lokal gefunden: $TEMPLATE"
+        return
     fi
 
-    printf -v "$varname" '%s' "$value"
-}
+    # 2. Online-Katalog aktualisieren und suchen
+    msg_info "Aktualisiere Template-Katalog..."
+    pveam update >/dev/null 2>&1 || true
 
-ask_choice() {
-    # ask_choice <variablenname> <prompt> <default>
-    local varname="$1"
-    local prompt="$2"
-    local default="$3"
-    local value=""
+    local online_tmpl
+    online_tmpl=$(pveam available -section system 2>/dev/null | awk '{print $2}' | grep "$os_search" | sort -V | tail -1)
 
-    read -rp "  $prompt [$default]: " value
-    value="${value:-$default}"
-    printf -v "$varname" '%s' "$value"
-}
-
-# ── Naechste freie Container-ID ermitteln ─────────────────────────────────────
-NEXT_ID=$(pvesh get /cluster/nextid 2>/dev/null || echo "200")
-
-# ── Interaktive Konfiguration ─────────────────────────────────────────────────
-echo -e "${BOLD}Konfiguration${NC}"
-echo "────────────────────────────────────────────────────"
-echo ""
-
-ask CTID "Container ID" "$NEXT_ID"
-ask HOSTNAME "Hostname" "haana"
-
-echo ""
-echo -e "${YELLOW}  Ressourcen (min. 2 Cores / 2048 MB RAM / 20 GB Disk):${NC}"
-ask CORES "CPU Cores (empfohlen: 4)" "4"
-ask RAM "RAM in MB (empfohlen: 4096)" "4096"
-ask DISK "Disk in GB (empfohlen: 50)" "50"
-
-echo ""
-echo -e "${YELLOW}  Netzwerk:${NC}"
-ask BRIDGE "Bridge" "vmbr0"
-ask VLAN "VLAN Tag (leer = kein VLAN)" ""
-
-echo ""
-echo "  IP-Konfiguration:"
-echo "    (1) DHCP"
-echo "    (2) Statische IP"
-ask_choice IP_MODE "Auswahl" "1"
-
-if [ "$IP_MODE" = "2" ]; then
-    ask STATIC_IP "IP-Adresse (z.B. 192.168.1.100/24)" ""
-    ask GATEWAY "Gateway (z.B. 192.168.1.1)" ""
-    ask DNS_SERVER "DNS (z.B. 192.168.1.1)" ""
-    validate_ip "$STATIC_IP" "IP-Adresse"
-    validate_ip "$GATEWAY" "Gateway"
-    validate_ip "$DNS_SERVER" "DNS-Server"
-    NET_CONFIG="ip=$STATIC_IP,gw=$GATEWAY"
-    NET_DISPLAY="$STATIC_IP (GW: $GATEWAY)"
-else
-    NET_CONFIG="ip=dhcp"
-    NET_DISPLAY="DHCP"
-fi
-
-echo ""
-echo -e "${YELLOW}  Anthropic API-Key (optional — kann auch später im Admin UI konfiguriert werden):${NC}"
-ask ANTHROPIC_KEY "API-Key (Enter zum Überspringen)" ""
-
-if [ -n "$ANTHROPIC_KEY" ]; then
-    if [[ ! "$ANTHROPIC_KEY" =~ ^sk-ant- ]]; then
-        warn "API-Key sieht ungewoehnlich aus (erwartet: sk-ant-...). Weiter auf eigene Gefahr."
+    if [ -z "$online_tmpl" ]; then
+        # Fallback: debian-13
+        msg_warn "Kein Debian 12 Template gefunden — versuche Debian 13..."
+        online_tmpl=$(pveam available -section system 2>/dev/null | awk '{print $2}' | grep "debian-13-standard" | sort -V | tail -1)
     fi
-fi
 
-# ── Validierung ───────────────────────────────────────────────────────────────
-if [ "$CORES" -lt 2 ] 2>/dev/null; then
-    warn "Mindestens 2 CPU Cores erforderlich — setze auf 2."
-    CORES=2
-fi
-
-if [ "$RAM" -lt 2048 ] 2>/dev/null; then
-    warn "Mindestens 2048 MB RAM erforderlich — setze auf 2048."
-    RAM=2048
-fi
-
-if [ "$DISK" -lt 20 ] 2>/dev/null; then
-    warn "Mindestens 20 GB Disk erforderlich — setze auf 20."
-    DISK=20
-fi
-
-# VLAN-Suffix fuer pct create
-VLAN_SUFFIX=""
-if [ -n "$VLAN" ]; then
-    VLAN_SUFFIX=",tag=$VLAN"
-fi
-
-# ── Zusammenfassung ───────────────────────────────────────────────────────────
-echo ""
-echo -e "${BOLD}┌─────────────────────────────────────────┐${NC}"
-echo -e "${BOLD}│  HAANA LXC Konfiguration                │${NC}"
-echo -e "${BOLD}├─────────────────────────────────────────┤${NC}"
-printf "${BOLD}│${NC}  Container ID:  %-23s${BOLD}│${NC}\n" "$CTID"
-printf "${BOLD}│${NC}  Hostname:      %-23s${BOLD}│${NC}\n" "$HOSTNAME"
-printf "${BOLD}│${NC}  CPU:           %-23s${BOLD}│${NC}\n" "$CORES Cores"
-printf "${BOLD}│${NC}  RAM:           %-23s${BOLD}│${NC}\n" "$RAM MB"
-printf "${BOLD}│${NC}  Disk:          %-23s${BOLD}│${NC}\n" "$DISK GB"
-printf "${BOLD}│${NC}  Bridge:        %-23s${BOLD}│${NC}\n" "$BRIDGE"
-printf "${BOLD}│${NC}  Netzwerk:      %-23s${BOLD}│${NC}\n" "$NET_DISPLAY"
-echo -e "${BOLD}└─────────────────────────────────────────┘${NC}"
-echo ""
-
-read -rp "Fortfahren? [y/N]: " CONFIRM
-if [[ ! "$CONFIRM" =~ ^[yYjJ]$ ]]; then
-    echo "Abgebrochen."
-    exit 0
-fi
-
-echo ""
-
-# ── Schritt 1: Template pruefen / herunterladen ───────────────────────────────
-TEMPLATE="debian-12-standard_12.7-1_amd64.tar.zst"
-TEMPLATE_PATH="local:vztmpl/$TEMPLATE"
-
-step 1 7 "Debian 12 Template pruefen..."
-if ! pveam list local 2>/dev/null | grep -q "$TEMPLATE"; then
-    warn "Template nicht gefunden — wird heruntergeladen..."
-    if ! pveam available 2>/dev/null | grep -q "debian-12-standard_12.7-1"; then
-        echo -e "${RED}Fehler: Template '$TEMPLATE' nicht in pveam verfuegbar.${NC}"
-        echo "  Verfuegbare Debian-Templates:"
-        pveam available 2>/dev/null | grep debian || true
+    if [ -z "$online_tmpl" ]; then
+        msg_error "Kein kompatibles Debian Template gefunden."
         exit 1
     fi
-    pveam download local "$TEMPLATE"
-    echo -e "${GREEN}  Template heruntergeladen.${NC}"
-else
-    echo -e "${GREEN}  Template bereits vorhanden.${NC}"
-fi
 
-# ── Schritt 2: Container erstellen ───────────────────────────────────────────
-step 2 7 "LXC Container $CTID erstellen..."
-pct create "$CTID" "$TEMPLATE_PATH" \
-    --hostname "$HOSTNAME" \
-    --cores "$CORES" \
-    --memory "$RAM" \
-    --rootfs "local-lvm:$DISK" \
-    --net0 "name=eth0,bridge=${BRIDGE}${VLAN_SUFFIX},ip=${NET_CONFIG}" \
-    --unprivileged 1 \
-    --features nesting=1 \
-    --ostype debian \
-    --start 1
+    msg_info "Lade Template herunter: $online_tmpl"
+    pveam download "$storage" "$online_tmpl"
+    TEMPLATE="$online_tmpl"
+    msg_ok "Template heruntergeladen: $TEMPLATE"
+}
 
-echo -e "${GREEN}  Container erstellt und gestartet.${NC}"
+# ── Interaktive Konfiguration (whiptail) ──────────────────────────────────────
+configure() {
+    local BACKTITLE="HAANA Proxmox LXC Installer"
 
-# Kurz warten bis Container vollstaendig gestartet ist
-echo "  Warte auf Container-Start..."
-sleep 5
+    # Container ID
+    NEXT_ID=$(pvesh get /cluster/nextid 2>/dev/null || echo "200")
+    CTID=$(whiptail --backtitle "$BACKTITLE" --title "CONTAINER ID" \
+        --inputbox "Container ID festlegen:" 10 58 "$NEXT_ID" \
+        --ok-button "Weiter" --cancel-button "Abbrechen" \
+        3>&1 1>&2 2>&3) || { msg_error "Abgebrochen."; exit 0; }
 
-# DNS nur bei statischer IP konfigurieren
-if [ "$IP_MODE" = "2" ] && [ -n "$DNS_SERVER" ]; then
-    pct exec "$CTID" -- bash -c "echo 'nameserver $DNS_SERVER' > /etc/resolv.conf"
-fi
+    # Hostname
+    HOSTNAME=$(whiptail --backtitle "$BACKTITLE" --title "HOSTNAME" \
+        --inputbox "Hostname festlegen:" 10 58 "haana" \
+        --ok-button "Weiter" --cancel-button "Abbrechen" \
+        3>&1 1>&2 2>&3) || { msg_error "Abgebrochen."; exit 0; }
 
-# ── Schritt 3: System-Pakete installieren ─────────────────────────────────────
-step 3 7 "System-Pakete installieren (curl, git, ca-certificates, Node.js)..."
-pct exec "$CTID" -- bash -c "
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update -qq
-    apt-get install -y -qq curl git ca-certificates sudo openssl
-    # Node.js LTS via NodeSource
-    curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - 2>/dev/null
-    apt-get install -y -qq nodejs
-"
-echo -e "${GREEN}  Pakete installiert.${NC}"
+    # CPU
+    CORES=$(whiptail --backtitle "$BACKTITLE" --title "CPU CORES" \
+        --inputbox "CPU Cores (min. 2, empfohlen: 4):" 10 58 "4" \
+        --ok-button "Weiter" --cancel-button "Abbrechen" \
+        3>&1 1>&2 2>&3) || { msg_error "Abgebrochen."; exit 0; }
+    [ "$CORES" -lt 2 ] 2>/dev/null && { msg_warn "Minimum 2 Cores — setze auf 2."; CORES=2; }
 
-# ── Schritt 4: Docker installieren ───────────────────────────────────────────
-step 4 7 "Docker installieren..."
-pct exec "$CTID" -- bash -c "curl -fsSL https://get.docker.com | sh"
-echo -e "${GREEN}  Docker installiert.${NC}"
+    # RAM
+    RAM=$(whiptail --backtitle "$BACKTITLE" --title "RAM" \
+        --inputbox "RAM in MB (min. 2048, empfohlen: 4096):" 10 58 "4096" \
+        --ok-button "Weiter" --cancel-button "Abbrechen" \
+        3>&1 1>&2 2>&3) || { msg_error "Abgebrochen."; exit 0; }
+    [ "$RAM" -lt 2048 ] 2>/dev/null && { msg_warn "Minimum 2048 MB — setze auf 2048."; RAM=2048; }
 
-# ── Schritt 5: Claude Code installieren ──────────────────────────────────────
-step 5 7 "Claude Code CLI installieren..."
-pct exec "$CTID" -- bash -c "npm install -g @anthropic-ai/claude-code 2>&1 | tail -5"
-echo -e "${GREEN}  Claude Code installiert.${NC}"
+    # Disk
+    DISK=$(whiptail --backtitle "$BACKTITLE" --title "DISK" \
+        --inputbox "Disk in GB (min. 20, empfohlen: 50):" 10 58 "50" \
+        --ok-button "Weiter" --cancel-button "Abbrechen" \
+        3>&1 1>&2 2>&3) || { msg_error "Abgebrochen."; exit 0; }
+    [ "$DISK" -lt 20 ] 2>/dev/null && { msg_warn "Minimum 20 GB — setze auf 20."; DISK=20; }
 
-# ── Schritt 6: HAANA einrichten ───────────────────────────────────────────────
-step 6 7 "HAANA installieren und konfigurieren..."
-pct exec "$CTID" -- bash -c "
-    set -e
+    # Netzwerk
+    BRIDGE=$(whiptail --backtitle "$BACKTITLE" --title "NETZWERK" \
+        --inputbox "Bridge (z.B. vmbr0):" 10 58 "vmbr0" \
+        --ok-button "Weiter" --cancel-button "Abbrechen" \
+        3>&1 1>&2 2>&3) || { msg_error "Abgebrochen."; exit 0; }
 
-    # haana user anlegen
-    useradd -m -u 1000 -s /bin/bash haana 2>/dev/null || true
-    usermod -aG docker haana
-
-    # sudo-Regel fuer haana (nur Docker-Befehle)
-    echo 'haana ALL=(ALL) NOPASSWD: /usr/bin/docker, /usr/local/bin/docker' > /etc/sudoers.d/haana
-    chmod 0440 /etc/sudoers.d/haana
-
-    # HAANA Repo klonen
-    if [ -d /opt/haana/.git ]; then
-        echo '  Repo bereits vorhanden — git pull...'
-        cd /opt/haana && git pull
-    else
-        git clone https://github.com/alicezone/haana /opt/haana
+    VLAN=$(whiptail --backtitle "$BACKTITLE" --title "VLAN" \
+        --inputbox "VLAN Tag (leer = kein VLAN):" 10 58 "" \
+        --ok-button "Weiter" --cancel-button "Abbrechen" \
+        3>&1 1>&2 2>&3) || { msg_error "Abgebrochen."; exit 0; }
+    if [ -n "$VLAN" ]; then
+        if ! [[ "$VLAN" =~ ^[0-9]+$ ]] || [ "$VLAN" -lt 1 ] || [ "$VLAN" -gt 4094 ]; then
+            msg_error "VLAN Tag muss eine Zahl zwischen 1 und 4094 sein."
+            exit 1
+        fi
     fi
-    chown -R haana:haana /opt/haana
 
-    # .bash_profile: auto-start Claude Code bei interaktivem Login
-    cat > /home/haana/.bash_profile << 'BPEOF'
-export PATH=$PATH:/usr/local/bin
+    # IP-Konfiguration
+    IP_MODE=$(whiptail --backtitle "$BACKTITLE" --title "IP KONFIGURATION" \
+        --radiolist "Netzwerk-Konfiguration:" 12 58 2 \
+        "dhcp"   "DHCP (automatisch)"  ON \
+        "static" "Statische IP"        OFF \
+        --ok-button "Weiter" --cancel-button "Abbrechen" \
+        3>&1 1>&2 2>&3) || { msg_error "Abgebrochen."; exit 0; }
 
-# Claude Code auto-starten wenn interaktive Session
-if [[ $- == *i* ]]; then
+    if [ "$IP_MODE" = "static" ]; then
+        STATIC_IP=$(whiptail --backtitle "$BACKTITLE" --title "STATISCHE IP" \
+            --inputbox "IP-Adresse mit CIDR (z.B. 192.168.1.100/24):" 10 58 "" \
+            --ok-button "Weiter" --cancel-button "Abbrechen" \
+            3>&1 1>&2 2>&3) || { msg_error "Abgebrochen."; exit 0; }
+        GATEWAY=$(whiptail --backtitle "$BACKTITLE" --title "GATEWAY" \
+            --inputbox "Gateway (z.B. 192.168.1.1):" 10 58 "" \
+            --ok-button "Weiter" --cancel-button "Abbrechen" \
+            3>&1 1>&2 2>&3) || { msg_error "Abgebrochen."; exit 0; }
+        DNS_SERVER=$(whiptail --backtitle "$BACKTITLE" --title "DNS" \
+            --inputbox "DNS-Server (z.B. 192.168.1.1):" 10 58 "" \
+            --ok-button "Weiter" --cancel-button "Abbrechen" \
+            3>&1 1>&2 2>&3) || { msg_error "Abgebrochen."; exit 0; }
+        validate_ip "$STATIC_IP" "IP-Adresse"
+        validate_ip "$GATEWAY"   "Gateway"
+        validate_ip "$DNS_SERVER" "DNS"
+        NET_CONFIG="ip=$STATIC_IP,gw=$GATEWAY"
+        NET_DISPLAY="$STATIC_IP (GW: $GATEWAY)"
+    else
+        NET_CONFIG="ip=dhcp"
+        NET_DISPLAY="DHCP"
+    fi
+
+    # Optionaler API-Key
+    ANTHROPIC_KEY=$(whiptail --backtitle "$BACKTITLE" --title "ANTHROPIC API-KEY (OPTIONAL)" \
+        --inputbox "API-Key (leer lassen = später im Admin UI eintragen):" 10 78 "" \
+        --ok-button "Weiter" --cancel-button "Ueberspringen" \
+        3>&1 1>&2 2>&3) || ANTHROPIC_KEY=""
+
+    if [ -n "$ANTHROPIC_KEY" ] && [[ ! "$ANTHROPIC_KEY" =~ ^sk-ant- ]]; then
+        msg_warn "API-Key sieht ungewoehnlich aus (erwartet: sk-ant-...) — weiter auf eigene Gefahr."
+    fi
+
+    # VLAN-Suffix
+    VLAN_SUFFIX=""
+    [ -n "$VLAN" ] && VLAN_SUFFIX=",tag=$VLAN"
+
+    # Bestätigung
+    whiptail --backtitle "$BACKTITLE" --title "ZUSAMMENFASSUNG" --yesno \
+"Container ID:  $CTID
+Hostname:      $HOSTNAME
+CPU:           $CORES Cores
+RAM:           $RAM MB
+Disk:          $DISK GB
+Bridge:        $BRIDGE${VLAN:+ (VLAN $VLAN)}
+Netzwerk:      $NET_DISPLAY
+
+Fortfahren?" 18 58 \
+        --yes-button "Installieren" --no-button "Abbrechen" \
+        3>&1 1>&2 2>&3 || { msg_error "Abgebrochen."; exit 0; }
+}
+
+# ── LXC erstellen ─────────────────────────────────────────────────────────────
+create_lxc() {
+    msg_info "Erstelle LXC Container $CTID..."
+    pct create "$CTID" "local:vztmpl/${TEMPLATE}" \
+        -hostname "$HOSTNAME" \
+        -cores "$CORES" \
+        -memory "$RAM" \
+        -rootfs "local-lvm:${DISK}" \
+        -net0 "name=eth0,bridge=${BRIDGE}${VLAN_SUFFIX},ip=${NET_CONFIG}" \
+        -unprivileged 1 \
+        -features nesting=1 \
+        -ostype debian \
+        -start 1
+    msg_ok "Container erstellt und gestartet."
+
+    msg_info "Warte auf Container-Netzwerk (max. 30s)..."
+    local retries=10
+    local net_ok=0
+    for ((i=retries; i>0; i--)); do
+        if pct exec "$CTID" -- hostname -I 2>/dev/null | grep -q "[0-9]"; then
+            net_ok=1
+            break
+        fi
+        sleep 3
+    done
+    if [ "$net_ok" -eq 0 ]; then
+        msg_error "Container hat nach 30s kein Netzwerk. Bitte IP/Gateway pruefen."
+        exit 1
+    fi
+
+    if [ "$IP_MODE" = "static" ] && [ -n "$DNS_SERVER" ]; then
+        pct exec "$CTID" -- bash -c "echo 'nameserver $DNS_SERVER' > /etc/resolv.conf"
+    fi
+}
+
+# ── HAANA Bootstrap ───────────────────────────────────────────────────────────
+bootstrap() {
+    msg_info "Installiere System-Pakete..."
+    pct exec "$CTID" -- bash -c "
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update -qq
+        apt-get install -y -qq curl git ca-certificates sudo openssl
+        curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - 2>/dev/null
+        apt-get install -y -qq nodejs
+    "
+    msg_ok "System-Pakete installiert."
+
+    msg_info "Installiere Docker..."
+    pct exec "$CTID" -- bash -c "curl -fsSL https://get.docker.com | sh"
+    msg_ok "Docker installiert."
+
+    msg_info "Installiere Claude Code CLI..."
+    pct exec "$CTID" -- bash -c "npm install -g @anthropic-ai/claude-code 2>&1 | tail -3"
+    msg_ok "Claude Code installiert."
+
+    msg_info "Richte HAANA ein..."
+    pct exec "$CTID" -- bash -c "
+        set -e
+
+        # haana user
+        useradd -m -u 1000 -s /bin/bash haana 2>/dev/null || true
+        usermod -aG docker haana
+        echo 'haana ALL=(ALL) NOPASSWD: /usr/bin/docker, /usr/local/bin/docker' > /etc/sudoers.d/haana
+        chmod 0440 /etc/sudoers.d/haana
+
+        # Repo klonen
+        if [ -d /opt/haana/.git ]; then
+            cd /opt/haana && git pull
+        else
+            git clone https://github.com/alicezone/haana /opt/haana
+        fi
+        chown -R haana:haana /opt/haana
+
+        # Verzeichnisse
+        mkdir -p /data/config /data/logs /media/haana
+        chown -R haana:haana /data /media/haana
+
+        # .env
+        if [ ! -f /opt/haana/.env ]; then
+            cp /opt/haana/.env.example /opt/haana/.env
+            chown haana:haana /opt/haana/.env
+        fi
+
+        # .bash_profile: auto-start Claude Code
+        cat > /home/haana/.bash_profile << 'BPEOF'
+export PATH=\$PATH:/usr/local/bin
+
+if [[ \$- == *i* ]]; then
     cd /opt/haana
     echo ""
     echo "  HAANA Dev-Umgebung  |  'exit' beendet Claude Code"
@@ -306,89 +305,104 @@ if [[ $- == *i* ]]; then
     claude --dangerously-skip-permissions --continue
 fi
 BPEOF
-    chown haana:haana /home/haana/.bash_profile
+        chown haana:haana /home/haana/.bash_profile
 
-    # Daten-Verzeichnisse anlegen
-    mkdir -p /data/config /data/logs /media/haana
-    chown -R haana:haana /data /media/haana
-
-    # .env aus Example kopieren (falls noch nicht vorhanden)
-    if [ ! -f /opt/haana/.env ]; then
-        cp /opt/haana/.env.example /opt/haana/.env
-        chown haana:haana /opt/haana/.env
-    fi
-
-    # companion_token generieren und in config.json schreiben (bestehende config nicht ueberschreiben)
-    TOKEN=\$(openssl rand -hex 32)
-    if [ ! -f /data/config/config.json ]; then
-        echo '{\"companion_token\": \"'\$TOKEN'\"}' > /data/config/config.json
-        chown haana:haana /data/config/config.json
-    else
-        if command -v jq &>/dev/null; then
-            TMP=\$(jq --arg t \"\$TOKEN\" '.companion_token = \$t' /data/config/config.json)
-            echo \"\$TMP\" > /data/config/config.json
+        # companion_token generieren
+        TOKEN=\$(openssl rand -hex 32)
+        if [ ! -f /data/config/config.json ]; then
+            echo '{\"companion_token\": \"'\$TOKEN'\"}' > /data/config/config.json
+            chown haana:haana /data/config/config.json
         else
-            python3 -c \"
+            if command -v jq &>/dev/null; then
+                TMP=\$(jq --arg t \"\$TOKEN\" '.companion_token = \$t' /data/config/config.json)
+                echo \"\$TMP\" > /data/config/config.json
+            else
+                python3 -c \"
 import json, sys
 with open('/data/config/config.json') as f: cfg = json.load(f)
 cfg['companion_token'] = sys.argv[1]
 with open('/data/config/config.json', 'w') as f: json.dump(cfg, f, indent=2)
 \" \"\$TOKEN\"
+            fi
         fi
+        chmod 600 /data/config/config.json
+        echo \"\$TOKEN\" > /tmp/haana_token
+        chmod 600 /tmp/haana_token
+
+        # Stack starten
+        cd /opt/haana && docker compose up -d
+    "
+    msg_ok "HAANA eingerichtet und gestartet."
+}
+
+# ── API-Key setzen ────────────────────────────────────────────────────────────
+set_api_key() {
+    if [ -n "$ANTHROPIC_KEY" ]; then
+        msg_info "Setze Anthropic API-Key..."
+        local TMPKEY
+        TMPKEY=$(mktemp)
+        trap "rm -f '$TMPKEY'" EXIT
+        printf '%s' "$ANTHROPIC_KEY" > "$TMPKEY"
+        pct push "$CTID" "$TMPKEY" /tmp/haana_apikey
+        rm -f "$TMPKEY"
+        trap - EXIT
+        pct exec "$CTID" -- bash -c '
+            KEY=$(cat /tmp/haana_apikey)
+            rm -f /tmp/haana_apikey
+            if grep -q "ANTHROPIC_API_KEY" /opt/haana/.env 2>/dev/null; then
+                sed -i "s|^#\?[[:space:]]*ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=$KEY|" /opt/haana/.env
+            else
+                echo "ANTHROPIC_API_KEY=$KEY" >> /opt/haana/.env
+            fi
+            chown haana:haana /opt/haana/.env
+        '
+        msg_ok "API-Key gesetzt."
     fi
-    chmod 600 /data/config/config.json
-
-    # Token fuer spaetere Ausgabe sichern
-    echo \"\$TOKEN\" > /tmp/haana_token
-    chmod 600 /tmp/haana_token
-
-    # Docker Compose als haana-User starten
-    cd /opt/haana
-    sudo -u haana docker compose up -d
-"
-echo -e "${GREEN}  HAANA eingerichtet und gestartet.${NC}"
-
-# API-Key in .env schreiben falls angegeben (via temporaere Datei, kein Prozessargument)
-if [ -n "$ANTHROPIC_KEY" ]; then
-    TMPKEY=$(mktemp)
-    printf '%s' "$ANTHROPIC_KEY" > "$TMPKEY"
-    pct push "$CTID" "$TMPKEY" /tmp/haana_apikey
-    rm -f "$TMPKEY"
-    pct exec "$CTID" -- bash -c '
-        KEY=$(cat /tmp/haana_apikey)
-        rm -f /tmp/haana_apikey
-        if grep -q "ANTHROPIC_API_KEY" /opt/haana/.env 2>/dev/null; then
-            sed -i "s|^#\?[[:space:]]*ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=$KEY|" /opt/haana/.env
-        else
-            echo "ANTHROPIC_API_KEY=$KEY" >> /opt/haana/.env
-        fi
-        chown haana:haana /opt/haana/.env
-    '
-fi
-
-# ── Schritt 7: Token und IP auslesen ─────────────────────────────────────────
-step 7 7 "Abschlussinformationen ermitteln..."
-sleep 3
-TOKEN=$(pct exec "$CTID" -- cat /tmp/haana_token 2>/dev/null || echo "unbekannt")
-IP=$(pct exec "$CTID" -- hostname -I 2>/dev/null | awk '{print $1}' || echo "unbekannt")
+}
 
 # ── Abschlussmeldung ──────────────────────────────────────────────────────────
+finish() {
+    local TOKEN IP ADMIN_PORT
+    sleep 2
+    TOKEN=$(pct exec "$CTID" -- cat /tmp/haana_token 2>/dev/null || echo "unbekannt")
+    IP=$(pct exec "$CTID" -- hostname -I 2>/dev/null | awk '{print $1}' || echo "unbekannt")
+    # Port aus docker-compose.yml ermitteln
+    ADMIN_PORT=$(pct exec "$CTID" -- bash -c "grep -oP '(?<=\")\d+(?=:8080)' /opt/haana/docker-compose.yml 2>/dev/null | head -1 || echo '8080'")
+
+    echo ""
+    msg_ok "HAANA LXC erfolgreich installiert!"
+    echo ""
+    echo -e "${GN}  Admin UI:   http://$IP:$ADMIN_PORT${CL}"
+    echo -e "${GN}  Token:      ${TOKEN:0:16}...${CL}"
+    echo ""
+    echo -e "${BL}  Naechste Schritte:${CL}"
+    echo "  1. HAANA Companion Addon in HA installieren"
+    echo "     Repository: https://github.com/alicezone/haana"
+    echo "  2. URL (http://$IP:$ADMIN_PORT) + Token in Addon eintragen"
+    echo "  3. API-Key im Admin UI konfigurieren"
+    echo "  4. Dev-Zugang: ssh root@$IP → su - haana"
+    echo ""
+    echo -e "${YW}  Vollstaendiger Token:${CL}"
+    echo "  $TOKEN"
+    echo ""
+}
+
+# ── Hauptprogramm ─────────────────────────────────────────────────────────────
+clear
 echo ""
-echo -e "${GREEN}${BOLD}┌─────────────────────────────────────────────────────┐${NC}"
-echo -e "${GREEN}${BOLD}│  HAANA erfolgreich installiert!                     │${NC}"
-echo -e "${GREEN}${BOLD}├─────────────────────────────────────────────────────┤${NC}"
-printf "${GREEN}${BOLD}│${NC}  Admin UI:    http://%-31s${GREEN}${BOLD}│${NC}\n" "$IP:8080"
-printf "${GREEN}${BOLD}│${NC}  Token:       %-36s${GREEN}${BOLD}│${NC}\n" "${TOKEN:0:32}..."
-echo -e "${GREEN}${BOLD}├─────────────────────────────────────────────────────┤${NC}"
-echo -e "${GREEN}${BOLD}│  Naechste Schritte:                                 │${NC}"
-echo -e "${GREEN}${BOLD}│  1. HAANA Companion Addon in HA installieren        │${NC}"
-echo -e "${GREEN}${BOLD}│     Repository: https://github.com/alicezone/haana │${NC}"
-echo -e "${GREEN}${BOLD}│  2. URL + Token in Addon-Konfiguration eintragen    │${NC}"
-echo -e "${GREEN}${BOLD}│  3. API-Key in Admin UI konfigurieren               │${NC}"
-echo -e "${GREEN}${BOLD}│  4. Dev-Zugang: ssh root@$IP, dann: su - haana      │${NC}"
-echo -e "${GREEN}${BOLD}│     Startet Claude Code direkt in /opt/haana         │${NC}"
-echo -e "${GREEN}${BOLD}└─────────────────────────────────────────────────────┘${NC}"
-echo ""
-echo -e "${YELLOW}  Vollstaendiger Token (fuer Addon-Konfiguration):${NC}"
-echo "  $TOKEN"
-echo ""
+echo -e "${GN}"
+cat << 'EOF'
+    __  __   ___    ___   _  _   ___
+   / / / /  / _ |  / _ | / |/ / / _ |
+  / /_/ /  / __ | / __ |/ ,  / / __ |
+  \____/  /_/ |_|/_/ |_/_/|_/ /_/ |_|
+EOF
+echo -e "${CL}"
+
+check_prerequisites
+get_template
+configure
+create_lxc
+bootstrap
+set_api_key
+finish
