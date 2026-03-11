@@ -345,23 +345,33 @@ BPEOF
            /home/haana/.claude/projects/-opt-haana/memory/architecture.md
         chown -R haana:haana /home/haana/.claude
 
-        TOKEN=\$(openssl rand -hex 32)
-        if [ ! -f /data/config/config.json ]; then
-            echo '{\"companion_token\": \"'\$TOKEN'\"}' > /data/config/config.json
-            chown haana:haana /data/config/config.json
-        else
-            python3 -c \"
-import json, sys
-with open('/data/config/config.json') as f: cfg = json.load(f)
-cfg['companion_token'] = sys.argv[1]
-with open('/data/config/config.json', 'w') as f: json.dump(cfg, f, indent=2)
-\" \"\$TOKEN\"
-        fi
-        chmod 600 /data/config/config.json
+        cd /opt/haana && docker compose up -d
+
+        # Warten bis Admin-Interface bereit ist
+        echo \"Warte auf Admin-Interface...\"
+        for i in \$(seq 1 30); do
+            if docker exec haana-admin-interface-1 python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/api/health')\" 2>/dev/null; then
+                break
+            fi
+            sleep 2
+        done
+
+        # Companion-Token im Docker-Volume setzen
+        TOKEN=\$(docker exec haana-admin-interface-1 python3 -c \"
+import json, secrets, os
+path = '/data/config/config.json'
+os.makedirs('/data/config', exist_ok=True)
+try:
+    with open(path) as f: cfg = json.load(f)
+except Exception:
+    cfg = {}
+if not cfg.get('companion_token'):
+    cfg['companion_token'] = secrets.token_hex(32)
+    with open(path, 'w') as f: json.dump(cfg, f, indent=2)
+print(cfg['companion_token'])
+\")
         echo \"\$TOKEN\" > /tmp/haana_token
         chmod 600 /tmp/haana_token
-
-        cd /opt/haana && docker compose up -d
     "
     msg_ok "HAANA eingerichtet und gestartet."
 }
@@ -405,8 +415,8 @@ finish() {
     echo ""
     echo -e "${BL}  Naechste Schritte:${CL}"
     echo "  1. HAANA Companion Addon in HA installieren"
-    echo "     Repository: https://github.com/alicezone/haana"
-    echo "  2. URL + Token in Addon eintragen"
+    echo "     Repository: https://github.com/alicezone/haana-companion"
+    echo "  2. Addon konfigurieren: URL=http://$IP:$ADMIN_PORT und Token (siehe unten)"
     echo "  3. API-Key im Admin UI konfigurieren (falls nicht gesetzt)"
     echo "  4. Dev-Zugang: ssh root@$IP → su - haana"
     echo ""
