@@ -266,7 +266,17 @@ create_lxc() {
 
     if [ -n "$ROOT_PASSWORD" ]; then
         pct exec "$CTID" -- bash -c "echo 'root:$ROOT_PASSWORD' | chpasswd"
+        # Passwort-Login per SSH erlauben
+        pct exec "$CTID" -- bash -c "sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config && systemctl restart ssh"
         msg_ok "Root-Passwort gesetzt."
+    fi
+
+    # SSH-Key des Proxmox-Hosts eintragen
+    local HOST_PUBKEY
+    HOST_PUBKEY=$(cat /root/.ssh/id_ed25519.pub 2>/dev/null || cat /root/.ssh/id_rsa.pub 2>/dev/null || true)
+    if [ -n "$HOST_PUBKEY" ]; then
+        pct exec "$CTID" -- bash -c "mkdir -p /root/.ssh && chmod 700 /root/.ssh && echo '$HOST_PUBKEY' >> /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys"
+        msg_ok "Proxmox SSH-Key eingetragen."
     fi
 }
 
