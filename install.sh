@@ -306,6 +306,15 @@ fi
 BPEOF
         chown haana:haana /home/haana/.bash_profile
 
+        # Claude Code Seed: settings + project memory
+        mkdir -p /home/haana/.claude/projects/-opt-haana/memory
+        cp /opt/haana/scripts/claude-seed/settings.json /home/haana/.claude/settings.json
+        cp /opt/haana/scripts/claude-seed/memory/MEMORY.md \
+           /home/haana/.claude/projects/-opt-haana/memory/MEMORY.md
+        cp /opt/haana/scripts/claude-seed/memory/architecture.md \
+           /home/haana/.claude/projects/-opt-haana/memory/architecture.md
+        chown -R haana:haana /home/haana/.claude
+
         TOKEN=\$(openssl rand -hex 32)
         if [ ! -f /data/config/config.json ]; then
             echo '{\"companion_token\": \"'\$TOKEN'\"}' > /data/config/config.json

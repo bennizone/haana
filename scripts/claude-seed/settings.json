@@ -1,0 +1,29 @@
+{
+  "skipDangerousModePermissionPrompt": true,
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(docker compose *)",
+      "Bash(docker logs *)",
+      "Bash(python3 -m py_compile *)",
+      "Bash(python3 -c *)",
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "Bash(npm *)",
+      "Bash(mkdir -p *)",
+      "Bash(cat *)",
+      "Bash(ls *)",
+      "Bash(which *)",
+      "Bash(tmux *)",
+      "Write(/opt/haana/*)",
+      "Edit(/opt/haana/*)",
+      "Read(/opt/haana/*)",
+      "Write(/home/haana/.claude/*)",
+      "Edit(/home/haana/.claude/*)"
+    ],
+    "deny": [
+      "Bash(rm -rf /)",
+      "Bash(git push --force *)"
+    ]
+  }
+}
