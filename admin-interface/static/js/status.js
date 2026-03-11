@@ -1,6 +1,7 @@
 // status.js – Systemstatus laden/rendern (Qdrant, Ollama, Instanzen)
 
 async function loadStatus() {
+  _renderStatusChecklist();
   const grid = document.getElementById('status-grid');
   grid.innerHTML = '<div class="status-card"><div class="empty-state"><div class="icon">...</div><div>' + t('status.checking') + '</div></div></div>';
   try {
@@ -146,4 +147,28 @@ async function deleteQdrantCollection(name) {
     loadStatus();
     loadMemoryStats();
   });
+}
+
+async function _renderStatusChecklist() {
+  try {
+    const r = await fetch('/api/system-status');
+    if (!r.ok) return;
+    const {checks} = await r.json();
+    const el = document.getElementById('status-checklist');
+    if (!el) return;
+    el.innerHTML = checks.map(c => `
+      <div class="checklist-item ${c.ok ? 'ok' : 'warn'}">
+        <span class="check-icon">${c.ok ? '&#10003;' : '&#9888;'}</span>
+        <a href="${c.link}" onclick="_checklistNav(event, '${c.link}')">${c.label}</a>
+      </div>
+    `).join('');
+  } catch(_) {}
+}
+
+function _checklistNav(e, link) {
+  if (!link.startsWith('#')) return;
+  e.preventDefault();
+  const tabName = link.slice(1);
+  const tabBtn = document.querySelector(`.tab-btn[onclick*="'${tabName}'"]`);
+  if (tabBtn) tabBtn.click();
 }

@@ -181,6 +181,22 @@ function _wizRenderStep(step) {
   if (finBtn)  finBtn.style.display  = step === 3 ? '' : 'none';
 
   _wizUpdateNextBtn();
+
+  // Skip-Link: nur auf Step 1 im fresh-Modus
+  const existingSkip = document.getElementById('wiz-skip-link');
+  if (existingSkip) existingSkip.parentElement.remove();
+  if (step === 1 && _wizState.mode === 'fresh') {
+    const skipDiv = document.createElement('div');
+    skipDiv.style.cssText = 'text-align:center;margin-top:16px';
+    skipDiv.innerHTML = '<a href="#" id="wiz-skip-link" style="color:var(--muted);font-size:0.85rem">Einrichtung \u00FCberspringen</a>';
+    const contentEl = document.getElementById('wizard-content');
+    if (contentEl) contentEl.after(skipDiv);
+    document.getElementById('wiz-skip-link')?.addEventListener('click', async (e) => {
+      e.preventDefault();
+      await fetch('/api/setup/skip', {method: 'POST'});
+      location.reload();
+    });
+  }
 }
 
 function _wizUpdateNextBtn() {

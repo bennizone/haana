@@ -1055,6 +1055,49 @@ async def setup_status():
     return {"needs_setup": False}
 
 
+@app.post("/api/setup/skip")
+async def setup_skip(request: Request):
+    """Ueberspringt den Wizard — setzt setup_done=True."""
+    cfg = load_config()
+    cfg["setup_done"] = True
+    save_config(cfg)
+    return {"ok": True}
+
+
+@app.get("/api/system-status")
+async def system_status():
+    """Checkliste aller wichtigen Konfigurationspunkte."""
+    cfg = load_config()
+    providers = cfg.get("providers", [])
+    users = [u for u in cfg.get("users", []) if u.get("id") not in _SYSTEM_USER_IDS]
+    services = cfg.get("services", {})
+
+    has_llm_provider = any(
+        (p.get("key") or (p.get("type", "").lower() == "ollama" and p.get("url")))
+        for p in providers if p.get("type", "").lower() != "ollama_embedding"
+    )
+    has_embedding = any(
+        p.get("type", "").lower() in ("ollama_embedding", "openai_embedding")
+        or (p.get("type", "").lower() == "ollama" and p.get("url"))
+        for p in providers
+    )
+    ha_url = services.get("ha_url", "")
+    ha_token = services.get("ha_token", "")
+    ha_configured = bool(ha_url and ha_token)
+    user_llm_ok = all(u.get("primary_llm") for u in users) if users else False
+
+    return {
+        "checks": [
+            {"id": "provider", "label": "LLM-Provider konfiguriert", "ok": has_llm_provider, "link": "#providers"},
+            {"id": "users", "label": "Mindestens ein Nutzer angelegt", "ok": bool(users), "link": "#users"},
+            {"id": "user_llm", "label": "Alle Nutzer haben ein LLM zugewiesen", "ok": user_llm_ok, "link": "#users"},
+            {"id": "embedding", "label": "Embedding-Modell konfiguriert", "ok": has_embedding, "link": "#providers"},
+            {"id": "ha", "label": "Home Assistant verbunden", "ok": ha_configured, "link": "#config"},
+            {"id": "companion_token", "label": "Companion-Token gesetzt", "ok": bool(cfg.get("companion_token")), "link": "#config"},
+        ]
+    }
+
+
 @app.get("/api/supervisor/addons")
 async def supervisor_addons():
     """Listet installierte Add-ons via HA Supervisor API (nur im Add-on-Modus)."""
