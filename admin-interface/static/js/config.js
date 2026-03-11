@@ -271,6 +271,27 @@ function _renderProvBodyMinimax(p, i) {
       <label>${t('config_provider.url')}</label>
       <input type="url" id="prov-${i}-url" value="${escAttr(p.url||'https://api.minimax.io/anthropic')}">
     </div>
+    <div style="margin-bottom:14px;padding:10px 12px;background:var(--card-bg);border-radius:8px;border:1px solid var(--border);">
+      <div style="font-weight:600;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">${t('config_provider.minimax_mcp_section')}</div>
+      <div style="margin-bottom:6px;">
+        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;">
+          <input type="checkbox" id="prov-${i}-mcp-web-search" style="margin-top:2px;flex-shrink:0;" ${p.mcp_web_search ? 'checked' : ''}>
+          <span>
+            <span>${t('config_provider.minimax_mcp_web_search')}</span><br>
+            <small style="font-size:11px;color:var(--muted);">${t('config_provider.minimax_mcp_web_search_desc')}</small>
+          </span>
+        </label>
+      </div>
+      <div>
+        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;">
+          <input type="checkbox" id="prov-${i}-mcp-image-analysis" style="margin-top:2px;flex-shrink:0;" ${p.mcp_image_analysis ? 'checked' : ''}>
+          <span>
+            <span>${t('config_provider.minimax_mcp_image_analysis')}</span><br>
+            <small style="font-size:11px;color:var(--muted);">${t('config_provider.minimax_mcp_image_analysis_desc')}</small>
+          </span>
+        </label>
+      </div>
+    </div>
     <div style="display:flex;gap:10px;align-items:center;">
       <button class="btn btn-secondary" style="font-size:12px;padding:5px 12px;"
         onclick="testProviderConn(${i})">${t('config_provider.test_connection')}</button>
@@ -918,12 +939,19 @@ async function _patchConfig(payload) {
 // ── Providers Section ────────────────────────────────────────────────────────
 async function saveSectionProviders() {
   if (!cfg) return;
-  const providers = (cfg.providers || []).map((p, i) => ({
-    ...p,
-    name: document.getElementById(`prov-${i}-name`)?.value ?? p.name,
-    url:  document.getElementById(`prov-${i}-url`)?.value  ?? p.url,
-    key:  document.getElementById(`prov-${i}-key`)?.value  ?? p.key,
-  }));
+  const providers = (cfg.providers || []).map((p, i) => {
+    const base = {
+      ...p,
+      name: document.getElementById(`prov-${i}-name`)?.value ?? p.name,
+      url:  document.getElementById(`prov-${i}-url`)?.value  ?? p.url,
+      key:  document.getElementById(`prov-${i}-key`)?.value  ?? p.key,
+    };
+    if (p.type === 'minimax') {
+      base.mcp_web_search     = !!(document.getElementById(`prov-${i}-mcp-web-search`)?.checked);
+      base.mcp_image_analysis = !!(document.getElementById(`prov-${i}-mcp-image-analysis`)?.checked);
+    }
+    return base;
+  });
   try {
     const r = await _patchConfig({ ...cfg, providers });
     if (r.ok) {

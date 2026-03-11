@@ -26,6 +26,7 @@ services:
     build: .
     env_file: .env
     environment:
+      TZ: Europe/Berlin
       HAANA_INSTANCE: alice
       HAANA_API_PORT: 8001
       HAANA_MEDIA_DIR: /media/haana
@@ -47,6 +48,7 @@ services:
     build: .
     env_file: .env
     environment:
+      TZ: Europe/Berlin
       HAANA_INSTANCE: bob
       HAANA_API_PORT: 8002
       HAANA_MEDIA_DIR: /media/haana
@@ -85,6 +87,7 @@ services:
     build: ./admin-interface
     env_file: .env
     environment:
+      TZ:                     Europe/Berlin
       HAANA_MEDIA_DIR:        /media/haana
       HAANA_DATA_DIR:         /data
       HAANA_CONF_FILE:        /data/config/config.json

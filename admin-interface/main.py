@@ -353,6 +353,7 @@ DEFAULT_CONFIG = {
         "ha_mcp_token":  "",   # leer = ha_token verwenden
         "ha_auto_backup": False,  # HA-Backup vor Agent-Änderungen
         "qdrant_url":    os.environ.get("QDRANT_URL", "http://qdrant:6333"),
+        "timezone":      "Europe/Berlin",
     },
     "users": [
         {
@@ -2650,6 +2651,9 @@ def _render_claude_md(template_name: str, display_name: str, user_id: str, ha_us
     content = content.replace("{{HA_USER}}", ha_user or user_id)
     response_language = _LANGUAGE_NAMES.get(language, language)
     content = content.replace("{{RESPONSE_LANGUAGE}}", response_language)
+    cfg = load_config()
+    timezone = cfg.get("services", {}).get("timezone", "Europe/Berlin")
+    content = content.replace("{{TIMEZONE}}", timezone)
     return content
 
 

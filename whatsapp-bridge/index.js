@@ -589,6 +589,13 @@ async function startBridge() {
         log.info({ from: fromNorm, response: response.slice(0, 100) }, "Agent-Antwort");
 
         // TTS: Sprachnachricht zurücksenden wenn Input Voice war und TTS konfiguriert
+        // Text wird bei Voice-Nachrichten immer zuerst gesendet (sofortige Sichtbarkeit),
+        // unabhängig von tts_also_text. Audio folgt danach falls TTS erfolgreich.
+        if (wasVoice) {
+          await sock.sendMessage(from, { text: response });
+          log.debug({ from: fromNorm }, "Text (Voice-Antwort) vorab gesendet");
+        }
+
         let sentVoice = false;
         if (wasVoice && _ttsConfig) {
           try {
@@ -603,19 +610,14 @@ async function startBridge() {
               });
               sentVoice = true;
               log.info({ from: fromNorm, bytes: oggBuffer.length }, "TTS-Sprachnachricht gesendet");
-              // Optional: Text zusätzlich senden
-              if (_ttsConfig.tts_also_text) {
-                await sock.sendMessage(from, { text: response });
-                log.debug({ from: fromNorm }, "Text zusätzlich zur Sprachnachricht gesendet");
-              }
             }
           } catch (ttsErr) {
-            log.warn({ err: ttsErr.message }, "TTS fehlgeschlagen – sende Text stattdessen");
+            log.warn({ err: ttsErr.message }, "TTS fehlgeschlagen – Text wurde bereits gesendet");
           }
         }
 
         // Text als Fallback oder wenn kein Voice gewünscht
-        if (!sentVoice) {
+        if (!wasVoice && !sentVoice) {
           await sock.sendMessage(from, { text: response });
         }
       } catch (err) {

@@ -209,7 +209,12 @@
     "oauth_status": "OAuth Status",
     "url_hint_openai": "empty = api.openai.com, or Azure URL",
     "oauth_api_key_hint": "optional – for memory extraction",
-    "oauth_api_key_placeholder": "sk-ant-api03-... (OAuth not supported for Messages API)"
+    "oauth_api_key_placeholder": "sk-ant-api03-... (OAuth not supported for Messages API)",
+    "minimax_mcp_section": "Minimax MCP Features",
+    "minimax_mcp_web_search": "Enable Web Search",
+    "minimax_mcp_web_search_desc": "Allows the agent to search the web (via Minimax MCP)",
+    "minimax_mcp_image_analysis": "Enable Image Analysis",
+    "minimax_mcp_image_analysis_desc": "Allows the agent to analyze images (JPEG/PNG/GIF/WebP, max 20MB)"
   },
   "config_memory": {
     "window_title": "Sliding Window",

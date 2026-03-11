@@ -34,6 +34,11 @@ def _build_sdk_mocks():
             for k, v in kw.items():
                 setattr(self, k, v)
 
+    class _McpStdioServerConfig:
+        def __init__(self, **kw):
+            for k, v in kw.items():
+                setattr(self, k, v)
+
     sdk.ClaudeSDKClient = _ClaudeSDKClient
     sdk.ClaudeAgentOptions = _ClaudeAgentOptions
     sdk.AssistantMessage = type("AssistantMessage", (), {})
@@ -47,6 +52,7 @@ def _build_sdk_mocks():
 
     sdk_types.McpHttpServerConfig = _McpHttpServerConfig
     sdk_types.McpSSEServerConfig = _McpSSEServerConfig
+    sdk_types.McpStdioServerConfig = _McpStdioServerConfig
 
     return sdk, sdk_types
 

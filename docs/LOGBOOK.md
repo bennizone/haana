@@ -4,6 +4,55 @@ Chronologische Dokumentation der wichtigsten Aenderungen am HAANA-Projekt.
 
 ---
 
+## 2026-03-11 — Voice Text-First, Timezone-Fix, Minimax MCP (Web-Suche + Bildanalyse)
+
+**Aenderungen:**
+- `whatsapp-bridge/index.js`: Text bei Voice-Nachrichten wird immer sofort gesendet, bevor TTS-Audio generiert wird — `tts_also_text` entfernt (Text-First ist jetzt Standard). Fallback-Log angepasst ("Text wurde bereits gesendet")
+- `docker-compose.yml`: `TZ: Europe/Berlin` fuer alle Services (haana-alice, haana-bob, admin-interface)
+- `core/agent.py`: `McpStdioServerConfig` importiert; Minimax-MCP-Block registriert `uvx minimax-coding-plan-mcp` mit Env-Vars (`MINIMAX_MCP_ENABLED`, `MINIMAX_API_KEY`, `MINIMAX_API_HOST`, `MINIMAX_MCP_WEB_SEARCH`, `MINIMAX_MCP_IMAGE_ANALYSIS`)
+- `core/process_manager.py`: `_build_agent_env()` liest `mcp_web_search` + `mcp_image_analysis` aus Minimax-Provider-Config und setzt Env-Vars fuer Agent
+- `instanzen/templates/user.md` + `haana-admin.md`: `{{TIMEZONE}}` Platzhalter im System-Prompt ergaenzt (Zeitzone-Kontext fuer Datum-/Zeit-Abfragen)
+- `admin-interface/main.py`: `{{TIMEZONE}}` Platzhalter wird beim Starten der Agenten aus Config oder TZ-Env aufgeloest
+- `admin-interface/static/js/config.js`: Minimax-Provider-Formular um Checkboxen `mcp_web_search` + `mcp_image_analysis` erweitert
+- `admin-interface/templates/index.html`: Checkbox-HTML fuer Minimax-MCP-Optionen
+- `admin-interface/static/i18n/de.json` + `en.json`: i18n-Keys fuer Minimax-MCP-Checkboxen ergaenzt
+- `Dockerfile`: `uv` via pip installiert (benoetigt fuer `uvx` im Container)
+- `tests/test_agent.py`: Tests fuer Minimax-MCP-Env-Vars + Timezone-Platzhalter ergaenzt
+
+**Entscheidungen:**
+- Text-First statt `tts_also_text`-Flag: Vereinfacht das Verhalten (Text ist immer sofort sichtbar), reduziert Config-Komplexitaet, verbessert UX bei langsamer TTS-Generierung
+- `TZ` per Env-Var statt Dockerfile: Erlaubt Container-spezifische Zeitzonen ohne Rebuild; docker-compose.yml ist die Single Source of Truth
+- `{{TIMEZONE}}` im System-Prompt: Agent kann Zeitzone-bewusst antworten ohne hardcoded Werte; erweiterbar auf multi-timezone
+- Minimax MCP als optionale Provider-Checkboxen: Nur aktiv wenn explizit aktiviert, kein Einfluss auf bestehende Minimax-LLM-Nutzung
+- `uvx` statt pip-install: Minimax-MCP laeuft isoliert in eigenem venv, keine Abhaengigkeitskonflikte mit dem Haupt-Container
+
+**Offene Punkte:**
+- `haana-addons/haana/` Sync: geaenderte Dateien muessen ins Addon-Verzeichnis uebertragen werden
+- Timezone-Config-Feld im Admin-Interface noch nicht implementiert (derzeit nur via TZ-Env-Var)
+
+**Rollback:**
+`git revert <hash>` — nach Commit Hash eintragen
+
+---
+
+## 2026-03-11 — Fallback-Embedding Modell-Sync + Validierung
+
+**Aenderungen:**
+- `haana-addons/haana/admin-interface/static/js/config.js`: `_syncFallbackModel()` hinzugefuegt — waehlt Fallback-Modell automatisch passend zum Primary-Modell aus
+- `updateEmbedDims()`: ruft `_syncFallbackModel()` nach Primary-Modell-Aenderung auf
+- `_updateFallbackLocalUI()`: ruft `_syncFallbackModel()` nach Modell-Laden auf
+- `saveSectionMemory()`: Warnung per Toast wenn Fallback-Modell vom Primary abweicht (kein Blocker)
+
+**Entscheidungen:**
+- Auto-Sync vermeidet typischen Konfigurationsfehler: Primary und Fallback-Modell muessen gleich sein
+- Toast-Warnung beim Speichern statt hartem Block — gibt User Kontrolle, verhindert Datenverlust
+- Commit: ec458e4
+
+**Offene Punkte:**
+- i18n-Key `config_memory.embedding_model_mismatch_warn` muss in de.json + en.json gepflegt sein (pruefen)
+
+---
+
 ## 2026-03-10 — Admin-Modus via WhatsApp + Terminal-Fixes
 
 **Features:**

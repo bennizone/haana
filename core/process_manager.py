@@ -223,6 +223,18 @@ def _build_agent_env(user: dict, cfg: dict, resolve_llm_fn, find_ollama_url_fn) 
             env["HA_MCP_URL"] = ha_mcp_url
             env["HA_MCP_TYPE"] = ha_mcp_type
 
+    # Minimax MCP — Web-Suche + Bildanalyse
+    for p in cfg.get("providers", []):
+        if p.get("type") == "minimax" and (p.get("mcp_web_search") or p.get("mcp_image_analysis")):
+            minimax_key = p.get("key", "")  # Provider nutzen "key" (nicht "api_key")
+            if minimax_key:
+                env["MINIMAX_MCP_ENABLED"] = "1"
+                env["MINIMAX_API_KEY"] = minimax_key
+                env["MINIMAX_API_HOST"] = p.get("url", "https://api.minimax.io").rstrip("/") or "https://api.minimax.io"
+                env["MINIMAX_MCP_WEB_SEARCH"] = "1" if p.get("mcp_web_search") else "0"
+                env["MINIMAX_MCP_IMAGE_ANALYSIS"] = "1" if p.get("mcp_image_analysis") else "0"
+            break
+
     # Provider-spezifische Env-Vars
     is_minimax = p_prov.get("type") == "minimax"
     if is_minimax:

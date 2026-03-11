@@ -34,7 +34,7 @@ from claude_agent_sdk import (
     ProcessError,
     CLIJSONDecodeError,
 )
-from claude_agent_sdk.types import McpHttpServerConfig, McpSSEServerConfig
+from claude_agent_sdk.types import McpHttpServerConfig, McpSSEServerConfig, McpStdioServerConfig
 from core.memory import HaanaMemory
 import core.logger as haana_log
 
@@ -247,6 +247,26 @@ class HaanaAgent:
                     url=ha_mcp_url,
                 )
             logger.info(f"[{instance_name}] HA MCP-Server registriert: {ha_mcp_type} @ {ha_mcp_url}")
+
+        # Minimax MCP — Web-Suche + Bildanalyse
+        if self._env.get("MINIMAX_MCP_ENABLED"):
+            minimax_env = {
+                "MINIMAX_API_KEY": self._env.get("MINIMAX_API_KEY", ""),
+                "MINIMAX_API_HOST": self._env.get("MINIMAX_API_HOST", "https://api.minimax.io"),
+                "MINIMAX_MCP_WEB_SEARCH": self._env.get("MINIMAX_MCP_WEB_SEARCH", "0"),
+                "MINIMAX_MCP_IMAGE_ANALYSIS": self._env.get("MINIMAX_MCP_IMAGE_ANALYSIS", "0"),
+            }
+            self._mcp_servers["minimax"] = McpStdioServerConfig(
+                type="stdio",
+                command="uvx",
+                args=["minimax-coding-plan-mcp"],
+                env=minimax_env,
+            )
+            logger.info(
+                f"[{instance_name}] Minimax MCP registriert "
+                f"(web_search={self._env.get('MINIMAX_MCP_WEB_SEARCH')}, "
+                f"image={self._env.get('MINIMAX_MCP_IMAGE_ANALYSIS')})"
+            )
 
         # Erlaubte Built-in-Tools (Phase 1: Basis)
         self._allowed_tools: list[str] = [
