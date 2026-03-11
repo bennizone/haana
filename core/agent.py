@@ -718,7 +718,7 @@ class HaanaAgent:
                             # Feedback für langläufige Tools (nur WhatsApp-Channel)
                             if (feedback_url and sender_phone
                                     and channel in ("whatsapp", "whatsapp_voice")
-                                    and block.name in ("web_search", "understand_image")):
+                                    and block.name.lower() in ("web_search", "understand_image")):
                                 _feedback_msgs = {
                                     "web_search": "Moment, ich suche gerade im Internet...",
                                     "understand_image": "Moment, ich analysiere das Bild...",
