@@ -151,6 +151,16 @@ else
     NET_DISPLAY="DHCP"
 fi
 
+echo ""
+echo -e "${YELLOW}  Anthropic API-Key (optional — kann auch später im Admin UI konfiguriert werden):${NC}"
+ask ANTHROPIC_KEY "API-Key (Enter zum Überspringen)" ""
+
+if [ -n "$ANTHROPIC_KEY" ]; then
+    if [[ ! "$ANTHROPIC_KEY" =~ ^sk-ant- ]]; then
+        warn "API-Key sieht ungewoehnlich aus (erwartet: sk-ant-...). Weiter auf eigene Gefahr."
+    fi
+fi
+
 # ── Validierung ───────────────────────────────────────────────────────────────
 if [ "$CORES" -lt 2 ] 2>/dev/null; then
     warn "Mindestens 2 CPU Cores erforderlich — setze auf 2."
@@ -200,7 +210,7 @@ echo ""
 TEMPLATE="debian-12-standard_12.7-1_amd64.tar.zst"
 TEMPLATE_PATH="local:vztmpl/$TEMPLATE"
 
-step 1 6 "Debian 12 Template pruefen..."
+step 1 7 "Debian 12 Template pruefen..."
 if ! pveam list local 2>/dev/null | grep -q "$TEMPLATE"; then
     warn "Template nicht gefunden — wird heruntergeladen..."
     if ! pveam available 2>/dev/null | grep -q "debian-12-standard_12.7-1"; then
@@ -216,7 +226,7 @@ else
 fi
 
 # ── Schritt 2: Container erstellen ───────────────────────────────────────────
-step 2 6 "LXC Container $CTID erstellen..."
+step 2 7 "LXC Container $CTID erstellen..."
 pct create "$CTID" "$TEMPLATE_PATH" \
     --hostname "$HOSTNAME" \
     --cores "$CORES" \
@@ -240,21 +250,29 @@ if [ "$IP_MODE" = "2" ] && [ -n "$DNS_SERVER" ]; then
 fi
 
 # ── Schritt 3: System-Pakete installieren ─────────────────────────────────────
-step 3 6 "System-Pakete installieren (curl, git, ca-certificates)..."
+step 3 7 "System-Pakete installieren (curl, git, ca-certificates, Node.js)..."
 pct exec "$CTID" -- bash -c "
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
     apt-get install -y -qq curl git ca-certificates sudo openssl
+    # Node.js LTS via NodeSource
+    curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - 2>/dev/null
+    apt-get install -y -qq nodejs
 "
 echo -e "${GREEN}  Pakete installiert.${NC}"
 
 # ── Schritt 4: Docker installieren ───────────────────────────────────────────
-step 4 6 "Docker installieren..."
+step 4 7 "Docker installieren..."
 pct exec "$CTID" -- bash -c "curl -fsSL https://get.docker.com | sh"
 echo -e "${GREEN}  Docker installiert.${NC}"
 
-# ── Schritt 5: HAANA einrichten ───────────────────────────────────────────────
-step 5 6 "HAANA installieren und konfigurieren..."
+# ── Schritt 5: Claude Code installieren ──────────────────────────────────────
+step 5 7 "Claude Code CLI installieren..."
+pct exec "$CTID" -- bash -c "npm install -g @anthropic-ai/claude-code 2>&1 | tail -5"
+echo -e "${GREEN}  Claude Code installiert.${NC}"
+
+# ── Schritt 6: HAANA einrichten ───────────────────────────────────────────────
+step 6 7 "HAANA installieren und konfigurieren..."
 pct exec "$CTID" -- bash -c "
     set -e
 
@@ -274,6 +292,21 @@ pct exec "$CTID" -- bash -c "
         git clone https://github.com/alicezone/haana /opt/haana
     fi
     chown -R haana:haana /opt/haana
+
+    # .bash_profile: auto-start Claude Code bei interaktivem Login
+    cat > /home/haana/.bash_profile << 'BPEOF'
+export PATH=$PATH:/usr/local/bin
+
+# Claude Code auto-starten wenn interaktive Session
+if [[ $- == *i* ]]; then
+    cd /opt/haana
+    echo ""
+    echo "  HAANA Dev-Umgebung  |  'exit' beendet Claude Code"
+    echo ""
+    claude --dangerously-skip-permissions --continue
+fi
+BPEOF
+    chown haana:haana /home/haana/.bash_profile
 
     # Daten-Verzeichnisse anlegen
     mkdir -p /data/config /data/logs /media/haana
@@ -315,8 +348,26 @@ with open('/data/config/config.json', 'w') as f: json.dump(cfg, f, indent=2)
 "
 echo -e "${GREEN}  HAANA eingerichtet und gestartet.${NC}"
 
-# ── Schritt 6: Token und IP auslesen ─────────────────────────────────────────
-step 6 6 "Abschlussinformationen ermitteln..."
+# API-Key in .env schreiben falls angegeben (via temporaere Datei, kein Prozessargument)
+if [ -n "$ANTHROPIC_KEY" ]; then
+    TMPKEY=$(mktemp)
+    printf '%s' "$ANTHROPIC_KEY" > "$TMPKEY"
+    pct push "$CTID" "$TMPKEY" /tmp/haana_apikey
+    rm -f "$TMPKEY"
+    pct exec "$CTID" -- bash -c '
+        KEY=$(cat /tmp/haana_apikey)
+        rm -f /tmp/haana_apikey
+        if grep -q "ANTHROPIC_API_KEY" /opt/haana/.env 2>/dev/null; then
+            sed -i "s|^#\?[[:space:]]*ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=$KEY|" /opt/haana/.env
+        else
+            echo "ANTHROPIC_API_KEY=$KEY" >> /opt/haana/.env
+        fi
+        chown haana:haana /opt/haana/.env
+    '
+fi
+
+# ── Schritt 7: Token und IP auslesen ─────────────────────────────────────────
+step 7 7 "Abschlussinformationen ermitteln..."
 sleep 3
 TOKEN=$(pct exec "$CTID" -- cat /tmp/haana_token 2>/dev/null || echo "unbekannt")
 IP=$(pct exec "$CTID" -- hostname -I 2>/dev/null | awk '{print $1}' || echo "unbekannt")
@@ -334,6 +385,8 @@ echo -e "${GREEN}${BOLD}│  1. HAANA Companion Addon in HA installieren        
 echo -e "${GREEN}${BOLD}│     Repository: https://github.com/alicezone/haana │${NC}"
 echo -e "${GREEN}${BOLD}│  2. URL + Token in Addon-Konfiguration eintragen    │${NC}"
 echo -e "${GREEN}${BOLD}│  3. API-Key in Admin UI konfigurieren               │${NC}"
+echo -e "${GREEN}${BOLD}│  4. Dev-Zugang: ssh root@$IP, dann: su - haana      │${NC}"
+echo -e "${GREEN}${BOLD}│     Startet Claude Code direkt in /opt/haana         │${NC}"
 echo -e "${GREEN}${BOLD}└─────────────────────────────────────────────────────┘${NC}"
 echo ""
 echo -e "${YELLOW}  Vollstaendiger Token (fuer Addon-Konfiguration):${NC}"

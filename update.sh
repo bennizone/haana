@@ -13,8 +13,19 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
+warn() {
+    echo -e "${YELLOW}  ⚠ $1${NC}"
+}
+
 # ── Fehlerbehandlung ──────────────────────────────────────────────────────────
 trap 'echo -e "${RED}Fehler in Zeile $LINENO — Update abgebrochen.${NC}"; exit 1' ERR
+
+# Root-Check
+if [[ $EUID -ne 0 ]]; then
+    echo -e "${RED}Fehler: update.sh muss als root ausgefuehrt werden.${NC}"
+    echo "  Tipp: sudo bash /opt/haana/update.sh"
+    exit 1
+fi
 
 # ── Voraussetzungen ───────────────────────────────────────────────────────────
 if [ ! -d /opt/haana/.git ]; then
@@ -37,6 +48,14 @@ echo -e "${YELLOW}→ System-Pakete aktualisieren...${NC}"
 DEBIAN_FRONTEND=noninteractive apt-get update -qq && \
     DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -qq
 echo -e "${GREEN}  System-Pakete aktualisiert.${NC}"
+echo ""
+
+# ── Claude Code Update ────────────────────────────────────────────────────────
+echo -e "${YELLOW}→ Claude Code aktualisieren...${NC}"
+NPM_OUT=$(npm install -g @anthropic-ai/claude-code 2>&1) || warn "Claude Code Update fehlgeschlagen"
+echo "$NPM_OUT" | tail -5
+CC_VERSION=$(claude --version 2>/dev/null || echo "n/a")
+echo -e "${GREEN}  Claude Code: $CC_VERSION${NC}"
 echo ""
 
 # ── Git Pull ──────────────────────────────────────────────────────────────────

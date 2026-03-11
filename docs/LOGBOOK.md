@@ -4,6 +4,43 @@ Chronologische Dokumentation der wichtigsten Aenderungen am HAANA-Projekt.
 
 ---
 
+## 2026-03-11 — MS7b: install.sh Dev-Workflow + Claude Code Auto-Start
+
+**Aenderungen:**
+- `install.sh`: Node.js LTS via NodeSource in Schritt 3 (System-Pakete) installiert; Schritt-Zaehler von 6 auf 7 erhoehen; neuer Schritt 5 installiert Claude Code CLI via `npm install -g @anthropic-ai/claude-code`
+- `install.sh`: `/home/haana/.bash_profile` wird automatisch erstellt — bei interaktivem Login als `haana` startet Claude Code mit `--dangerously-skip-permissions --continue` in `/opt/haana`
+- `install.sh`: Anthropic API-Key Abfrage vor der Validierungsphase; Key wird via `pct push` + temporaere Datei sicher in Container uebertragen (kein Prozessargument, kein Prozesslisten-Leak); Prefix-Check `sk-ant-` mit Warn-Ausgabe
+- `install.sh`: Abschluss-Ausgabe ergaenzt um Dev-Zugangshinweis (`ssh root@$IP`, dann `su - haana`)
+- `update.sh`: `warn()`-Funktion ergaenzt; Root-Check am Skriptanfang; neuer Schritt aktualisiert Claude Code CLI via `npm install -g @anthropic-ai/claude-code` und gibt installierte Version aus
+
+**Entscheidungen:**
+- `pct push` + temporaere Datei statt Prozessargument: API-Key taucht nicht in `ps aux` oder `/proc/<pid>/cmdline` auf
+- `.bash_profile` statt `.bashrc`: wird nur bei Login-Shells ausgefuehrt (SSH, `su -`), nicht bei nicht-interaktiven Shells (Docker Exec, Cron)
+- `--dangerously-skip-permissions --continue`: Dev-Workflow ohne interaktive Bestaetigung, setzt vorherige Sitzung fort
+- Root-Check in `update.sh`: `apt-get` benoetigt Root; fruehzeitiger Fehler spart Zeit
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert <hash-nach-commit>`
+
+---
+
+## 2026-03-11 — Feedback-Trigger case-insensitive (Commit 2d9288a)
+
+**Aenderungen:**
+- `core/agent.py`: `block.name.lower()` statt `block.name` beim Vergleich der Tool-Namen fuer Feedback-Nachrichten
+
+**Entscheidungen:**
+- Claude Agent SDK liefert Tool-Namen in PascalCase (`WebSearch`, `UnderstandImage`), nicht in snake_case (`web_search`, `understand_image`) — `.lower()` stellt sicher dass beide Varianten matchen und der Feedback-Text ("Moment, ich suche...") korrekt ausgeloest wird
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert 2d9288a`
+
+---
+
 ## 2026-03-11 — Pre-Release Code Quality Fixes (Commit 9348fa6)
 
 **Aenderungen:**
