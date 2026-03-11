@@ -360,6 +360,7 @@ DEFAULT_CONFIG = {
         "qdrant_url":    os.environ.get("QDRANT_URL", "http://qdrant:6333"),
         "timezone":      "Europe/Berlin",
     },
+    "companion_token": "",
     "users": [
         {
             "id": "ha-assist", "display_name": "HAANA Voice", "role": "voice",
@@ -678,6 +679,8 @@ def load_config() -> dict:
             else:
                 for k, v in dream_defaults.items():
                     cfg["dream"].setdefault(k, v)
+            # Companion-Token Default
+            cfg.setdefault("companion_token", "")
             _ensure_system_users(cfg)
             _ensure_user_defaults(cfg)
             return cfg
@@ -4016,3 +4019,73 @@ async def api_git_connect(request: Request):
 @app.get("/api/git/log")
 async def api_git_log():
     return await _git.git_log()
+
+
+# ── MS7: Companion API ─────────────────────────────────────────────────────────
+
+def _verify_companion_token(request: Request, config: dict) -> bool:
+    """Prueft den Bearer-Token aus dem Authorization-Header gegen den Config-Token."""
+    auth = request.headers.get("Authorization", "")
+    token = auth.replace("Bearer ", "").strip()
+    expected = config.get("companion_token", "")
+    return bool(token and expected and secrets.compare_digest(token, expected))
+
+
+@app.get("/api/companion/ping")
+async def companion_ping(request: Request):
+    """Token-Validierung fuer den Companion-Addon."""
+    cfg = load_config()
+    if not _verify_companion_token(request, cfg):
+        raise HTTPException(status_code=401, detail="Invalid companion token")
+    return {"status": "ok", "version": "1.0.0"}
+
+
+@app.post("/api/companion/register")
+async def companion_register(request: Request):
+    """Registriert den Companion: speichert ha_url + ha_token in config.json."""
+    cfg = load_config()
+    if not _verify_companion_token(request, cfg):
+        raise HTTPException(status_code=401, detail="Invalid companion token")
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Ungueltiges JSON")
+    ha_url = (body.get("ha_url") or "").strip().rstrip("/")
+    ha_token = (body.get("ha_token") or "").strip()
+    if not ha_url:
+        raise HTTPException(400, "ha_url fehlt")
+    if not ha_token:
+        raise HTTPException(400, "ha_token fehlt")
+    cfg.setdefault("services", {})["ha_url"] = ha_url
+    cfg["services"]["ha_token"] = ha_token
+    save_config(cfg)
+    logger.info(f"[companion] Registered: ha_url={ha_url}")
+    return {"status": "registered"}
+
+
+@app.get("/api/companion/token")
+async def companion_token_get(request: Request):
+    """Gibt den aktuellen Companion-Token zurueck (nur intern/admin)."""
+    if not _auth.is_authenticated(request):
+        raise HTTPException(status_code=403, detail="Admin-Authentifizierung erforderlich")
+    cfg = load_config()
+    token = cfg.get("companion_token", "")
+    if not token:
+        token = secrets.token_hex(32)
+        cfg["companion_token"] = token
+        save_config(cfg)
+        logger.info("[companion] Companion-Token erstmalig generiert")
+    return {"companion_token": token}
+
+
+@app.post("/api/companion/token/regenerate")
+async def companion_token_regenerate(request: Request):
+    """Generiert einen neuen Companion-Token (nur intern/admin)."""
+    if not _auth.is_authenticated(request):
+        raise HTTPException(status_code=403, detail="Admin-Authentifizierung erforderlich")
+    cfg = load_config()
+    new_token = secrets.token_hex(32)
+    cfg["companion_token"] = new_token
+    save_config(cfg)
+    logger.info("[companion] Companion-Token neu generiert")
+    return {"companion_token": new_token}

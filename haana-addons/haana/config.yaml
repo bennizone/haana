@@ -1,5 +1,5 @@
 name: "HAANA"
-description: "AI Household Assistant with persistent memory"
+description: "AI Household Assistant with persistent memory. DEPRECATED: Use haana-companion instead."
 version: "0.1.16"
 slug: "haana"
 url: "https://github.com/alicezone/haana-dev"

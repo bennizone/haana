@@ -1,3 +1,6 @@
 name: HAANA Add-ons
 url: https://github.com/alicezone/haana
 maintainer: HAANA Project
+addons:
+  - haana-companion
+  - haana
