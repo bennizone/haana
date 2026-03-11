@@ -331,7 +331,12 @@ if [[ \$- == *i* ]]; then
     echo ''
     echo '  HAANA Dev-Umgebung  |  exit beendet Claude Code'
     echo ''
-    claude --dangerously-skip-permissions --continue
+    # --continue nur wenn bereits eine Session existiert
+    if ls /home/haana/.claude/projects/-opt-haana/*.jsonl 2>/dev/null | head -1 | grep -q .; then
+        claude --dangerously-skip-permissions --continue
+    else
+        claude --dangerously-skip-permissions
+    fi
 fi
 BPEOF
         chown haana:haana /home/haana/.bash_profile
