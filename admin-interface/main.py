@@ -46,6 +46,7 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse, parse_qs
 import glob as _glob
+import threading as _threading
 
 from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -152,9 +153,13 @@ templates = Jinja2Templates(directory="templates")
 
 # ── Auth-Middleware ───────────────────────────────────────────────────────────
 
+# ── In-Memory SSO Token Store ─────────────────────────────────────────────────
+_SSO_TOKENS: dict[str, float] = {}
+_SSO_LOCK = _threading.Lock()
+
 # Pfade die OHNE Authentifizierung zugänglich sind
 _AUTH_EXEMPT_PREFIXES = ("/static/", "/ws/", "/api/wa-proxy/", "/api/companion/")  # WICHTIG: WS-Endpoints müssen intern selbst auth prüfen!
-_AUTH_EXEMPT_EXACT = {"/", "/api/auth/login", "/api/auth/logout", "/api/auth/status", "/api/health", "/api/setup-status", "/api/whatsapp-config"}
+_AUTH_EXEMPT_EXACT = {"/", "/api/auth/login", "/api/auth/logout", "/api/auth/status", "/api/health", "/api/setup-status", "/api/whatsapp-config", "/api/auth/sso"}
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -774,6 +779,29 @@ async def auth_login(request: Request):
         raise HTTPException(401, "Ungültiger Token")
 
     response = JSONResponse({"ok": True, "mode": "standalone"})
+    response.set_cookie(
+        key=_auth.COOKIE_NAME,
+        value=expected,
+        max_age=7 * 24 * 3600,  # 7 Tage
+        httponly=True,
+        samesite="lax",
+        secure=False,  # kein HTTPS im lokalen Netz erzwingen
+    )
+    return response
+
+
+@app.get("/api/auth/sso")
+async def auth_sso(token: str):
+    """Validiert Companion-SSO-Token, erstellt Session, redirect zur UI."""
+    now = time.time()
+    with _SSO_LOCK:
+        expiry = _SSO_TOKENS.get(token)
+        if not expiry or expiry < now:
+            raise HTTPException(status_code=401, detail="Ungültiger oder abgelaufener SSO-Token")
+        del _SSO_TOKENS[token]
+    from starlette.responses import RedirectResponse
+    response = RedirectResponse(url="/", status_code=302)
+    expected = _auth.get_admin_token()
     response.set_cookie(
         key=_auth.COOKIE_NAME,
         value=expected,
@@ -4054,6 +4082,22 @@ async def companion_ping(request: Request):
     if not _verify_companion_token(request, cfg):
         raise HTTPException(status_code=401, detail="Invalid companion token")
     return {"status": "ok", "version": "1.0.0"}
+
+
+@app.post("/api/companion/sso")
+async def companion_sso(request: Request):
+    """Einmal-SSO-Token fuer Companion Browser-Redirect (60s TTL)."""
+    cfg = load_config()
+    if not _verify_companion_token(request, cfg):
+        raise HTTPException(status_code=401, detail="Invalid companion token")
+    now = time.time()
+    with _SSO_LOCK:
+        expired = [t for t, exp in _SSO_TOKENS.items() if exp < now]
+        for t in expired:
+            del _SSO_TOKENS[t]
+        sso_token = secrets.token_urlsafe(32)
+        _SSO_TOKENS[sso_token] = now + 60
+    return {"sso_token": sso_token}
 
 
 @app.post("/api/companion/register")
