@@ -40,6 +40,7 @@ import secrets
 import select
 import signal
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -84,7 +85,68 @@ from core.ollama_compat import create_ollama_router
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="HAANA Admin", docs_url=None, redoc_url=None)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # startup
+    global _agent_manager
+    asyncio.create_task(_cleanup_loop())
+    asyncio.create_task(_dream_scheduler())
+    _sync_rebuild_state()
+    _auth.log_startup_info()
+    # Skills-Verzeichnis in /data/ sicherstellen (update-resistent)
+    _data_skills = Path("/data/skills")
+    if not _data_skills.exists():
+        _data_skills.mkdir(parents=True, exist_ok=True)
+        logger.info(
+            "[Startup] /data/skills/ erstellt. "
+            "Eigene Skills hier ablegen – sie überschreiben /app/skills/ beim nächsten Agent-Start."
+        )
+    else:
+        logger.debug("[Startup] /data/skills/ vorhanden (update-resistent)")
+    # AgentManager initialisieren (nach Config-Laden, damit _resolve_llm verfügbar ist)
+    _agent_manager = create_agent_manager(
+        HAANA_MODE,
+        main_app=app,
+        docker_client=_docker_client,
+        resolve_llm_fn=_resolve_llm,
+        find_ollama_url_fn=_find_ollama_url,
+    )
+    # Ollama-kompatibler Router (Fake-Ollama für HA Voice Integration)
+    # Kein Agent-Stack — direkter LLM-Call mit Memory-Enrichment (via Qdrant+Ollama, kein mem0)
+    ollama_router = create_ollama_router(
+        get_config=load_config,
+        resolve_llm=_resolve_llm,
+        find_ollama_url=_find_ollama_url,
+        get_agent_url=lambda inst: _agent_manager.agent_url(inst),
+    )
+    app.include_router(ollama_router)
+    # Add-on Modus: Agents beim Start automatisch starten (kein Docker-SDK)
+    if HAANA_MODE == "addon":
+        asyncio.create_task(_autostart_agents())
+
+    # System-User INST_DIRs sicherstellen (inkl. haana-admin, neu seit letztem Setup)
+    _startup_cfg = load_config()
+    for _sys_id in _SYSTEM_USER_IDS:
+        _sys_dir = INST_DIR / _sys_id
+        _sys_dir.mkdir(parents=True, exist_ok=True)
+        _sys_md = _sys_dir / "CLAUDE.md"
+        if not _sys_md.exists():
+            _sys_user = next((u for u in _startup_cfg.get("users", []) if u.get("id") == _sys_id), None)
+            if _sys_user:
+                _content = _render_claude_md(
+                    _sys_user.get("claude_md_template", "user"),
+                    _sys_user.get("display_name", _sys_id.capitalize()),
+                    _sys_id,
+                    _sys_user.get("ha_user", _sys_id),
+                    _sys_user.get("language", "de"),
+                )
+                _sys_md.write_text(_content, encoding="utf-8")
+                logger.info(f"[Startup] CLAUDE.md für System-User '{_sys_id}' erstellt")
+    yield
+    # shutdown (nichts nötig)
+
+
+app = FastAPI(title="HAANA Admin", docs_url=None, redoc_url=None, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
@@ -179,63 +241,6 @@ async def _cleanup_loop():
 HAANA_MODE = detect_mode()
 _agent_manager: Optional[AgentManager] = None
 
-
-@app.on_event("startup")
-async def startup_event():
-    global _agent_manager
-    asyncio.create_task(_cleanup_loop())
-    asyncio.create_task(_dream_scheduler())
-    _sync_rebuild_state()
-    _auth.log_startup_info()
-    # Skills-Verzeichnis in /data/ sicherstellen (update-resistent)
-    _data_skills = Path("/data/skills")
-    if not _data_skills.exists():
-        _data_skills.mkdir(parents=True, exist_ok=True)
-        logger.info(
-            "[Startup] /data/skills/ erstellt. "
-            "Eigene Skills hier ablegen – sie überschreiben /app/skills/ beim nächsten Agent-Start."
-        )
-    else:
-        logger.debug("[Startup] /data/skills/ vorhanden (update-resistent)")
-    # AgentManager initialisieren (nach Config-Laden, damit _resolve_llm verfügbar ist)
-    _agent_manager = create_agent_manager(
-        HAANA_MODE,
-        main_app=app,
-        docker_client=_docker_client,
-        resolve_llm_fn=_resolve_llm,
-        find_ollama_url_fn=_find_ollama_url,
-    )
-    # Ollama-kompatibler Router (Fake-Ollama für HA Voice Integration)
-    # Kein Agent-Stack — direkter LLM-Call mit Memory-Enrichment (via Qdrant+Ollama, kein mem0)
-    ollama_router = create_ollama_router(
-        get_config=load_config,
-        resolve_llm=_resolve_llm,
-        find_ollama_url=_find_ollama_url,
-        get_agent_url=lambda inst: _agent_manager.agent_url(inst),
-    )
-    app.include_router(ollama_router)
-    # Add-on Modus: Agents beim Start automatisch starten (kein Docker-SDK)
-    if HAANA_MODE == "addon":
-        asyncio.create_task(_autostart_agents())
-
-    # System-User INST_DIRs sicherstellen (inkl. haana-admin, neu seit letztem Setup)
-    _startup_cfg = load_config()
-    for _sys_id in _SYSTEM_USER_IDS:
-        _sys_dir = INST_DIR / _sys_id
-        _sys_dir.mkdir(parents=True, exist_ok=True)
-        _sys_md = _sys_dir / "CLAUDE.md"
-        if not _sys_md.exists():
-            _sys_user = next((u for u in _startup_cfg.get("users", []) if u.get("id") == _sys_id), None)
-            if _sys_user:
-                _content = _render_claude_md(
-                    _sys_user.get("claude_md_template", "user"),
-                    _sys_user.get("display_name", _sys_id.capitalize()),
-                    _sys_id,
-                    _sys_user.get("ha_user", _sys_id),
-                    _sys_user.get("language", "de"),
-                )
-                _sys_md.write_text(_content, encoding="utf-8")
-                logger.info(f"[Startup] CLAUDE.md für System-User '{_sys_id}' erstellt")
 
 async def _autostart_agents():
     """Startet alle konfigurierten User-Agents im Add-on-Modus."""

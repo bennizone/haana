@@ -264,7 +264,7 @@ async function processQueue(fromNorm, from, route) {
       }
     }
 
-    if (!wasVoice && !sentVoice) {
+    if (!wasVoice) {
       await _sock?.sendMessage(from, { text: response });
     }
   } catch (err) {

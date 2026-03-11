@@ -723,9 +723,10 @@ class HaanaAgent:
                                     "web_search": "Moment, ich suche gerade im Internet...",
                                     "understand_image": "Moment, ich analysiere das Bild...",
                                 }
-                                asyncio.create_task(self._send_feedback(
+                                _fb_task = asyncio.create_task(self._send_feedback(
                                     feedback_url, sender_phone, _feedback_msgs[block.name]
                                 ))
+                                _fb_task.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
                 elif isinstance(message, ResultMessage):
                     if message.session_id:
                         self.session_id = message.session_id
