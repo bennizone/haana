@@ -126,6 +126,7 @@ services:
       ADMIN_URL:         http://admin-interface:8080
       BRIDGE_LOG_LEVEL:  ${BRIDGE_LOG_LEVEL:-info}
       BRIDGE_HTTP_PORT:  "3001"
+      BRIDGE_CALLBACK_URL: "http://whatsapp-bridge:3001"
       # HAANA_BRIDGE_SECRET: "your-secret"  # Optional: schützt /api/whatsapp-config
     volumes:
       - haana-whatsapp-session:/app/session

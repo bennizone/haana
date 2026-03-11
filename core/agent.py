@@ -636,7 +636,8 @@ class HaanaAgent:
 
     # ── Haupt-Loop ────────────────────────────────────────────────────────────
 
-    async def run_async(self, user_message: str, channel: str = "repl") -> str:
+    async def run_async(self, user_message: str, channel: str = "repl",
+                        sender_phone: str = None, feedback_url: str = None) -> str:
         """
         Führt einen Agent-Turn aus.
 
@@ -714,6 +715,17 @@ class HaanaAgent:
                                 tool_name=block.name,
                                 tool_input=block.input,
                             )
+                            # Feedback für langläufige Tools (nur WhatsApp-Channel)
+                            if (feedback_url and sender_phone
+                                    and channel in ("whatsapp", "whatsapp_voice")
+                                    and block.name in ("web_search", "understand_image")):
+                                _feedback_msgs = {
+                                    "web_search": "Moment, ich suche gerade im Internet...",
+                                    "understand_image": "Moment, ich analysiere das Bild...",
+                                }
+                                asyncio.create_task(self._send_feedback(
+                                    feedback_url, sender_phone, _feedback_msgs[block.name]
+                                ))
                 elif isinstance(message, ResultMessage):
                     if message.session_id:
                         self.session_id = message.session_id
@@ -831,6 +843,19 @@ class HaanaAgent:
             result = f"[Fallback-LLM aktiv: {self.model}] " + result
 
         return result
+
+    async def _send_feedback(self, feedback_url: str, sender_phone: str, message: str) -> None:
+        """Sendet ein Fortschritts-Feedback an die WhatsApp Bridge."""
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                await client.post(
+                    feedback_url,
+                    json={"phone": sender_phone, "message": message},
+                )
+            logger.debug(f"[{self.instance}] Feedback gesendet: {message[:60]}")
+        except Exception as e:
+            logger.warning(f"[{self.instance}] Feedback-Fehler: {e}")
 
     def run(self, user_message: str) -> str:
         """Synchroner Wrapper für run_async() – für einfache Skripte."""

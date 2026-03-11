@@ -50,8 +50,10 @@ def create_api(agent) -> FastAPI:
         channel = body.get("channel", "webchat")
         if not message:
             raise HTTPException(400, "message darf nicht leer sein")
+        sender_phone = body.get("sender_phone")
+        feedback_url = body.get("feedback_url")
         logger.info(f"[{agent.instance}] API /chat | channel={channel} | {message[:80]}")
-        response = await agent.run_async(message, channel=channel)
+        response = await agent.run_async(message, channel=channel, sender_phone=sender_phone, feedback_url=feedback_url)
         return {"response": response, "instance": agent.instance}
 
     @api.post("/rebuild-entry")

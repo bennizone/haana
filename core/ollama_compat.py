@@ -37,7 +37,8 @@ logger = logging.getLogger(__name__)
 DELEGATION_MARKER = "[DELEGATE]"
 
 _DELEGATION_INSTRUCTIONS = """
-IMPORTANT: You are a fast voice assistant. For complex questions that you cannot answer directly, respond ONLY with the exact text "[DELEGATE]" (nothing else).
+IMPORTANT: You are a fast voice assistant. For complex questions that you cannot answer directly, first output a short natural transition sentence, then [DELEGATE].
+Examples: "One moment, let me check. [DELEGATE]", "Let me look that up. [DELEGATE]", "I'll research that. [DELEGATE]"
 Delegate when the question is about: weather, forecasts, calendar, appointments, recipes, cooking, complex explanations ("how does X work", "why does X happen"), general knowledge, or anything you are unsure about.
 Do NOT delegate for: controlling devices (lights, switches, climate), reading sensor states, simple status queries, timers, or simple household questions.
 """
@@ -660,22 +661,24 @@ def create_ollama_router(
         resp_text = ollama_resp.get("message", {}).get("content", "")
 
         # ── Delegation: [DELEGATE] erkannt → an laufenden Agent weiterleiten ──
-        if delegation_target and resp_text.strip().startswith(DELEGATION_MARKER) and get_agent_url:
+        if delegation_target and DELEGATION_MARKER in resp_text and get_agent_url:
+            feedback_text = resp_text[:resp_text.index(DELEGATION_MARKER)].strip()
             delegate_text = await _handle_delegation(
                 delegation_target, user_message,
                 get_agent_url=get_agent_url,
             )
             if delegate_text is not None:
+                combined = (feedback_text + "\n\n" if feedback_text else "") + delegate_text
                 d_elapsed = time.monotonic() - t_start
                 logger.info(
                     "[ollama-compat] %s → %s (delegated): %.2fs | Q: %s | A: %s",
                     instance, delegation_target, d_elapsed,
                     user_message[:80] if user_message else "(tool-result)",
-                    delegate_text[:120],
+                    combined[:120],
                 )
                 if stream:
-                    return _make_response(delegate_text, model_raw, d_elapsed, True)
-                return _text_response(delegate_text, model_raw, d_elapsed)
+                    return _make_response(combined, model_raw, d_elapsed, True)
+                return _text_response(combined, model_raw, d_elapsed)
             # Delegation fehlgeschlagen → Fallback auf eigene Antwort
             logger.warning("[ollama-compat] Delegation %s → %s fehlgeschlagen, Fallback", instance, delegation_target)
 

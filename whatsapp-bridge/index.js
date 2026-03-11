@@ -47,6 +47,7 @@ const ADMIN_URL   = (process.env.ADMIN_URL || "http://admin-interface:8080").rep
 const SESSION_DIR = path.resolve(process.env.SESSION_DIR || "/app/session");
 const LOG_LEVEL   = process.env.BRIDGE_LOG_LEVEL || "info";
 const HTTP_PORT   = parseInt(process.env.BRIDGE_HTTP_PORT || "3001", 10);
+const CALLBACK_URL = (process.env.BRIDGE_CALLBACK_URL || `http://localhost:${HTTP_PORT}`).replace(/\/$/, "");
 
 const log = pino({ level: LOG_LEVEL, transport: { target: "pino-pretty", options: { colorize: false } } });
 
@@ -64,6 +65,15 @@ let _sock        = null;           // aktuelle Baileys-Socket-Instanz
 let _routes     = new Map();
 let _waMode     = "separate";
 let _selfPrefix = "!h ";
+
+// ── Debounce / Queue State ──────────────────────────────────────────────────
+const _pendingMessages    = new Map();  // phone → [{text, channel, from}]
+const _processingMessages = new Map();  // phone → [{text, channel, from}] (in-flight)
+const _debounceTimers     = new Map();  // phone → setTimeout handle
+const _activeRequests     = new Map();  // phone → AbortController
+// Hinweis: node-fetch v2 unterstützt kein AbortController-signal nativ –
+// die signal-Option wird ignoriert (kein Fehler, aber kein HTTP-Abbruch).
+// Upgrade auf node-fetch v3 oder natives fetch (Node 18+) für echten Abbruch.
 
 // ── STT/TTS-Konfiguration (Home Assistant) ───────────────────────────────
 let _sttConfig  = null; // { ha_url, ha_token, stt_entity, stt_language }
@@ -143,16 +153,24 @@ function normalizeJid(jid) {
 
 // ── Agent-Anfrage ──────────────────────────────────────────────────────────
 
-async function queryAgent(agentUrl, message, channel = "whatsapp") {
+async function queryAgent(agentUrl, message, channel = "whatsapp", opts = {}) {
   const url = `${agentUrl}/chat`;
   log.debug({ url, message: message.slice(0, 80) }, "Agent-Anfrage");
 
-  const res = await fetch(url, {
+  const { signal, sender_phone, feedback_url } = opts;
+  const bodyData = { message, channel };
+  if (sender_phone) bodyData.sender_phone = sender_phone;
+  if (feedback_url) bodyData.feedback_url = feedback_url;
+
+  const fetchOpts = {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, channel }),
+    body: JSON.stringify(bodyData),
     timeout: 120_000,
-  });
+  };
+  if (signal) fetchOpts.signal = signal;
+
+  const res = await fetch(url, fetchOpts);
 
   if (!res.ok) {
     const txt = await res.text();
@@ -161,6 +179,108 @@ async function queryAgent(agentUrl, message, channel = "whatsapp") {
 
   const json = await res.json();
   return json.response || "[Keine Antwort]";
+}
+
+// ── Debounce-Queue ─────────────────────────────────────────────────────────
+
+function enqueueMessage(fromNorm, from, msgData, route) {
+  // 1. Neue Nachricht in Queue
+  if (!_pendingMessages.has(fromNorm)) _pendingMessages.set(fromNorm, []);
+  _pendingMessages.get(fromNorm).push(msgData);
+
+  // 2. Debounce-Timer zurücksetzen
+  if (_debounceTimers.has(fromNorm)) clearTimeout(_debounceTimers.get(fromNorm));
+
+  // 3. Laufende Anfrage abbrechen + in-flight Nachrichten an Queue-Anfang zurücklegen
+  if (_activeRequests.has(fromNorm)) {
+    _activeRequests.get(fromNorm).abort();
+    _activeRequests.delete(fromNorm);
+    const wasProcessing = _processingMessages.get(fromNorm) || [];
+    _processingMessages.delete(fromNorm);
+    const stillPending = _pendingMessages.get(fromNorm);
+    _pendingMessages.set(fromNorm, [...wasProcessing, ...stillPending]);
+    log.info({ from: fromNorm, requeued: wasProcessing.length }, "Laufende Anfrage abgebrochen – Nachrichten zurückgestellt");
+  }
+
+  // 4. Neuen Timer setzen (500ms Debounce)
+  _debounceTimers.set(fromNorm, setTimeout(() => processQueue(fromNorm, from, route), 500));
+  log.debug({ from: fromNorm, pending: _pendingMessages.get(fromNorm).length }, "Nachricht eingereiht");
+}
+
+async function processQueue(fromNorm, from, route) {
+  const msgs = _pendingMessages.get(fromNorm) || [];
+  _pendingMessages.delete(fromNorm);
+  _debounceTimers.delete(fromNorm);
+  if (!msgs.length) return;
+
+  _processingMessages.set(fromNorm, msgs);
+
+  // Nachrichten kombinieren
+  const combined = msgs.length === 1
+    ? msgs[0].text
+    : msgs.map((m, i) => `${i + 1}. ${m.text}`).join('\n');
+
+  const channel = msgs[msgs.length - 1].channel;  // Channel der letzten Nachricht
+  const wasVoice = channel === "whatsapp_voice";
+
+  const controller = new AbortController();
+  _activeRequests.set(fromNorm, controller);
+
+  const feedbackUrl = `${CALLBACK_URL}/internal/feedback`;
+
+  log.info({ from: fromNorm, count: msgs.length, text: combined.slice(0, 100) }, "Queue verarbeiten");
+
+  await _sock?.sendPresenceUpdate("composing", from);
+
+  try {
+    const response = await queryAgent(route.agent_url, combined, channel, {
+      signal: controller.signal,
+      sender_phone: fromNorm.replace("@s.whatsapp.net", ""),
+      feedback_url: feedbackUrl,
+    });
+    log.info({ from: fromNorm, response: response.slice(0, 100) }, "Agent-Antwort");
+
+    // TTS: Voice-Handling (Text zuerst, dann Audio)
+    if (wasVoice) {
+      await _sock?.sendMessage(from, { text: response });
+      log.debug({ from: fromNorm }, "Text (Voice-Antwort) vorab gesendet");
+    }
+
+    let sentVoice = false;
+    if (wasVoice && _ttsConfig) {
+      try {
+        const mp3Buffer = await ttsViaHA(response);
+        if (mp3Buffer && mp3Buffer.length > 0) {
+          const oggBuffer = await convertToOggOpus(mp3Buffer);
+          await _sock?.sendMessage(from, {
+            audio: oggBuffer,
+            mimetype: "audio/ogg; codecs=opus",
+            ptt: true,
+          });
+          sentVoice = true;
+        }
+      } catch (ttsErr) {
+        log.warn({ err: ttsErr.message }, "TTS fehlgeschlagen – Text wurde bereits gesendet");
+      }
+    }
+
+    if (!wasVoice && !sentVoice) {
+      await _sock?.sendMessage(from, { text: response });
+    }
+  } catch (err) {
+    if (err.name === "AbortError") {
+      log.info({ from: fromNorm }, "Anfrage abgebrochen (neue Nachricht)");
+    } else {
+      log.error({ err: err.message, from: fromNorm, agent: route.agent_url }, "Fehler bei Agent-Anfrage");
+      await _sock?.sendMessage(from, {
+        text: "Entschuldigung, ich konnte deine Nachricht gerade nicht verarbeiten. Versuch es nochmal.",
+      });
+    }
+  } finally {
+    _activeRequests.delete(fromNorm);
+    _processingMessages.delete(fromNorm);
+    await _sock?.sendPresenceUpdate("paused", from);
+  }
 }
 
 // ── STT via Home Assistant ────────────────────────────────────────────────
@@ -402,6 +522,27 @@ function startHttpServer() {
       return;
     }
 
+    if (req.method === "POST" && url === "/internal/feedback") {
+      let body = "";
+      req.on("data", (chunk) => { body += chunk; });
+      req.on("end", () => {
+        try {
+          const { phone, message } = JSON.parse(body);
+          if (phone && message && _sock) {
+            const jid = phone.includes("@") ? phone : `${phone}@s.whatsapp.net`;
+            _sock.sendMessage(jid, { text: message }).catch((e) => {
+              log.warn({ err: e.message }, "Feedback-Nachricht konnte nicht gesendet werden");
+            });
+          }
+        } catch (e) {
+          log.warn({ err: e.message }, "Ungültiges Feedback-JSON");
+        }
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+      });
+      return;
+    }
+
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Not found" }));
   });
@@ -582,52 +723,11 @@ async function startBridge() {
       const wasVoice = isVoiceMessage(msg);
       log.info({ from: fromNorm, user: route.user_id, voice: wasVoice, text: text.slice(0, 100) }, "Eingehende Nachricht");
 
-      await sock.sendPresenceUpdate("composing", from);
-
-      try {
-        const response = await queryAgent(route.agent_url, text, wasVoice ? "whatsapp_voice" : "whatsapp");
-        log.info({ from: fromNorm, response: response.slice(0, 100) }, "Agent-Antwort");
-
-        // TTS: Sprachnachricht zurücksenden wenn Input Voice war und TTS konfiguriert
-        // Text wird bei Voice-Nachrichten immer zuerst gesendet (sofortige Sichtbarkeit),
-        // unabhängig von tts_also_text. Audio folgt danach falls TTS erfolgreich.
-        if (wasVoice) {
-          await sock.sendMessage(from, { text: response });
-          log.debug({ from: fromNorm }, "Text (Voice-Antwort) vorab gesendet");
-        }
-
-        let sentVoice = false;
-        if (wasVoice && _ttsConfig) {
-          try {
-            const mp3Buffer = await ttsViaHA(response);
-            if (mp3Buffer && mp3Buffer.length > 0) {
-              const oggBuffer = await convertToOggOpus(mp3Buffer);
-              log.info({ mp3: mp3Buffer.length, ogg: oggBuffer.length }, "Audio konvertiert (MP3 → OGG Opus)");
-              await sock.sendMessage(from, {
-                audio: oggBuffer,
-                mimetype: "audio/ogg; codecs=opus",
-                ptt: true,
-              });
-              sentVoice = true;
-              log.info({ from: fromNorm, bytes: oggBuffer.length }, "TTS-Sprachnachricht gesendet");
-            }
-          } catch (ttsErr) {
-            log.warn({ err: ttsErr.message }, "TTS fehlgeschlagen – Text wurde bereits gesendet");
-          }
-        }
-
-        // Text als Fallback oder wenn kein Voice gewünscht
-        if (!wasVoice && !sentVoice) {
-          await sock.sendMessage(from, { text: response });
-        }
-      } catch (err) {
-        log.error({ err: err.message, from, agent: route.agent_url }, "Fehler bei Agent-Anfrage");
-        await sock.sendMessage(from, {
-          text: "Entschuldigung, ich konnte deine Nachricht gerade nicht verarbeiten. Versuch es nochmal.",
-        });
-      } finally {
-        await sock.sendPresenceUpdate("paused", from);
-      }
+      // Nachricht in Debounce-Queue einreihen statt sofort verarbeiten
+      enqueueMessage(fromNorm, from, {
+        text,
+        channel: wasVoice ? "whatsapp_voice" : "whatsapp",
+      }, route);
     }
   });
 }

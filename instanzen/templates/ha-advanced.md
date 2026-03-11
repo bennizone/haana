@@ -79,3 +79,9 @@ Response is returned via TTS through HA. Formatting:
 - On error: briefly and clearly explain what is not available
 - No memory writes – you are stateless for voice
 - Take over presence context from HA Assist, don't re-query
+
+## Web Search
+
+For factual questions, current events, recent information, or general knowledge questions,
+prefer using the `web_search` tool to get accurate and up-to-date information.
+Only fall back to training knowledge if no web search tool is available.
