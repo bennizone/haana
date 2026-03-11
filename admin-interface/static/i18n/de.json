@@ -588,6 +588,8 @@
     "connected": "Verbunden",
     "connected_no_models": "Verbunden, aber keine Modelle gefunden",
     "not_tested": "Noch nicht getestet",
+    "oauth_setup_later": "OAuth — nach Setup einrichten",
+    "oauth_setup_later_hint": "OAuth wird nach dem Setup unter Konfiguration → Provider eingerichtet.",
     "models": "Modelle",
     "test_connection": "Verbindung testen",
     "api_key_placeholder": "API-Key eingeben...",

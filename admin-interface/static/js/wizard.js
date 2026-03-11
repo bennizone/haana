@@ -5,7 +5,7 @@
 const _wizState = {
   step: 1,
   mode: 'fresh',      // 'fresh' | 'extend'
-  providers: [],      // [{type, name, url, key, key_masked, models:[], tested:false, existing:false}]
+  providers: [],      // [{type, name, url, key, key_masked, auth_method, models:[], tested:false, existing:false}]
   llms: [],           // flattened: [{providerIdx, model, label}]
   existingLlms: [],   // LLM-Einträge aus aktueller Config (im extend-Modus befüllt)
   users: [],          // [{id, name, primaryLlm, fallbackLlm, lang, selected}]
@@ -190,7 +190,7 @@ function _wizUpdateNextBtn() {
   if (step === 1) {
     // In extend mode, existing providers (p.existing) count as valid even without re-testing
     const ok = _wizState.providers.some(p =>
-      (p.tested && p.models.length > 0) || p.existing
+      (p.tested && p.models.length > 0) || p.existing || p.auth_method === 'oauth'
     );
     nextBtn.disabled = !ok;
     nextBtn.title = ok ? '' : t('wizard.step1_need_provider');
@@ -241,13 +241,15 @@ function _wizRenderProviders() {
 
 function _wizProviderCardHtml(p, i) {
   const meta   = _PROVIDER_TYPES.find(x => x.type === p.type) || { label: p.type, icon: '?' };
-  const status = p.tested
-    ? (p.models.length > 0
-      ? `<span style="color:var(--green);">&#10003; ${t('wizard.connected')} &middot; ${p.models.length} ${t('wizard.models')}</span>`
-      : (p.existing
-        ? `<span style="color:var(--green);">&#128274; ${t('wizard.extend_provider_existing')}</span>`
-        : `<span style="color:var(--yellow);">&#9888; ${t('wizard.connected_no_models')}</span>`))
-    : `<span style="color:var(--muted);">${t('wizard.not_tested')}</span>`;
+  const status = p.auth_method === 'oauth'
+    ? `<span style="color:var(--accent2);">&#128272; OAuth — ${t('wizard.oauth_setup_later')}</span>`
+    : (p.tested
+      ? (p.models.length > 0
+        ? `<span style="color:var(--green);">&#10003; ${t('wizard.connected')} &middot; ${p.models.length} ${t('wizard.models')}</span>`
+        : (p.existing
+          ? `<span style="color:var(--green);">&#128274; ${t('wizard.extend_provider_existing')}</span>`
+          : `<span style="color:var(--yellow);">&#9888; ${t('wizard.connected_no_models')}</span>`))
+      : `<span style="color:var(--muted);">${t('wizard.not_tested')}</span>`);
 
   // Existing provider: show masked key, placeholder for new key input
   const keyField = p.existing
@@ -266,6 +268,13 @@ function _wizProviderCardHtml(p, i) {
         oninput="_wizState.providers[${i}].key=this.value;_wizState.providers[${i}].tested=false;_wizUpdateNextBtn();">
     </div>`;
 
+  const oauthField = `
+    <div style="background:color-mix(in srgb,var(--accent2) 12%,transparent);border:1px solid var(--accent2);border-radius:var(--radius-sm);padding:var(--sp-3);margin-bottom:var(--sp-3);">
+      <div style="font-size:13px;font-weight:600;margin-bottom:4px;">&#128272; OAuth (claude.ai)</div>
+      <div style="font-size:12px;color:var(--muted);">${t('config_provider.auth_method_oauth_desc')}</div>
+      <div style="font-size:12px;color:var(--accent2);margin-top:var(--sp-2);">&#10003; ${t('wizard.connected')} — ${t('wizard.oauth_setup_later_hint')}</div>
+    </div>`;
+
   const cardBorder = p.existing ? 'border-left:3px solid var(--accent2);' : '';
 
   return `
@@ -276,18 +285,14 @@ function _wizProviderCardHtml(p, i) {
       ${p.existing ? `<span style="font-size:11px;color:var(--accent2);border:1px solid var(--accent2);border-radius:var(--radius-sm);padding:2px 6px;">&#128274; ${t('wizard.extend_provider_existing')}</span>` : ''}
       <button class="btn btn-sm btn-danger" onclick="wizRemoveProvider(${i})">&#10005;</button>
     </div>
-    ${p.type === 'ollama' ? `
-    <div class="form-group" style="margin-bottom:var(--sp-3);">
-      <label>URL</label>
-      <input type="url" id="wiz-prov-${i}-url" value="${escAttr(p.url || _PROVIDER_DEFAULTS.ollama)}"
-        placeholder="http://localhost:11434"
-        oninput="_wizState.providers[${i}].url=this.value;_wizState.providers[${i}].tested=false;_wizUpdateNextBtn();">
-    </div>` : keyField}
+    ${p.type === 'ollama'
+      ? `<div class="form-group" style="margin-bottom:var(--sp-3);"><label>URL</label><input type="url" id="wiz-prov-${i}-url" value="${escAttr(p.url || _PROVIDER_DEFAULTS.ollama)}" placeholder="http://localhost:11434" oninput="_wizState.providers[${i}].url=this.value;_wizState.providers[${i}].tested=false;_wizUpdateNextBtn();"></div>`
+      : (p.auth_method === 'oauth' ? oauthField : keyField)}
     <div style="display:flex;gap:var(--sp-2);align-items:center;">
-      <button class="btn btn-secondary btn-sm" onclick="wizTestProvider(${i})" id="wiz-prov-${i}-test-btn"
+      ${p.auth_method === 'oauth' ? '' : `<button class="btn btn-secondary btn-sm" onclick="wizTestProvider(${i})" id="wiz-prov-${i}-test-btn"
         title="${p.existing ? t('wizard.provider_retest_title') : ''}">
         ${p.existing ? t('wizard.provider_retest') : t('wizard.test_connection')}
-      </button>
+      </button>`}
       <span id="wiz-prov-${i}-status">${status}</span>
     </div>
   </div>`;
@@ -320,13 +325,56 @@ function wizAddProvider() {
 function wizSelectProviderType(type) {
   const meta = _PROVIDER_TYPES.find(x => x.type === type);
   if (!meta) return;
+
+  if (type === 'anthropic') {
+    // Auth-Methode wählen
+    const list = document.getElementById('wiz-providers-list');
+    const lastCard = list.lastElementChild;
+    if (lastCard) lastCard.innerHTML = `
+      <p style="font-size:13px;font-weight:600;margin-bottom:var(--sp-3);">Anthropic — ${t('config_provider.auth_method_apikey')} / OAuth</p>
+      <div class="provider-type-grid">
+        <div class="provider-type-card" onclick="wizAddAnthropicProvider('api_key')">
+          <div style="font-size:24px;margin-bottom:4px;">&#128273;</div>
+          <div class="provider-type-card-name">${t('config_provider.auth_method_apikey')}</div>
+          <div class="provider-type-card-desc">${t('config_provider.auth_method_apikey_desc')}</div>
+        </div>
+        <div class="provider-type-card" onclick="wizAddAnthropicProvider('oauth')">
+          <div style="font-size:24px;margin-bottom:4px;">&#128272;</div>
+          <div class="provider-type-card-name">${t('config_provider.auth_method_oauth')}</div>
+          <div class="provider-type-card-desc">${t('config_provider.auth_method_oauth_desc')}</div>
+        </div>
+      </div>
+      <div style="margin-top:var(--sp-3);text-align:right;">
+        <button class="btn btn-secondary btn-sm" onclick="this.closest('.wizard-provider-card').remove()">
+          ${t('common.cancel')}
+        </button>
+      </div>`;
+    return;
+  }
+
   _wizState.providers.push({
     type,
     name: meta.label,
     url:  _PROVIDER_DEFAULTS[type] || '',
     key:  '',
+    auth_method: 'api_key',
     models: [],
     tested: false,
+  });
+  _wizRenderProviders();
+  _wizUpdateNextBtn();
+}
+
+function wizAddAnthropicProvider(authMethod) {
+  const meta = _PROVIDER_TYPES.find(x => x.type === 'anthropic');
+  _wizState.providers.push({
+    type:        'anthropic',
+    name:        meta.label,
+    url:         _PROVIDER_DEFAULTS.anthropic,
+    key:         '',
+    auth_method: authMethod,
+    models:      authMethod === 'oauth' ? ['claude-opus-4-5', 'claude-sonnet-4-5', 'claude-haiku-4-5'] : [],
+    tested:      authMethod === 'oauth',  // OAuth: direkt als "bereit" markieren
   });
   _wizRenderProviders();
   _wizUpdateNextBtn();
@@ -862,10 +910,11 @@ async function wizFinish() {
     const payload = {
       mode:          _wizState.mode || 'fresh',
       providers:     _wizState.providers.map(p => ({
-        type: p.type,
-        name: p.name,
-        url:  p.url,
-        key:  p.key,  // empty string = "do not change" in extend mode
+        type:        p.type,
+        name:        p.name,
+        url:         p.url,
+        key:         p.key,  // empty string = "do not change" in extend mode
+        auth_method: p.auth_method || 'api_key',
       })),
       users:         _wizState.users,
       ha_assist_llm: _wizState.haAssistLlm,
