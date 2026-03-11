@@ -104,7 +104,7 @@ else
     # Changelog der neuen Commits anzeigen
     echo ""
     echo "  Neue Commits:"
-    git log --oneline "${OLD_HASH}..${NEW_HASH}" | sed 's/^/    /'
+    su -s /bin/bash haana -c "git -C /opt/haana log --oneline '${OLD_HASH}..${NEW_HASH}'" | sed 's/^/    /'
 fi
 echo ""
 
