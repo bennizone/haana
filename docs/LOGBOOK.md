@@ -4,6 +4,24 @@ Chronologische Dokumentation der wichtigsten Aenderungen am HAANA-Projekt.
 
 ---
 
+## 2026-03-11 — README aktualisiert (Proxmox Oneliner + Companion Addon)
+
+**Aenderungen:**
+- `README.md`: Vollstaendig neu geschrieben — spiegelt aktuelle Architektur wider
+
+**Entscheidungen:**
+- Primaere Installationsmethode ist jetzt Proxmox LXC via Oneliner (`install.sh`)
+- HA Companion Addon als Schritt 2 (leichtgewichtig, ~5MB, verbindet HA mit LXC)
+- HA Addon als Primaerinstallation entfernt (Disk-Probleme auf HAOS, siehe MEMORY.md)
+- README bleibt kurz und auf Deutsch (Zielgruppe DE)
+
+**Offene Punkte:**
+- `install.sh` und `update.sh` muessen noch auf GitHub veroeffentlicht werden (URLs im README noch nicht aktiv)
+
+**Rollback:** `git revert 2715ba1`
+
+---
+
 ## 2026-03-11 — MS7b: install.sh Dev-Workflow + Claude Code Auto-Start
 
 **Aenderungen:**
