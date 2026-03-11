@@ -55,6 +55,7 @@ if [ "${HAANA_SELF_UPDATED:-0}" != "1" ]; then
         if [ "$LOCAL_HASH" != "$REMOTE_HASH" ]; then
             echo -e "  Neue Version gefunden — Update-Script wird aktualisiert."
             cp "$REMOTE_TMP" /opt/haana/update.sh
+            chown haana:haana /opt/haana/update.sh
             chmod +x /opt/haana/update.sh
             rm -f "$REMOTE_TMP"
             echo -e "  Starte neue Version..."
@@ -91,8 +92,6 @@ echo -e "${YELLOW}→ HAANA Code aktualisieren...${NC}"
 cd /opt/haana
 
 OLD_HASH=$(su -s /bin/bash haana -c "git -C /opt/haana rev-parse --short HEAD")
-# update.sh wurde ggf. durch Self-Update lokal geändert → vor Pull zurücksetzen
-su -s /bin/bash haana -c "git -C /opt/haana checkout -- update.sh" 2>/dev/null || true
 su -s /bin/bash haana -c "git -C /opt/haana pull"
 NEW_HASH=$(su -s /bin/bash haana -c "git -C /opt/haana rev-parse --short HEAD")
 
