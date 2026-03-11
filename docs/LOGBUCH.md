@@ -5,6 +5,27 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ---
 
+## 2026-03-11 — MS6: UX-Verbesserungen
+
+**Aenderungen:**
+- Web-Suche-Praeferenz: `instanzen/templates/user.md` + `instanzen/templates/ha-advanced.md` → Agent bevorzugt web_search fuer Faktenfragen
+- Fortschritts-Feedback via WhatsApp: "Moment, ich suche..." bei web_search/understand_image (`core/agent.py` _send_feedback(), `core/api.py`, `whatsapp-bridge/index.js` POST /internal/feedback)
+- Delegation-Feedback: Transition-Satz vor [DELEGATE] wird in HA-Antwort integriert (`core/ollama_compat.py`, `instanzen/templates/ha-assist.md`)
+- Nachrichten-Debounce 500ms: Bild+Caption, Tippfehler-Korrekturen werden gebuendelt (`whatsapp-bridge/index.js` enqueueMessage() + processQueue())
+- Abort laufender Anfragen bei neuer Nachricht gleichen Senders (AbortController per Sender)
+
+**Entscheidungen:**
+- Debounce 500ms als Kompromiss: schnell genug fuer normale Nutzung, langsam genug fuer Bild+Caption
+- Feedback nur auf WhatsApp-Channels (nicht HTTP-API) um keine REST-Clients zu stoeren
+- BRIDGE_CALLBACK_URL als Env-Var damit haana-core die Bridge zurueckrufen kann
+
+**Offene Punkte:**
+- Feedback-Texte sind noch hartcodiert in agent.py (kein i18n)
+
+**Rollback:** `git revert 16d92cb`
+
+---
+
 ## 2026-03-09 — MS5: Git-Integration + Beta-Readiness
 
 **Anderungen:**
