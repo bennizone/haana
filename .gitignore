@@ -211,3 +211,10 @@ data/
 .claude/
 !.claude/agents/
 test-results/
+
+# User-Instanzen (werden dynamisch durch Admin UI erstellt, nicht versioniert)
+instanzen/*/
+!instanzen/ha-advanced/
+!instanzen/haana-admin/
+!instanzen/ha-assist/
+!instanzen/templates/
