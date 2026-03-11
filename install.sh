@@ -64,7 +64,7 @@ get_template() {
 
     # 1. Lokal vorhanden?
     local local_tmpl
-    local_tmpl=$(pveam list "$storage" 2>/dev/null | awk '{print $1}' | grep "$os_search" | sort -V | tail -1)
+    local_tmpl=$(pveam list "$storage" 2>/dev/null | awk '{print $1}' | grep "$os_search" | sort -V | tail -1 || true)
     if [ -n "$local_tmpl" ]; then
         TEMPLATE=$(basename "$local_tmpl")
         msg_ok "Template lokal gefunden: $TEMPLATE"
@@ -76,12 +76,12 @@ get_template() {
     pveam update >/dev/null 2>&1 || true
 
     local online_tmpl
-    online_tmpl=$(pveam available -section system 2>/dev/null | awk '{print $2}' | grep "$os_search" | sort -V | tail -1)
+    online_tmpl=$(pveam available -section system 2>/dev/null | awk '{print $2}' | grep "$os_search" | sort -V | tail -1 || true)
 
     if [ -z "$online_tmpl" ]; then
         # Fallback: debian-13
         msg_warn "Kein Debian 12 Template gefunden — versuche Debian 13..."
-        online_tmpl=$(pveam available -section system 2>/dev/null | awk '{print $2}' | grep "debian-13-standard" | sort -V | tail -1)
+        online_tmpl=$(pveam available -section system 2>/dev/null | awk '{print $2}' | grep "debian-13-standard" | sort -V | tail -1 || true)
     fi
 
     if [ -z "$online_tmpl" ]; then
