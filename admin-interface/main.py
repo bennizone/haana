@@ -739,6 +739,15 @@ async def auth_status(request: Request):
     """Gibt Auth-Status und Modus zurück. Immer erreichbar (kein Auth-Guard)."""
     mode = "ingress" if _auth.IS_INGRESS_MODE else "standalone"
     authenticated = _auth.is_authenticated(request)
+    # Companion-Token als Auth akzeptieren
+    if not authenticated:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            bearer = auth_header[7:].strip()
+            cfg = load_config()
+            companion_token = cfg.get("companion_token", "")
+            if companion_token and bearer and secrets.compare_digest(bearer, companion_token):
+                authenticated = True
     return {"authenticated": authenticated, "mode": mode}
 
 
