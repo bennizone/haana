@@ -91,6 +91,8 @@ echo -e "${YELLOW}→ HAANA Code aktualisieren...${NC}"
 cd /opt/haana
 
 OLD_HASH=$(su -s /bin/bash haana -c "git -C /opt/haana rev-parse --short HEAD")
+# update.sh wurde ggf. durch Self-Update lokal geändert → vor Pull zurücksetzen
+su -s /bin/bash haana -c "git -C /opt/haana checkout -- update.sh" 2>/dev/null || true
 su -s /bin/bash haana -c "git -C /opt/haana pull"
 NEW_HASH=$(su -s /bin/bash haana -c "git -C /opt/haana rev-parse --short HEAD")
 
