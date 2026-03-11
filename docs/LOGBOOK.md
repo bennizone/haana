@@ -4,6 +4,24 @@ Chronologische Dokumentation der wichtigsten Aenderungen am HAANA-Projekt.
 
 ---
 
+## 2026-03-11 — Pre-Release Code Quality Fixes (Commit 9348fa6)
+
+**Aenderungen:**
+- `core/agent.py`: `asyncio.create_task` fuer Feedback-Nachrichten mit `done_callback` gesichert — verhindert silent GC bei unbehandelten Exceptions
+- `whatsapp-bridge/index.js`: `sentVoice`-Bedingung vereinfacht (`!wasVoice` genuegt), toter Logikzweig entfernt
+- `admin-interface/main.py`: FastAPI `@app.on_event("startup")` (deprecated) auf `lifespan`-Pattern mit `asynccontextmanager` migriert
+
+**Entscheidungen:**
+- Lifespan-Pattern ist ab FastAPI 0.93 der empfohlene Weg; `on_event` wird in kuenftigen Versionen entfernt
+- `done_callback` auf Tasks ist Best Practice damit Exceptions nicht lautlos verschluckt werden
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert 9348fa6`
+
+---
+
 ## 2026-03-11 — Voice Text-First, Timezone-Fix, Minimax MCP (Web-Suche + Bildanalyse)
 
 **Aenderungen:**
