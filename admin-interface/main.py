@@ -194,7 +194,7 @@ app.add_middleware(AuthMiddleware)
 # status: "idle" | "running" | "done" | "error" | "cancelled"
 _rebuild: dict[str, dict] = {
     inst: {"status": "idle", "done": 0, "total": 0, "started": 0.0, "error": ""}
-    for inst in ["alice", "bob", "ha-assist", "ha-advanced", "haana-admin"]
+    for inst in ["ha-assist", "ha-advanced", "haana-admin"]
 }
 
 
@@ -296,7 +296,7 @@ def _get_log_root() -> Path:
 
 LOG_ROOT = _get_log_root()
 
-INSTANCES = ["alice", "bob", "ha-assist", "ha-advanced", "haana-admin"]  # statische Basis-Instanzen
+INSTANCES = ["ha-assist", "ha-advanced", "haana-admin"]  # nur System-Instanzen; User-Instanzen kommen aus config.json
 
 def get_all_instances() -> list[str]:
     """Alle Instanzen: statische + dynamische User aus config.json."""
@@ -311,8 +311,6 @@ def get_all_instances() -> list[str]:
 
 # Agent-API URLs (aus Env, Fallback für lokale Entwicklung)
 AGENT_URLS: dict[str, str] = {
-    "alice":        os.environ.get("AGENT_URL_BENNI",        "http://localhost:8001"),
-    "bob":         os.environ.get("AGENT_URL_DOMI",         "http://localhost:8002"),
     "ha-assist":    os.environ.get("AGENT_URL_HA_ASSIST",    "http://localhost:8003"),
     "ha-advanced":  os.environ.get("AGENT_URL_HA_ADVANCED",  "http://localhost:8004"),
     "haana-admin":  os.environ.get("AGENT_URL_HAANA_ADMIN",  "http://localhost:8005"),
@@ -328,7 +326,7 @@ _BRIDGE_SECRET = os.environ.get("HAANA_BRIDGE_SECRET", "").strip()
 HOST_BASE       = os.environ.get("HAANA_HOST_BASE",        "/opt/haana")
 DATA_VOLUME     = os.environ.get("HAANA_DATA_VOLUME",       "haana_haana-data")
 COMPOSE_NETWORK = os.environ.get("HAANA_COMPOSE_NETWORK",  "haana_default")
-AGENT_IMAGE     = os.environ.get("HAANA_AGENT_IMAGE",       "haana-instanz-alice")
+AGENT_IMAGE     = os.environ.get("HAANA_AGENT_IMAGE",       "")
 TEMPLATES_DIR   = INST_DIR / "templates"
 
 # ── Default-Konfiguration ────────────────────────────────────────────────────

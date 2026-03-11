@@ -69,7 +69,7 @@ def create_notify_router(
 
         Erwartet JSON:
           {
-            "instance": "alice",           # Pflicht: Agent-Instanz
+            "instance": "mein-user",       # Pflicht: Agent-Instanz
             "message": "Waschmaschine fertig!",  # Pflicht: Nachricht/Event-Beschreibung
             "event": "washer_done",        # Optional: Event-Typ (fuer Logging)
             "channel": "whatsapp",         # Optional: Ziel-Channel (default: whatsapp)

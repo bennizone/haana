@@ -951,7 +951,7 @@ async def _main():
     except ImportError:
         pass
 
-    instance = os.environ.get("HAANA_INSTANCE", "alice")
+    instance = os.environ.get("HAANA_INSTANCE", "")
 
     try:
         agent = HaanaAgent(instance)

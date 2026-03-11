@@ -13,6 +13,13 @@
 
 **Regel: Hauptagent programmiert NICHT selbst.** Alle Code-Aenderungen gehen ueber Sub-Agenten.
 
+**Coding-Regel: Keine userspezifischen Daten im Code.**
+- NIEMALS Usernamen ("alice", "bob" o.ae.) hardcodieren — weder als Default, Fallback noch in Listen
+- User-Instanzen kommen aus `config.json` (`cfg["users"]`), nie aus dem Code
+- Memory-Scopes dynamisch: `{instance}_memory` — kein hardcodiertes `alice_memory`
+- IP-Adressen, Tokens, Passwörter gehoeren in `.env`, nie in Code oder Tests
+- Default-Werte fuer Instanznamen: leer (`""`) oder aus Config — nie ein echter Username
+
 **Pipeline:** Plan -> dev/webdev (parallel, Hintergrund) -> reviewer -> fixes -> docs -> commit -> deploy
 
 **Deployment:** Nach erfolgreichem Review+Commit immer `docker compose up -d --build <service>` ausfuehren.

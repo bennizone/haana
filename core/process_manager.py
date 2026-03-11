@@ -624,7 +624,7 @@ def create_agent_manager(mode: str, *, main_app=None, docker_client=None,
             data_volume=kwargs.get("data_volume", os.environ.get("HAANA_DATA_VOLUME", "haana_haana-data")),
             media_volume=kwargs.get("media_volume", os.environ.get("HAANA_MEDIA_VOLUME", "haana_haana-media")),
             compose_network=kwargs.get("compose_network", os.environ.get("HAANA_COMPOSE_NETWORK", "haana_default")),
-            agent_image=kwargs.get("agent_image", os.environ.get("HAANA_AGENT_IMAGE", "haana-instanz-alice")),
+            agent_image=kwargs.get("agent_image", os.environ.get("HAANA_AGENT_IMAGE", "")),
             resolve_llm_fn=resolve_llm_fn,
             find_ollama_url_fn=find_ollama_url_fn,
         )

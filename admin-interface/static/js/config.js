@@ -2076,9 +2076,9 @@ async function uploadProviderCredentials(i) {
 // ── Dream Process ────────────────────────────────────────────────────────────
 
 function _dreamGetInstance() {
-  // Erste verfügbare Instanz aus Memory-Stats, sonst 'alice'
+  // Erste verfügbare Instanz aus Memory-Stats, sonst leer
   if (_memStats && _memStats.length > 0) return _memStats[0].instance;
-  return 'alice';
+  return '';
 }
 
 async function loadDreamStatus() {

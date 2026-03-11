@@ -65,3 +65,12 @@ HAANA ist ein KI-Assistenten-Stack fuer Smart Home (Home Assistant), bestehend a
 - Qdrant (Vector DB fuer Memory), Ollama (lokale LLMs)
 - Vanilla JS (kein Framework), Jinja2 Templates
 - i18n: de.json + en.json (Paritaet Pflicht)
+
+## Coding-Regeln (ABSOLUT VERBINDLICH)
+
+### Keine userspezifischen Daten im Code
+- **NIEMALS** Usernamen (z.B. "alice", "bob") hardcodieren — weder als Default, Fallback, Kommentar-Beispiel noch in Listen
+- User-Instanzen kommen IMMER aus `config.json` (`cfg["users"]`), nie aus dem Code
+- Memory-Scopes sind dynamisch: `{instance}_memory` — kein hardcodiertes `alice_memory` etc.
+- IP-Adressen, Tokens, Passwörter gehoeren in `.env` (nie in Code oder Tests)
+- Default-Werte fuer Instanz-Namen: leer (`""`) oder aus Config — nie ein echter Username

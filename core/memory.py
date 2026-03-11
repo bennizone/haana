@@ -1,10 +1,9 @@
 """
 HAANA Memory – Mem0 + Qdrant Wrapper
 
-Drei Scopes mit separaten Qdrant-Collections:
-  alice_memory  – Alicees persönliche Erinnerungen
-  bob_memory   – Bobs persönliche Erinnerungen
-  household_memory    – gemeinsamer Haushaltskontext
+Scopes mit separaten Qdrant-Collections:
+  {instance}_memory – persönliche Erinnerungen pro User-Instanz
+  household_memory  – gemeinsamer Haushaltskontext
 
 LLM für Memory-Extraktion: Ollama (kein API-Key nötig).
 Embedder: Ollama bge-m3, FastEmbed (lokal/CPU) oder OpenAI/Gemini.
@@ -39,25 +38,28 @@ import core.logger as haana_log
 
 logger = logging.getLogger(__name__)
 
-VALID_SCOPES = {"alice_memory", "bob_memory", "household_memory", "admin_memory"}
+_SYSTEM_INSTANCES: frozenset[str] = frozenset({"ha-assist", "ha-advanced", "haana-admin"})
 
-# Schreibberechtigungen pro Instanz
-_WRITE_SCOPES: dict[str, set[str]] = {
-    "alice":        {"alice_memory", "household_memory"},
-    "bob":         {"bob_memory", "household_memory"},
-    "ha-assist":    set(),
-    "ha-advanced":  {"household_memory"},
-    "haana-admin":  {"admin_memory"},
-}
+VALID_SCOPES: set[str] = {"household_memory", "admin_memory"}
 
-# Leseberechtigungen pro Instanz
-_READ_SCOPES: dict[str, set[str]] = {
-    "alice":        {"alice_memory", "household_memory"},
-    "bob":         {"bob_memory", "household_memory"},
-    "ha-assist":    {"alice_memory", "bob_memory", "household_memory"},
-    "ha-advanced":  {"alice_memory", "bob_memory", "household_memory"},
-    "haana-admin":  {"admin_memory", "household_memory"},
-}
+
+def _get_user_scopes(instance: str) -> set[str]:
+    if instance in _SYSTEM_INSTANCES:
+        return {"household_memory", "admin_memory"}
+    return {f"{instance}_memory", "household_memory"}
+
+
+def get_read_scopes(instance: str, all_instances: list[str] | None = None) -> set[str]:
+    if instance in _SYSTEM_INSTANCES and all_instances:
+        user_scopes = {f"{i}_memory" for i in all_instances if i not in _SYSTEM_INSTANCES}
+        return user_scopes | {"household_memory", "admin_memory"}
+    return _get_user_scopes(instance)
+
+
+def get_write_scopes(instance: str) -> set[str]:
+    if instance == "ha-assist":
+        return set()
+    return _get_user_scopes(instance)
 
 
 def _get_qdrant_host_port(qdrant_url: str = "") -> tuple[str, int]:
@@ -467,12 +469,12 @@ def _load_scopes(instance_name: str) -> tuple[set[str], set[str]]:
     write = (
         {s.strip() for s in write_env.split(",") if s.strip()}
         if write_env is not None
-        else _WRITE_SCOPES.get(instance_name, set())
+        else get_write_scopes(instance_name)
     )
     read = (
         {s.strip() for s in read_env.split(",") if s.strip()}
         if read_env is not None
-        else _READ_SCOPES.get(instance_name, set())
+        else get_read_scopes(instance_name)
     )
     return write, read
 
@@ -883,7 +885,7 @@ class HaanaMemory:
 
         # Versuch 1: Scope aus Agentenantwort lesen
         match = re.search(
-            r"\b(alice_memory|bob_memory|household_memory)\b",
+            r"\b(\w+_memory)\b",
             assistant_response,
         )
         if match and match.group(1) in self.write_scopes:
