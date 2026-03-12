@@ -2009,6 +2009,16 @@ async function startProviderOAuthLogin(i) {
   codeSection.style.display = 'none';
 
   try {
+    // Provider-Config sicherstellen bevor OAuth startet
+    statusEl.innerHTML = `<span style="color:var(--muted)">${t('config.saving')}\u2026</span>`;
+    const providers = collectProviders();
+    const saveResp = await _patchConfig({ ...cfg, providers });
+    if (!saveResp.ok) {
+      statusEl.innerHTML = `<span style="color:var(--red)">✗ ${t('config.save_failed')}</span>`;
+      return;
+    }
+    cfg.providers = providers;
+
     const r = await fetch(`/api/claude-auth/login/start/${encodeURIComponent(p.id)}`, { method: 'POST' });
     const d = await r.json();
     if (!d.ok) {

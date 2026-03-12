@@ -114,6 +114,8 @@
     "reset": "Zurücksetzen",
     "saved": "Gespeichert",
     "save_error": "Fehler beim Speichern",
+    "saving": "Speichern",
+    "save_failed": "Config-Speichern fehlgeschlagen",
     "load_failed": "Config-Laden fehlgeschlagen",
     "restart_title": "Neustart erforderlich",
     "restart_prompt": "Folgende Änderungen erfordern einen Neustart der Agenten:",

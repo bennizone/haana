@@ -114,6 +114,8 @@
     "reset": "Reset",
     "saved": "Saved",
     "save_error": "Error saving",
+    "saving": "Saving",
+    "save_failed": "Config save failed",
     "load_failed": "Config loading failed",
     "restart_title": "Restart required",
     "restart_prompt": "The following changes require an agent restart:",

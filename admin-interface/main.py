@@ -3341,11 +3341,15 @@ async def claude_auth_login_complete(request: Request):
 @app.get("/api/claude-auth/status/{provider_id}")
 async def claude_auth_status_provider(provider_id: str):
     """Prüft ob gültige Claude OAuth-Credentials für einen Provider vorliegen."""
+    if not re.match(r'^[a-z0-9][a-z0-9-]*$', provider_id):
+        raise HTTPException(400, "Ungültige Provider-ID")
     cfg = load_config()
     prov = next((p for p in cfg.get("providers", []) if p["id"] == provider_id), None)
-    if not prov:
-        raise HTTPException(404, "Provider nicht gefunden")
-    oauth_dir = Path(prov.get("oauth_dir", f"/data/claude-auth/{provider_id}"))
+    if prov:
+        oauth_dir = Path(prov.get("oauth_dir", f"/data/claude-auth/{provider_id}"))
+    else:
+        # Fallback: Standard-Pfad prüfen (Provider noch nicht in Config gespeichert)
+        oauth_dir = Path(f"/data/claude-auth/{provider_id}")
     creds_file = oauth_dir / ".credentials.json"
     if not creds_file.exists():
         return {"ok": False, "status": "no_credentials", "detail": "Keine Credentials gefunden"}
@@ -3383,6 +3387,8 @@ async def claude_auth_login_start_provider(provider_id: str):
 @app.post("/api/claude-auth/login/complete/{provider_id}")
 async def claude_auth_login_complete_provider(provider_id: str, request: Request):
     """Complete OAuth login for a specific provider: send the authorization code."""
+    if not re.match(r'^[a-z0-9][a-z0-9-]*$', provider_id):
+        raise HTTPException(400, "Ungültige Provider-ID")
     body = await request.json()
     code = body.get("code", "").strip()
     if not code:
@@ -3396,26 +3402,30 @@ async def claude_auth_login_complete_provider(provider_id: str, request: Request
     prov = next((p for p in cfg.get("providers", []) if p["id"] == provider_id), None)
     if prov:
         oauth_dir = Path(prov.get("oauth_dir", f"/data/claude-auth/{provider_id}"))
-        global_creds = CLAUDE_AUTH_DIR / ".credentials.json"
-        if global_creds.exists():
-            try:
-                import shutil
-                oauth_dir.mkdir(parents=True, exist_ok=True)
-                dest = oauth_dir / ".credentials.json"
-                shutil.copy2(str(global_creds), str(dest))
-                os.chmod(dest, 0o600)
-                import subprocess
-                subprocess.run(["chown", "1000:1000", str(dest)], check=False)
-                logger.info(f"OAuth credentials kopiert: {global_creds} → {dest}")
-                # Nur als Erfolg melden wenn die Credentials tatsächlich gültig sind
-                if not result.get("ok"):
-                    creds = json.loads(dest.read_text(encoding="utf-8"))
-                    oauth = creds.get("claudeAiOauth", {})
-                    expires_at = oauth.get("expiresAt", 0) / 1000
-                    if oauth.get("accessToken") and (expires_at == 0 or expires_at > time.time()):
-                        result = {"ok": True, "detail": "Login successful. Credentials saved."}
-            except Exception as e:
-                logger.error(f"OAuth credential copy failed: {e}")
+    else:
+        # Provider noch nicht in Config gespeichert — verwende Standard-Pfad
+        oauth_dir = Path(f"/data/claude-auth/{provider_id}")
+        logger.warning(f"Provider {provider_id!r} nicht in Config — Credentials in Standard-Pfad: {oauth_dir}")
+    global_creds = CLAUDE_AUTH_DIR / ".credentials.json"
+    if global_creds.exists():
+        try:
+            import shutil
+            oauth_dir.mkdir(parents=True, exist_ok=True)
+            dest = oauth_dir / ".credentials.json"
+            shutil.copy2(str(global_creds), str(dest))
+            os.chmod(dest, 0o600)
+            import subprocess
+            subprocess.run(["chown", "1000:1000", str(dest)], check=False)
+            logger.info(f"OAuth credentials kopiert: {global_creds} → {dest}")
+            # Nur als Erfolg melden wenn die Credentials tatsächlich gültig sind
+            if not result.get("ok"):
+                creds = json.loads(dest.read_text(encoding="utf-8"))
+                oauth = creds.get("claudeAiOauth", {})
+                expires_at = oauth.get("expiresAt", 0) / 1000
+                if oauth.get("accessToken") and (expires_at == 0 or expires_at > time.time()):
+                    result = {"ok": True, "detail": "Login successful. Credentials saved."}
+        except Exception as e:
+            logger.error(f"OAuth credential copy failed: {e}")
 
     return result
 
