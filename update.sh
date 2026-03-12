@@ -92,8 +92,8 @@ echo -e "${YELLOW}→ HAANA Code aktualisieren...${NC}"
 cd /opt/haana
 
 OLD_HASH=$(su -s /bin/bash haana -c "git -C /opt/haana rev-parse --short HEAD")
-su -s /bin/bash haana -c "git -C /opt/haana reset --hard HEAD"
-su -s /bin/bash haana -c "git -C /opt/haana pull"
+su -s /bin/bash haana -c "git -C /opt/haana fetch origin"
+su -s /bin/bash haana -c "git -C /opt/haana reset --hard origin/main"
 NEW_HASH=$(su -s /bin/bash haana -c "git -C /opt/haana rev-parse --short HEAD")
 
 if [ "$OLD_HASH" = "$NEW_HASH" ]; then
