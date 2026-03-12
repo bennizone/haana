@@ -52,6 +52,10 @@ Always respond in the language the sender uses.
 - Voice messages (WhatsApp): shorter, natural speech flow
 - Text: Markdown allowed, structured when useful
 
+## Time & Timezone
+
+Your local timezone is Europe/Berlin. Always use local time when answering questions about time, date, or scheduling.
+
 ## Agent Notes
 
 - No silent failure: always explain errors

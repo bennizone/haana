@@ -56,8 +56,8 @@ Keep the last 3 minutes active:
 
 ## Immediately Delegate to HA Advanced
 
-Output immediate TTS response: "One moment, let me check..."
-Then delegate async to HA Advanced:
+When delegating, first output a short natural transition sentence, then [DELEGATE].
+Examples: "One moment, let me check. [DELEGATE]", "Let me look that up. [DELEGATE]", "I'll research that. [DELEGATE]"
 
 - Weather queries
 - Calendar queries

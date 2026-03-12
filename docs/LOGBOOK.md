@@ -4,6 +4,42 @@ Chronologische Dokumentation der wichtigsten Aenderungen am HAANA-Projekt.
 
 ---
 
+## 2026-03-12 — System-Prompts auf direkte Nutzeransprache umgestellt
+
+**Aenderungen:**
+- `instanzen/templates/user.md`: Identity-Sektion auf direkte Ansprache umgestellt ("You are currently speaking with {{DISPLAY_NAME}}"); Memory-Warnung als eigener Block in `## Memory Behavior`
+- `instanzen/templates/admin.md`: Time & Timezone und Web Search Sektionen ergaenzt (Paritaet mit user.md)
+- `instanzen/ha-assist/CLAUDE.md`, `instanzen/ha-advanced/CLAUDE.md`, `instanzen/haana-admin/CLAUDE.md`: Aus aktualisierten Templates regeneriert
+
+**Entscheidungen:**
+- "You are currently speaking with X" statt "You are HAANA's instance for X": direktere Formulierung vermeidet Dritte-Person-Selbstbeschreibung, wirkt natuerlicher in Konversationen
+- "I'm your HAANA assistant" statt Dritte-Person bei Model-Identity-Antworten: konsistenter Ich-Stil
+- Memory-Warnung als eigener Block: hoehere Sichtbarkeit, verhindert versehentliche Tool-Nutzung fuer Memory-Writes
+- admin.md Paritaet mit user.md: Admin-Instanz hat jetzt dieselben Zeitzone- und Web-Search-Instruktionen
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert <hash-nach-commit>`
+
+---
+
+## 2026-03-12 — Log-Verzeichnisse beim Startup anlegen (Commit 0afa2b4)
+
+**Aenderungen:**
+- `admin-interface/main.py`: Im `lifespan`-Handler werden beim Start automatisch die Verzeichnisse `logs/conversations`, `logs/memory-ops`, `logs/dream` und `logs/errors` unterhalb von `HAANA_MEDIA_DIR` (Default `/media/haana`) angelegt. Eigentuemerschaft wird per `os.chown` auf `HAANA_UID` (Default `1000`) gesetzt. Fehler werden als WARNING geloggt, nicht als Exception.
+
+**Entscheidungen:**
+- Verhindert Permission-Fehler bei Neuinstallation und neuen Usern ohne manuelle Vorbereitung der Verzeichnisstruktur.
+- `HAANA_UID` als Env-Variable statt Hardcoding, damit der Container flexibel auf unterschiedliche Host-UIDs reagiert.
+
+**Offene Punkte:**
+- Kein offener Punkt.
+
+**Rollback:** `git revert 0afa2b4`
+
+---
+
 ## 2026-03-12 — Embedding-Refactoring, HA Users Sync, UI-Fixes (Commit b6967f8)
 
 **Aenderungen:**
