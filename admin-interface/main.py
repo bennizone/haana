@@ -425,7 +425,7 @@ DEFAULT_CONFIG = {
         },
     ],
     "ollama_compat": {
-        "enabled": False,
+        "enabled": True,
         "exposed_models": ["ha-assist", "ha-advanced"],
     },
     "dream": {
@@ -1498,6 +1498,57 @@ async def get_status():
     status["hints"] = hints
 
     return status
+
+
+@app.get("/api/status/ollama-compat")
+async def get_ollama_compat_status(request: Request):
+    if not _auth.is_authenticated(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    cfg = load_config()
+    oc = cfg.get("ollama_compat", {})
+    enabled = oc.get("enabled", True)
+    exposed = oc.get("exposed_models", ["ha-assist", "ha-advanced"])
+    users = cfg.get("users", [])
+    llms = {l["id"]: l for l in cfg.get("llms", [])}
+    providers = {p["id"]: p for p in cfg.get("providers", [])}
+
+    agents = []
+    for user in users:
+        uid = user.get("id", "")
+        primary_llm_id = user.get("primary_llm", "")
+        llm = llms.get(primary_llm_id)
+        provider = providers.get(llm.get("provider_id", "")) if llm else None
+
+        # Grund warum nicht als Fake-LLM verfuegbar
+        reason = None
+        if not enabled:
+            reason = "ollama_compat_disabled"
+        elif not primary_llm_id:
+            reason = "no_primary_llm"
+        elif not llm:
+            reason = "llm_not_found"
+        elif not provider:
+            reason = "provider_not_found"
+
+        # Nur exposed_models erscheinen als dedizierte Proxy-Modelle
+        # Alle anderen User-Agents erscheinen ebenfalls (direkt geroutet)
+        is_exposed = uid in exposed
+        available = enabled and bool(llm) and bool(provider)
+
+        agents.append({
+            "id": uid,
+            "name": user.get("name", uid),
+            "available": available,
+            "is_proxy_model": is_exposed,
+            "primary_llm": primary_llm_id or None,
+            "llm_model": llm.get("model", "") if llm else None,
+            "reason": reason,
+        })
+
+    return {
+        "enabled": enabled,
+        "agents": agents,
+    }
 
 
 # ── Chat-Proxy (Webchat → Agent-API) ─────────────────────────────────────────

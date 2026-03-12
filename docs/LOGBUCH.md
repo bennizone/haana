@@ -5,6 +5,16 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ---
 
+## 2026-03-12 — Ollama-Compat Status-Sektion + Default-Fix
+
+- `ollama_compat.enabled` Default auf `True` gesetzt (war False — frische Installs hatten Fake-Ollama deaktiviert)
+- GET `/api/status/ollama-compat`: listet alle Agenten mit Verfügbarkeit als Fake-LLM
+- Status-Tab: neue Sektion "Fake-Ollama-Server (HA Voice)" mit Agent-Liste + Fehlergrund
+- i18n: 9 neue status.ollama_* Keys + status.no_agents (700 Keys, paritätisch)
+- Reviewer Score: 8/10 (1 Finding gefixt: fehlender no_agents Key)
+
+---
+
 ## 2026-03-12 — WhatsApp Bridge Start/Stop Buttons
 
 **Aenderungen:**

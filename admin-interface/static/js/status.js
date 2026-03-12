@@ -1,7 +1,42 @@
 // status.js – Systemstatus laden/rendern (Qdrant, Ollama, Instanzen)
 
+async function loadOllamaCompatStatus() {
+  try {
+    const r = await fetch('/api/status/ollama-compat');
+    if (!r.ok) return;
+    const data = await r.json();
+    const el = document.getElementById('status-ollama-compat-list');
+    if (!el) return;
+
+    if (!data.enabled) {
+      el.innerHTML = `<span class="tag" style="background:rgba(251,191,36,.15);color:var(--yellow);">${t('status.ollama_compat_disabled')}</span>`;
+      return;
+    }
+
+    const rows = (data.agents || []).map(a => {
+      const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${a.available ? 'var(--green)' : 'var(--red)'};flex-shrink:0;"></span>`;
+      let detail = '';
+      if (!a.available) {
+        const reasonKey = 'status.ollama_reason_' + (a.reason || 'unknown');
+        detail = ` <span style="color:var(--muted);">— ${t(reasonKey) || escHtml(a.reason || '')}</span>`;
+      } else {
+        detail = a.llm_model ? ` <span style="color:var(--muted);">→ ${escHtml(a.llm_model)}</span>` : '';
+      }
+      const typeBadge = a.is_proxy_model
+        ? `<span class="tag" style="font-size:10px;">${t('status.ollama_proxy')}</span>`
+        : `<span class="tag" style="font-size:10px;">${t('status.ollama_agent')}</span>`;
+      return `<div class="status-row">${dot} ${typeBadge} <strong>${escHtml(a.name || a.id)}</strong>${detail}</div>`;
+    }).join('');
+
+    el.innerHTML = rows || `<span style="color:var(--muted);">${t('status.no_agents')}</span>`;
+  } catch(e) {
+    console.warn('ollama-compat status:', e);
+  }
+}
+
 async function loadStatus() {
   _renderStatusChecklist();
+  loadOllamaCompatStatus();
   const grid = document.getElementById('status-grid');
   grid.innerHTML = '<div class="status-card"><div class="empty-state"><div class="icon">...</div><div>' + t('status.checking') + '</div></div></div>';
   try {

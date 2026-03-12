@@ -953,8 +953,14 @@
       <div class="empty-state"><div class="icon">...</div><div data-i18n="status.loading">Status wird geladen...</div></div>
     </div>
   </div>
+  <div class="cfg-section" style="margin-top:16px;">
+    <h3 style="margin:0 0 var(--sp-3) 0;font-size:14px;font-weight:600;" data-i18n="status.ollama_compat_title">Fake-Ollama-Server (HA Voice)</h3>
+    <div id="status-ollama-compat-list">
+      <span style="color:var(--muted);" data-i18n="status.loading">Status wird geladen...</span>
+    </div>
+  </div>
   <div style="margin-top:16px;">
-    <button class="btn btn-secondary" onclick="loadStatus()">↺ Aktualisieren</button>
+    <button class="btn btn-secondary" onclick="loadStatus()" data-i18n="status.refresh">↺ Aktualisieren</button>
     <button class="btn btn-danger" onclick="restartAllAgentsStatus()" data-i18n="status.restart_all_btn" style="margin-left:8px;">⟳ Alle Agenten neu starten</button>
     <button class="btn btn-secondary" onclick="systemUpdate()" data-i18n="status.update_btn" style="margin-left:8px;">↑ Update</button>
   </div>
@@ -1065,7 +1071,7 @@
 <script src="/static/js/chat.js?v=5"></script>
 <script src="/static/js/config.js?v=20"></script>
 <script src="/static/js/users.js?v=7"></script>
-<script src="/static/js/status.js?v=5"></script>
+<script src="/static/js/status.js?v=6"></script>
 <script src="/static/js/logs.js?v=6"></script>
 <script src="/static/js/whatsapp.js?v=4"></script>
 <script src="/static/js/git.js?v=1"></script>

@@ -534,7 +534,17 @@
     "rebuild_banner": "Qdrant is empty – memory can be rebuilt from conversation logs.",
     "restart_all_btn": "Restart all agents",
     "update_btn": "Update",
-    "updating": "Update started — page reloads in ~60 seconds"
+    "updating": "Update started — page reloads in ~60 seconds",
+    "ollama_compat_title": "Fake Ollama Server (HA Voice)",
+    "ollama_compat_disabled": "Disabled",
+    "ollama_proxy": "Proxy Model",
+    "ollama_agent": "Agent",
+    "ollama_reason_no_primary_llm": "No primary LLM assigned",
+    "ollama_reason_llm_not_found": "LLM configuration missing",
+    "ollama_reason_provider_not_found": "Provider not found",
+    "ollama_reason_ollama_compat_disabled": "Fake Ollama disabled",
+    "ollama_reason_unknown": "Unknown error",
+    "no_agents": "No agents configured"
   },
   "whatsapp": {
     "connected": "Connected",
