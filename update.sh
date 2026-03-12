@@ -108,6 +108,15 @@ else
 fi
 echo ""
 
+# Script neu starten falls update.sh selbst durch git aktualisiert wurde
+if [ "${HAANA_GIT_UPDATED:-0}" != "1" ] && [ "$OLD_HASH" != "$NEW_HASH" ]; then
+    export HAANA_GIT_UPDATED=1
+    export HAANA_SELF_UPDATED=1
+    echo -e "  Script wurde aktualisiert — starte neue Version..."
+    echo ""
+    exec bash /opt/haana/update.sh
+fi
+
 # ── Agent-Image bauen ─────────────────────────────────────────────────────────
 echo -e "${YELLOW}→ Agent-Image bauen...${NC}"
 if docker build -t haana-instanz:latest /opt/haana/ 2>&1 | tail -3; then
