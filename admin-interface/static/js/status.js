@@ -9,12 +9,12 @@ async function loadOllamaCompatStatus() {
     if (!el) return;
 
     if (!data.enabled) {
-      el.innerHTML = `<span class="tag" style="background:rgba(251,191,36,.15);color:var(--yellow);">${t('status.ollama_compat_disabled')}</span>`;
+      el.innerHTML = `<span class="tag tag-warn">${t('status.ollama_compat_disabled')}</span>`;
       return;
     }
 
     const rows = (data.agents || []).map(a => {
-      const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${a.available ? 'var(--green)' : 'var(--red)'};flex-shrink:0;"></span>`;
+      const dot = `<span class="status-dot-sm ${a.available ? 'ok' : 'err'}"></span>`;
       let detail = '';
       if (!a.available) {
         const reasonKey = 'status.ollama_reason_' + (a.reason || 'unknown');
@@ -23,8 +23,8 @@ async function loadOllamaCompatStatus() {
         detail = a.llm_model ? ` <span style="color:var(--muted);">→ ${escHtml(a.llm_model)}</span>` : '';
       }
       const typeBadge = a.is_proxy_model
-        ? `<span class="tag" style="font-size:10px;">${t('status.ollama_proxy')}</span>`
-        : `<span class="tag" style="font-size:10px;">${t('status.ollama_agent')}</span>`;
+        ? `<span class="tag tag-xs">${t('status.ollama_proxy')}</span>`
+        : `<span class="tag tag-xs">${t('status.ollama_agent')}</span>`;
       return `<div class="status-row">${dot} ${typeBadge} <strong>${escHtml(a.name || a.id)}</strong>${detail}</div>`;
     }).join('');
 
@@ -68,7 +68,7 @@ async function loadStatus() {
     (memStats || []).forEach(m => memMap[m.instance] = m);
 
     const agentRows = agentHealth.map(a => {
-      const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${a.ok?'var(--green)':'var(--red)'};"></span>`;
+      const dot = `<span class="status-dot-sm ${a.ok ? 'ok' : 'err'}"></span>`;
       const mem = memMap[a.inst];
       const queueInfo = a.ok
         ? `<span style="font-size:11px;color:var(--muted);">Win: ${a.window_size??'?'} | Queue: ${a.pending_extractions??'?'}</span>`
@@ -78,9 +78,9 @@ async function loadStatus() {
         : '';
       const controls = `
         <div style="display:flex;gap:4px;margin-top:6px;">
-          <button class="btn btn-secondary" style="font-size:10px;padding:2px 8px;" onclick="instanceControl('${a.inst}','restart')">↺ Restart</button>
-          <button class="btn btn-secondary" style="font-size:10px;padding:2px 8px;" onclick="instanceControl('${a.inst}','stop')">Stop</button>
-          <button class="btn btn-danger"    style="font-size:10px;padding:2px 8px;" onclick="instanceForceStop('${a.inst}')">Kill</button>
+          <button class="btn btn-sm btn-secondary" onclick="instanceControl('${a.inst}','restart')">↺ Restart</button>
+          <button class="btn btn-sm btn-secondary" onclick="instanceControl('${a.inst}','stop')">Stop</button>
+          <button class="btn btn-sm btn-danger"    onclick="instanceForceStop('${a.inst}')">Kill</button>
         </div>`;
       return `<div class="status-row" style="flex-direction:column;align-items:flex-start;gap:2px;">
         <div style="display:flex;justify-content:space-between;width:100%;align-items:center;">
@@ -99,7 +99,7 @@ async function loadStatus() {
       <div class="status-card">
         <h3 style="display:flex;justify-content:space-between;align-items:center;">
           Qdrant
-          <button class="btn btn-secondary" style="font-size:10px;padding:2px 8px;" onclick="qdrantRestart()">\u21ba Restart</button>
+          <button class="btn btn-sm btn-secondary" onclick="qdrantRestart()">\u21ba Restart</button>
         </h3>
         <div class="status-row">
           <span>Status</span>

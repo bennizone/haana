@@ -5,6 +5,28 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ---
 
+## 2026-03-12 — Design-Vereinheitlichung + Bugfixes
+
+**Aenderungen:**
+- `admin-interface/static/css/admin.css`: `.status-dot-sm` (ok/err/warn/muted), `.terminal-status-dot` (connected/disconnected), `.cfg-section + h3` als vollstaendige CSS-Box-Klasse, `.tag.tag-warn` + `.tag.tag-xs` Modifier-Klassen — admin.css v9
+- `admin-interface/static/js/status.js`: inline-styles durch CSS-Klassen ersetzt
+- `admin-interface/templates/index.html`: Markup-Anpassungen fuer neue CSS-Klassen
+
+**Entscheidungen:**
+- Inline-Styles in JS gehoeren nicht in JS-Logik — CSS-Klassen erleichtern Theming und Wartung
+- `.cfg-section` als vollstaendige Box-Klasse (inkl. h3) vermeidet Inkonsistenzen zwischen Tabs
+- `.tag.tag-warn` + `.tag.tag-xs` folgen dem bestehenden Modifier-Pattern (`.tag.tag-info` etc.)
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:**
+- `git revert <hash>` (Hash nach Commit eintragen)
+
+**Reviewer Scores:** 9/10 (Design-Vereinheitlichung)
+
+---
+
 ## 2026-03-12 — Ollama-Compat Status-Sektion + Default-Fix
 
 - `ollama_compat.enabled` Default auf `True` gesetzt (war False — frische Installs hatten Fake-Ollama deaktiviert)
