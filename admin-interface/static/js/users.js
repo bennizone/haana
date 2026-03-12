@@ -333,21 +333,74 @@ async function saveUserClaudeMd(uid) {
   }
 }
 
+function _autoGenerateUserId() {
+  const nameEl = document.getElementById('nuf-display-name');
+  const idEl   = document.getElementById('nuf-id');
+  if (!nameEl || !idEl) return;
+  if (idEl.dataset.manualEdit === 'true') return;
+  const generated = nameEl.value
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .substring(0, 20) || '';
+  idEl.value = generated;
+}
+
+async function _loadHaUsersForNewForm() {
+  const sel  = document.getElementById('nuf-ha-user');
+  const hint = document.getElementById('nuf-ha-hint');
+  if (!sel) return;
+  try {
+    const r = await fetch('/api/ha-users');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    const users = d.users || d || [];
+    sel.innerHTML = '<option value="">-- HA-User wählen --</option>' +
+      users.map(u => {
+        const val  = typeof u === 'string' ? u : (u.id || u.name || u);
+        const name = typeof u === 'string' ? u : (u.display_name || u.name || u.id || u);
+        return `<option value="${escAttr(val)}" data-display-name="${escAttr(name)}">${escHtml(name)}</option>`;
+      }).join('');
+    if (hint) hint.style.display = 'none';
+  } catch(e) {
+    if (hint) { hint.style.display = ''; hint.dataset.i18n = 'users.ha_select_hint'; }
+  }
+}
+
+function _onNewUserHaSelect() {
+  const sel  = document.getElementById('nuf-ha-user');
+  const nameEl = document.getElementById('nuf-display-name');
+  if (!sel || !nameEl) return;
+  const opt = sel.options[sel.selectedIndex];
+  if (opt && opt.value && !nameEl.value) {
+    nameEl.value = opt.dataset.displayName || opt.text || '';
+    _autoGenerateUserId();
+  }
+}
+
 function showNewUserCard() {
+  const idEl = document.getElementById('nuf-id');
+  if (idEl) { idEl.value = ''; idEl.dataset.manualEdit = ''; }
+  const nameEl = document.getElementById('nuf-display-name');
+  if (nameEl) nameEl.value = '';
   document.getElementById('new-user-card').style.display = '';
-  document.getElementById('nuf-id').focus();
+  _loadHaUsersForNewForm();
+  if (nameEl) nameEl.focus();
 }
 
 async function submitNewUser() {
   const st  = document.getElementById('nuf-status');
   const uid = document.getElementById('nuf-id').value.trim();
   if (!uid) { st.textContent = '\u26a0 ' + t('users.id_missing'); st.style.color = 'var(--yellow)'; return; }
+  const role = document.getElementById('nuf-role').value;
   const payload = {
-    id:           uid,
-    display_name: document.getElementById('nuf-display-name').value.trim() || uid,
-    role:         document.getElementById('nuf-role').value,
-    claude_md_template: document.getElementById('nuf-template').value,
-    language: document.getElementById('nuf-language').value,
+    id:                 uid,
+    display_name:       document.getElementById('nuf-display-name').value.trim() || uid,
+    role:               role,
+    claude_md_template: role,
+    language:           document.getElementById('nuf-language').value,
+    ha_user:            document.getElementById('nuf-ha-user')?.value || '',
   };
   st.textContent = '\u2026'; st.style.color = 'var(--muted)';
   try {

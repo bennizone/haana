@@ -138,7 +138,6 @@ def _build_agent_env(user: dict, cfg: dict, resolve_llm_fn, find_ollama_url_fn) 
     e_llm, e_prov = resolve_llm_fn(extract_llm_id, cfg)
 
     ollama_url = find_ollama_url_fn(cfg)
-    emb = cfg.get("embedding", {})
 
     # Extraction-Provider bestimmen (kann sich vom Primary-Provider unterscheiden)
     extract_type = e_prov.get("type", "ollama")
@@ -154,23 +153,32 @@ def _build_agent_env(user: dict, cfg: dict, resolve_llm_fn, find_ollama_url_fn) 
     extract_rpm = str(e_llm.get("rpm", 0))
     # Ollama: URL kommt aus OLLAMA_URL
 
-    # Embedding-Provider bestimmen
-    embed_provider_id = emb.get("provider_id", "")
-    embed_type = "ollama"
+    # Embedding-Provider bestimmen (aus neuer embeddings-Liste)
+    mem_cfg = cfg.get("memory", {})
+    embedding_id = mem_cfg.get("embedding_id", "")
+    embeddings = cfg.get("embeddings", [])
+    emb = next((e for e in embeddings if e.get("id") == embedding_id), None)
+
+    embed_model = ""
+    embed_dims = 384
+    embed_type = "fastembed"
     embed_url = ""
     embed_key = ""
-    if embed_provider_id == "__local__":
-        embed_type = "fastembed"
-    elif embed_provider_id:
-        for prov in cfg.get("providers", []):
-            if prov.get("id") == embed_provider_id:
-                embed_type = prov.get("type", "ollama")
-                if embed_type in ("openai", "gemini"):
-                    embed_url = prov.get("url", "")
-                    embed_key = prov.get("key", "")
-                break
 
-    mem_cfg = cfg.get("memory", {})
+    if emb is not None:
+        embed_model = emb.get("model", "")
+        embed_dims = emb.get("dims", 1024)
+        embed_provider_id = emb.get("provider_id", "")
+        if embed_provider_id == "__local__":
+            embed_type = "fastembed"
+        elif embed_provider_id:
+            for prov in cfg.get("providers", []):
+                if prov.get("id") == embed_provider_id:
+                    embed_type = prov.get("type", "ollama")
+                    if embed_type in ("openai", "gemini", "custom"):
+                        embed_url = prov.get("url", "")
+                        embed_key = prov.get("key", "")
+                    break
 
     env = {
         "HAANA_INSTANCE":        uid,
@@ -183,8 +191,8 @@ def _build_agent_env(user: dict, cfg: dict, resolve_llm_fn, find_ollama_url_fn) 
         "HAANA_MEMORY_MODEL":    e_llm.get("model", "ministral-3-32k:3b"),
         "HAANA_WINDOW_SIZE":     str(mem_cfg.get("window_size", 20)),
         "HAANA_WINDOW_MINUTES":  str(mem_cfg.get("window_minutes", 60)),
-        "HAANA_EMBEDDING_MODEL": emb.get("model", "bge-m3"),
-        "HAANA_EMBEDDING_DIMS":  str(emb.get("dims", 1024)),
+        "HAANA_EMBEDDING_MODEL": embed_model,
+        "HAANA_EMBEDDING_DIMS":  str(embed_dims),
         "QDRANT_URL":            cfg.get("services", {}).get("qdrant_url", "http://qdrant:6333"),
         "OLLAMA_URL":            ollama_url,
         "HA_URL":                cfg.get("services", {}).get("ha_url", ""),

@@ -17,6 +17,7 @@ function _setVal(id, val) {
 function renderConfig(c) {
   try { renderProviders(c); } catch(e) { console.error('renderProviders error:', e); }
   try { renderLlms(c); } catch(e) { console.error('renderLlms error:', e); }
+  try { renderEmbeddings(c); } catch(e) { console.error('renderEmbeddings error:', e); }
 
   // Memory
   const m = c.memory || {};
@@ -53,10 +54,8 @@ function renderConfig(c) {
     memExtFbEl.innerHTML = '<option value="">--</option>' + _llmSelectOpts(m.extraction_llm_fallback || '');
   }
 
-  // Embedding
-  const em = c.embedding || {};
-  try { _renderEmbeddingProviderDropdowns(c, em); } catch(e) { console.error('renderEmbedding error:', e); }
-  _setVal('embed-dims',  em.dims  ?? 1024);
+  // Embedding dropdowns in Memory tab
+  _refreshEmbeddingDropdowns();
 
   // Log Retention
   const lr = c.log_retention || {};
@@ -426,6 +425,21 @@ function onProviderTypeSelected(type) {
 
 function addProviderWithType(type, authMethod) {
   if (!cfg) return;
+  // Sync unsaved DOM values into cfg.providers before re-rendering
+  (cfg.providers || []).forEach((p, i) => {
+    const nameEl = document.getElementById(`prov-${i}-name`);
+    const urlEl  = document.getElementById(`prov-${i}-url`);
+    const keyEl  = document.getElementById(`prov-${i}-key`);
+    if (nameEl) p.name = nameEl.value;
+    if (urlEl)  p.url  = urlEl.value;
+    if (keyEl)  p.key  = keyEl.value;
+    if (p.type === 'minimax') {
+      const webEl = document.getElementById(`prov-${i}-mcp-web-search`);
+      const imgEl = document.getElementById(`prov-${i}-mcp-image-analysis`);
+      if (webEl) p.mcp_web_search     = webEl.checked;
+      if (imgEl) p.mcp_image_analysis = imgEl.checked;
+    }
+  });
   const existing = (cfg.providers || []).map(p => p.id);
   let id = `${type}-1`;
   let n = 1;
@@ -554,6 +568,17 @@ function toggleLlmCard(i) {
 
 function addLlm() {
   if (!cfg) return;
+  // Sync unsaved DOM values into cfg.llms before re-rendering
+  (cfg.llms || []).forEach((l, i) => {
+    const nameEl     = document.getElementById(`llm-${i}-name`);
+    const provEl     = document.getElementById(`llm-${i}-provider`);
+    const modelEl    = document.getElementById(`llm-${i}-model`);
+    const rpmEl      = document.getElementById(`llm-${i}-rpm`);
+    if (nameEl)  l.name        = nameEl.value;
+    if (provEl)  l.provider_id = provEl.value;
+    if (modelEl) l.model       = modelEl.value;
+    if (rpmEl)   l.rpm         = parseInt(rpmEl.value) || 0;
+  });
   const existing = (cfg.llms || []).map(l => l.id);
   let id = 'llm-1';
   let n = 1;
@@ -993,6 +1018,16 @@ async function saveSectionLlms() {
     const r = await _patchConfig({ ...cfg, llms });
     if (r.ok) {
       cfg.llms = llms;
+      // Refresh memory tab LLM dropdowns so they reflect the updated LLM list
+      const memExtEl   = document.getElementById('mem-extraction-llm');
+      const memExtFbEl = document.getElementById('mem-extraction-llm-fallback');
+      const dreamLlmEl = document.getElementById('dream-llm');
+      const curMemExt = memExtEl?.value   || cfg.memory?.extraction_llm          || '';
+      const curMemFb  = memExtFbEl?.value || cfg.memory?.extraction_llm_fallback || '';
+      const curDream  = dreamLlmEl?.value || cfg.dream?.llm                      || '';
+      if (memExtEl)   memExtEl.innerHTML   = _llmSelectOpts(curMemExt);
+      if (memExtFbEl) memExtFbEl.innerHTML = '<option value="">--</option>' + _llmSelectOpts(curMemFb);
+      if (dreamLlmEl) dreamLlmEl.innerHTML = '<option value="">(' + t('config_memory.dream_llm_default') + ')</option>' + _llmSelectOpts(curDream);
       _sectionSaveOk('save-status-llms', 'save-btn-llms');
       toast(t('config.section_saved'), 'ok');
     } else {
@@ -1016,6 +1051,136 @@ async function resetSectionLlms() {
   } catch(e) { toast(e.message, 'err'); }
 }
 
+// ─── Embeddings ─────────────────────────────────────────────────────────────
+
+function renderEmbeddings(c) {
+  const list = document.getElementById('embedding-list');
+  if (!list) return;
+  list.innerHTML = (c.embeddings || []).map((e, i) => `
+    <div class="provider-slot" id="emb-card-${i}" style="padding:0;overflow:hidden;">
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;background:rgba(255,255,255,.02);"
+           onclick="toggleEmbCard(${i})">
+        <span id="emb-card-${i}-chevron" style="font-size:11px;color:var(--muted);transition:transform .2s;">&#9654;</span>
+        <span style="font-weight:600;color:var(--accent2);flex:1;" id="emb-card-${i}-label">${escHtml(e.name || ('Embedding ' + (i+1)))}</span>
+        <button class="btn btn-danger" style="font-size:11px;padding:2px 8px;" onclick="event.stopPropagation();removeEmbedding(${i})" data-i18n="common.remove">&#x2715;</button>
+      </div>
+      <div id="emb-card-${i}-body" style="display:none;padding:12px 14px;border-top:1px solid var(--border);">
+        <div class="form-row">
+          <div class="form-group" style="flex:1;">
+            <label data-i18n="config_embeddings.name">Name</label>
+            <input type="text" id="emb-${i}-name" value="${escAttr(e.name || '')}" oninput="document.getElementById('emb-card-${i}-label').textContent=this.value||'Embedding '+(${i}+1)">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="flex:2;">
+            <label data-i18n="config_embeddings.provider">Provider</label>
+            <select id="emb-${i}-provider" onchange="_onEmbProviderChange(${i})">
+              <option value="__local__" ${e.provider_id==='__local__'?'selected':''}>${t('config_memory.embed_local')} (fastembed)</option>
+              ${(c.providers||[]).map(p=>`<option value="${escAttr(p.id)}" ${p.id===e.provider_id?'selected':''}>${escHtml(p.name)} (${escHtml(p.type)})</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group" style="flex:3;">
+            <label data-i18n="config_embeddings.model">Modell</label>
+            <input type="text" id="emb-${i}-model" value="${escAttr(e.model || '')}" oninput="_onEmbModelChange(${i})" placeholder="z.B. BAAI/bge-m3">
+          </div>
+          <div class="form-group" style="flex:0 0 110px;">
+            <label data-i18n="config_embeddings.dims">Dims</label>
+            <input type="number" id="emb-${i}-dims" value="${e.dims || 1024}" style="width:100px;">
+          </div>
+        </div>
+        <div id="emb-${i}-local-hint" style="${e.provider_id==='__local__'?'':'display:none;'}margin-top:4px;font-size:12px;color:var(--muted);" data-i18n="config_memory.embed_local_hint">Kein externer Service nötig. Modell wird beim ersten Start heruntergeladen.</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function toggleEmbCard(i) {
+  const body    = document.getElementById(`emb-card-${i}-body`);
+  const chevron = document.getElementById(`emb-card-${i}-chevron`);
+  if (!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : '';
+  if (chevron) chevron.style.transform = open ? '' : 'rotate(90deg)';
+}
+
+function addEmbedding() {
+  if (!cfg) return;
+  (cfg.embeddings || []).forEach((e, i) => {
+    const nameEl = document.getElementById(`emb-${i}-name`);
+    const provEl = document.getElementById(`emb-${i}-provider`);
+    const modEl  = document.getElementById(`emb-${i}-model`);
+    const dimsEl = document.getElementById(`emb-${i}-dims`);
+    if (nameEl) e.name        = nameEl.value;
+    if (provEl) e.provider_id = provEl.value;
+    if (modEl)  e.model       = modEl.value;
+    if (dimsEl) e.dims        = parseInt(dimsEl.value) || 1024;
+  });
+  if (!cfg.embeddings) cfg.embeddings = [];
+  cfg.embeddings.push({ id: 'emb-' + Date.now(), name: '', provider_id: '__local__', model: 'BAAI/bge-m3', dims: 1024 });
+  renderEmbeddings(cfg);
+  toggleEmbCard(cfg.embeddings.length - 1);
+  _refreshEmbeddingDropdowns();
+}
+
+function removeEmbedding(i) {
+  if (!cfg || !cfg.embeddings) return;
+  cfg.embeddings.splice(i, 1);
+  renderEmbeddings(cfg);
+  _refreshEmbeddingDropdowns();
+}
+
+function _onEmbProviderChange(i) {
+  const provId = document.getElementById(`emb-${i}-provider`)?.value;
+  const hint   = document.getElementById(`emb-${i}-local-hint`);
+  if (hint) hint.style.display = provId === '__local__' ? '' : 'none';
+}
+
+function _onEmbModelChange(i) {
+  const modEl  = document.getElementById(`emb-${i}-model`);
+  const dimsEl = document.getElementById(`emb-${i}-dims`);
+  if (!modEl || !dimsEl) return;
+  const known = _EMBED_DIMS[modEl.value] || _EMBED_DIMS[modEl.value.split(':')[0]];
+  if (known) dimsEl.value = known;
+}
+
+async function saveSectionEmbeddings() {
+  if (!cfg) return;
+  const embeddings = (cfg.embeddings || []).map((e, i) => ({
+    ...e,
+    name:        document.getElementById(`emb-${i}-name`)?.value        || '',
+    provider_id: document.getElementById(`emb-${i}-provider`)?.value    || '__local__',
+    model:       document.getElementById(`emb-${i}-model`)?.value       || '',
+    dims:        parseInt(document.getElementById(`emb-${i}-dims`)?.value) || 1024,
+  }));
+  try {
+    const r = await _patchConfig({ ...cfg, embeddings });
+    if (r.ok) {
+      cfg.embeddings = embeddings;
+      renderEmbeddings(cfg);
+      _refreshEmbeddingDropdowns();
+      _sectionSaveOk('save-status-embeddings', 'save-btn-embeddings');
+      toast(t('config.section_saved'), 'ok');
+    } else {
+      toast(t('config.save_error'), 'error');
+    }
+  } catch(e) {
+    toast(e.message, 'err');
+  }
+}
+
+function _refreshEmbeddingDropdowns() {
+  const embs = (cfg && cfg.embeddings) ? cfg.embeddings : [];
+  const opts = '<option value="">--</option>' + embs.map(e =>
+    `<option value="${escAttr(e.id)}">${escHtml(e.name || e.id)}</option>`
+  ).join('');
+  const memEmb = document.getElementById('mem-embedding-id');
+  const memFb  = document.getElementById('mem-fallback-embedding-id');
+  const curEmb = memEmb?.value || (cfg && cfg.memory?.embedding_id)          || '';
+  const curFb  = memFb?.value  || (cfg && cfg.memory?.fallback_embedding_id) || '';
+  if (memEmb) { memEmb.innerHTML = opts; memEmb.value = curEmb; }
+  if (memFb)  { memFb.innerHTML  = opts; memFb.value  = curFb;  }
+}
+
 // ── Memory Section ────────────────────────────────────────────────────────────
 async function saveSectionMemory() {
   if (!cfg) return;
@@ -1030,13 +1195,8 @@ async function saveSectionMemory() {
     window_minutes: parseInt(document.getElementById('mem-window-minutes')?.value || '60'),
     min_messages:   parseInt(document.getElementById('mem-min-messages')?.value || '5'),
   };
-  const embedding = {
-    ...(cfg.embedding || {}),
-    provider_id:          document.getElementById('embed-provider')?.value || '',
-    model:                document.getElementById('embed-model')?.value || 'bge-m3',
-    dims:                 parseInt(document.getElementById('embed-dims')?.value || '1024'),
-    fallback_provider_id: document.getElementById('embed-fallback-provider')?.value || '',
-  };
+  memory.embedding_id          = document.getElementById('mem-embedding-id')?.value          || '';
+  memory.fallback_embedding_id = document.getElementById('mem-fallback-embedding-id')?.value || '';
   const dream = {
     ...(cfg.dream || {}),
     enabled:  document.getElementById('dream-enabled')?.checked ?? false,
@@ -1044,32 +1204,16 @@ async function saveSectionMemory() {
     llm:      document.getElementById('dream-llm')?.value || '',
   };
   try {
-    const newCfg = { ...cfg, memory, embedding, dream };
+    const newCfg = { ...cfg, memory, dream };
     const r = await _patchConfig(newCfg);
     if (r.ok) {
-      // Check for embedding model change
-      const oldEmb = cfg.embedding || {};
-      const embeddingChanged = oldEmb.model !== embedding.model
-        || oldEmb.provider_id !== embedding.provider_id
-        || String(oldEmb.dims) !== String(embedding.dims);
       const restartChanges = _detectRestartChanges(cfg, newCfg);
       cfg.memory = memory;
-      cfg.embedding = embedding;
       cfg.dream = dream;
-      try { _renderEmbeddingProviderDropdowns(cfg, cfg.embedding); } catch(e) { /* ignore */ }
       _sectionSaveOk('save-status-memory', 'save-btn-memory');
       toast(t('config.section_saved'), 'ok');
       if (restartChanges.length) {
         toast(t('config.restart_hint') + ': ' + restartChanges.join(', '), 'warn');
-      }
-      if (embeddingChanged) {
-        Modal.show({
-          title: t('config_memory.embedding_changed_title'),
-          body: `<p class="modal-message">${escHtml(t('config_memory.embedding_changed_body')).replace(/\n/g, '<br>')}</p>`,
-          confirmText: t('config_memory.embedding_changed_rebuild'),
-          onConfirm: () => { scrollToRebuild(); rebuildSelectAll(); },
-          onCancel: () => { toast(t('config_memory.embedding_changed_later'), 'warn'); },
-        });
       }
     } else {
       _sectionSaveErr('save-status-memory', t('config.save_error'));
@@ -1086,8 +1230,9 @@ async function resetSectionMemory() {
     const r = await fetch('/api/config');
     const fresh = await r.json();
     cfg.memory = fresh.memory;
-    cfg.embedding = fresh.embedding;
+    cfg.embeddings = fresh.embeddings || [];
     cfg.dream = fresh.dream;
+    renderEmbeddings(cfg);
     // Re-render memory fields
     const m = cfg.memory || {};
     _setVal('mem-window-size',    m.window_size    ?? 20);
@@ -1109,9 +1254,12 @@ async function resetSectionMemory() {
     if (dreamScheduleEl) dreamScheduleEl.value = dr.schedule || '02:00';
     const dreamLlmEl = document.getElementById('dream-llm');
     if (dreamLlmEl) dreamLlmEl.innerHTML = '<option value="">(' + t('config_memory.dream_llm_default') + ')</option>' + _llmSelectOpts(dr.llm || '');
-    // Embedding
-    try { _renderEmbeddingProviderDropdowns(cfg, cfg.embedding || {}); } catch(e) { /* ignore */ }
-    _setVal('embed-dims', (cfg.embedding || {}).dims ?? 1024);
+    // Embedding dropdowns
+    _refreshEmbeddingDropdowns();
+    const memEmbEl2 = document.getElementById('mem-embedding-id');
+    const memFbEl2  = document.getElementById('mem-fallback-embedding-id');
+    if (memEmbEl2) memEmbEl2.value = (fresh.memory || {}).embedding_id          || '';
+    if (memFbEl2)  memFbEl2.value  = (fresh.memory || {}).fallback_embedding_id || '';
     const st = document.getElementById('save-status-memory');
     if (st) { st.textContent = '\u21ba ' + t('config.section_reset_done'); st.style.color = 'var(--muted)'; setTimeout(() => { st.textContent = ''; }, 2000); }
   } catch(e) { toast(e.message, 'err'); }

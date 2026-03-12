@@ -348,13 +348,10 @@ DEFAULT_CONFIG = {
         "window_size":    int(os.environ.get("HAANA_WINDOW_SIZE",    "20")),
         "window_minutes": int(os.environ.get("HAANA_WINDOW_MINUTES", "60")),
         "min_messages":   5,
+        "embedding_id":          "",
+        "fallback_embedding_id": "",
     },
-    "embedding": {
-        "provider_id":          "__local__",
-        "model":                os.environ.get("HAANA_EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5"),
-        "dims":                 int(os.environ.get("HAANA_EMBEDDING_DIMS", "384")),
-        "fallback_provider_id": "",
-    },
+    "embeddings": [],
     "log_retention": {
         "conversations": None,   # niemals löschen
         "llm-calls":     30,
@@ -467,12 +464,12 @@ def _ensure_user_defaults(cfg: dict) -> None:
     """Stellt sicher, dass alle User neu hinzugefügte Felder mit Defaults haben."""
     for user in cfg.get("users", []):
         user.setdefault("language", "de")
-    # Embedding-Defaults für bestehende Configs ohne embedding-Sektion
-    if "embedding" not in cfg:
-        cfg["embedding"] = dict(DEFAULT_CONFIG["embedding"])
-    else:
-        for k, v in DEFAULT_CONFIG["embedding"].items():
-            cfg["embedding"].setdefault(k, v)
+    # embeddings-Liste sicherstellen
+    cfg.setdefault("embeddings", [])
+    # memory embedding_id/fallback_embedding_id sicherstellen
+    mem = cfg.setdefault("memory", {})
+    mem.setdefault("embedding_id", "")
+    mem.setdefault("fallback_embedding_id", "")
 
 
 def _slugify(text: str) -> str:
@@ -547,7 +544,7 @@ def _migrate_config(cfg: dict) -> bool:
         user.pop("extraction_llm", None)
         user.setdefault("fallback_llm", "")
 
-    # Embedding migrieren: provider → provider_id
+    # Embedding migrieren: provider → provider_id (legacy v1)
     emb = cfg.get("embedding", {})
     if "provider" in emb and "provider_id" not in emb:
         old_prov_type = emb.pop("provider")
@@ -615,10 +612,13 @@ def _resolve_llm(llm_id: str, cfg: dict) -> tuple[dict, dict]:
 
 def _find_ollama_url(cfg: dict) -> str:
     """Findet die Ollama-URL aus Providern: Embedding → Extraction → erster Ollama."""
-    emb = cfg.get("embedding", {})
-    emb_prov = next((p for p in cfg.get("providers", []) if p["id"] == emb.get("provider_id")), {})
-    if emb_prov.get("type") == "ollama" and emb_prov.get("url"):
-        return emb_prov["url"]
+    mem_cfg = cfg.get("memory", {})
+    embedding_id = mem_cfg.get("embedding_id", "")
+    emb = next((e for e in cfg.get("embeddings", []) if e.get("id") == embedding_id), None)
+    if emb:
+        emb_prov = next((p for p in cfg.get("providers", []) if p.get("id") == emb.get("provider_id")), {})
+        if emb_prov.get("type") == "ollama" and emb_prov.get("url"):
+            return emb_prov["url"]
 
     # Extraction-Provider
     mem = cfg.get("memory", {})
@@ -648,12 +648,10 @@ def _find_references(entity_type: str, entity_id: str, cfg: dict) -> list[str]:
         for llm in cfg.get("llms", []):
             if llm.get("provider_id") == entity_id:
                 refs.append(f"LLM: {llm.get('name', llm['id'])}")
-        # Embedding
-        emb = cfg.get("embedding", {})
-        if emb.get("provider_id") == entity_id:
-            refs.append("Embedding (Primary)")
-        if emb.get("fallback_provider_id") == entity_id:
-            refs.append("Embedding (Fallback)")
+        # Embeddings
+        for emb in cfg.get("embeddings", []):
+            if emb.get("provider_id") == entity_id:
+                refs.append(f"Embedding: {emb.get('name', emb.get('id', ''))}")
 
     elif entity_type == "llm":
         # Welche User referenzieren dieses LLM?
@@ -683,6 +681,20 @@ def load_config() -> dict:
             if _migrate_config(cfg):
                 save_config(cfg)
             if _migrate_providers_v2(cfg):
+                save_config(cfg)
+            # Migration: embedding (singular) → embeddings (Liste) + memory.embedding_id
+            if "embedding" in cfg and "embeddings" not in cfg:
+                old_emb = cfg.pop("embedding")
+                cfg["embeddings"] = [{
+                    "id": "emb-1",
+                    "name": "Embedding 1",
+                    "provider_id": old_emb.get("provider_id", "__local__"),
+                    "model": old_emb.get("model", ""),
+                    "dims": old_emb.get("dims", 1024),
+                }]
+                fp = old_emb.get("fallback_provider_id", "")
+                if fp:
+                    cfg.setdefault("memory", {})["fallback_embedding_id"] = fp
                 save_config(cfg)
             # Dream-Config mit Defaults auffüllen falls fehlend
             dream_defaults = DEFAULT_CONFIG["dream"]
@@ -1396,7 +1408,9 @@ async def get_status():
             coll_names = [c["name"] for c in colls]
             # Prüfe ob Collections leer sind (für Rebuild-Empfehlung)
             total_vectors = 0
-            configured_dims = cfg.get("embedding", {}).get("dims", 1024)
+            _emb_id = cfg.get("memory", {}).get("embedding_id", "")
+            _emb_obj = next((e for e in cfg.get("embeddings", []) if e.get("id") == _emb_id), None)
+            configured_dims = _emb_obj.get("dims", 1024) if _emb_obj else 1024
             dims_mismatch = False
             for cname in coll_names:
                 try:
@@ -1947,8 +1961,27 @@ async def ha_stt_tts():
 async def ha_users():
     """Listet Home Assistant Person-Entitäten für User-Mapping auf."""
     cfg = load_config()
-    ha_url   = (cfg.get("services", {}).get("ha_url", "") or os.environ.get("HA_URL", "")).rstrip("/")
-    ha_token = (cfg.get("services", {}).get("ha_token", "") or os.environ.get("SUPERVISOR_TOKEN", "")).strip()
+    services = cfg.get("services", {})
+
+    # Zuerst: gecachte Personen aus Companion-Registrierung nutzen (zuverlaessigste Quelle)
+    cached = services.get("ha_persons", [])
+    if cached:
+        # Normalisierung: sicherstellen, dass alle Felder vorhanden sind
+        persons = [
+            {
+                "id": p.get("id", ""),
+                "uid": p.get("uid", p.get("id", "").replace("person.", "")),
+                "name": p.get("display_name", p.get("name", p.get("uid", ""))),
+                "friendly_name": p.get("display_name", p.get("name", p.get("uid", ""))),
+                "display_name": p.get("display_name", p.get("name", p.get("uid", ""))),
+            }
+            for p in cached
+        ]
+        return {"ok": True, "users": persons, "source": "companion"}
+
+    # Fallback: Live-Abfrage via gespeichertem HA-Token
+    ha_url   = (services.get("ha_url", "") or os.environ.get("HA_URL", "")).rstrip("/")
+    ha_token = (services.get("ha_token", "") or os.environ.get("SUPERVISOR_TOKEN", "")).strip()
     if not ha_url or not ha_token:
         return {"ok": False, "error": "HA URL oder Token nicht konfiguriert", "users": []}
     import httpx
@@ -1967,8 +2000,8 @@ async def ha_users():
                 if eid.startswith("person."):
                     uid  = eid[len("person."):]
                     name = state.get("attributes", {}).get("friendly_name", uid)
-                    persons.append({"id": eid, "name": name, "friendly_name": name, "display_name": name})
-            return {"ok": True, "users": persons}
+                    persons.append({"id": eid, "uid": uid, "name": name, "friendly_name": name, "display_name": name})
+            return {"ok": True, "users": persons, "source": "live"}
     except httpx.ConnectError:
         return {"ok": False, "error": "HA nicht erreichbar", "users": []}
     except Exception as e:
@@ -4169,9 +4202,30 @@ async def companion_register(request: Request):
         raise HTTPException(400, "ha_token fehlt")
     cfg.setdefault("services", {})["ha_url"] = ha_url
     cfg["services"]["ha_token"] = ha_token
+    ha_persons = body.get("ha_persons", [])
+    if ha_persons:
+        cfg["services"]["ha_persons"] = ha_persons
+        logger.info(f"[companion] ha_persons gespeichert: {len(ha_persons)}")
     save_config(cfg)
     logger.info(f"[companion] Registered: ha_url={ha_url}")
     return {"status": "registered"}
+
+
+@app.post("/api/companion/refresh-persons")
+async def companion_refresh_persons(request: Request):
+    """Companion kann HA-Personenliste aktualisieren."""
+    cfg = load_config()
+    if not _verify_companion_token(request, cfg):
+        raise HTTPException(status_code=401, detail="Invalid companion token")
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Ungueltiges JSON")
+    persons = body.get("ha_persons", [])
+    cfg.setdefault("services", {})["ha_persons"] = persons
+    save_config(cfg)
+    logger.info(f"[companion] ha_persons aktualisiert: {len(persons)}")
+    return {"ok": True, "count": len(persons)}
 
 
 @app.get("/api/companion/token")

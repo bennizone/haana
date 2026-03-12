@@ -292,6 +292,7 @@
   <div class="cfg-tabs">
     <button class="cfg-tab-btn active" onclick="showCfgTab('providers')"  id="cfgtab-providers" data-i18n="config.sub_tabs.providers">Providers</button>
     <button class="cfg-tab-btn"        onclick="showCfgTab('llms')"       id="cfgtab-llms" data-i18n="config.sub_tabs.llms">LLMs</button>
+    <button class="cfg-tab-btn"        onclick="showCfgTab('embeddings')" id="cfgtab-embeddings" data-i18n="config_embeddings.title">Embeddings</button>
     <button class="cfg-tab-btn"        onclick="showCfgTab('memory')"     id="cfgtab-memory" data-i18n="config.sub_tabs.memory">Memory</button>
     <button class="cfg-tab-btn"        onclick="showCfgTab('ha')"         id="cfgtab-ha" data-i18n="config.sub_tabs.home_assistant">Home Assistant</button>
     <button class="cfg-tab-btn"        onclick="showCfgTab('whatsapp')"   id="cfgtab-whatsapp" data-i18n="config.sub_tabs.whatsapp">WhatsApp</button>
@@ -334,6 +335,28 @@
         <span data-i18n="config.section_reset">&#8635; Zurücksetzen</span>
       </button>
       <span id="save-status-llms" class="cfg-section-save-status"></span>
+    </div>
+  </div>
+
+  <!-- ── Sub-Tab: Embeddings ── -->
+  <div id="cfgpanel-embeddings" class="cfg-tab-panel" style="display:none;">
+    <div class="config-section">
+      <div class="config-section-header" style="display:flex;align-items:center;justify-content:space-between;">
+        <span data-i18n="config_embeddings.title">Embeddings</span>
+        <button class="btn btn-secondary" style="font-size:12px;padding:4px 10px;" onclick="addEmbedding()" data-i18n="config_embeddings.add">+ Embedding</button>
+      </div>
+      <div class="config-section-body" id="embedding-list">
+        <!-- Wird per JS befüllt -->
+      </div>
+    </div>
+    <div class="cfg-section-save-bar">
+      <button class="btn btn-primary" id="save-btn-embeddings" onclick="saveSectionEmbeddings()">
+        <span data-i18n="config.section_save">Speichern</span>
+      </button>
+      <button class="btn btn-secondary" onclick="resetSectionEmbeddings()">
+        <span data-i18n="config.section_reset">&#8635; Zurücksetzen</span>
+      </button>
+      <span id="save-status-embeddings" class="cfg-section-save-status"></span>
     </div>
   </div>
 
@@ -412,50 +435,22 @@
       </div>
     </div>
 
-    <!-- Embedding-Modell -->
+    <!-- Embedding-Auswahl -->
     <div class="config-section">
-      <div class="config-section-header" data-i18n="config_memory.embedding_title">Embedding-Modell</div>
+      <div class="config-section-header" data-i18n="config_embeddings.title">Embeddings</div>
       <div class="config-section-body">
         <div class="form-row">
           <div class="form-group" style="flex:1;">
-            <label data-i18n="config_memory.embedding_provider">Embedding-Provider</label>
-            <select id="embed-provider" onchange="_updateEmbedLocalUI()"><!-- JS --></select>
+            <label data-i18n="config_embeddings.select">Embedding</label>
+            <select id="mem-embedding-id"><!-- JS --></select>
           </div>
-          <div class="form-group" style="flex:0 0 auto;align-self:flex-end;">
-            <button class="btn btn-secondary" style="font-size:11px;padding:4px 10px;" onclick="testEmbedding()" data-i18n="config_memory.embedding_test">Test</button>
-          </div>
-        </div>
-        <div id="embed-local-hint" style="display:none;margin-top:8px;padding:8px 12px;border-radius:6px;background:rgba(100,200,100,.08);border:1px solid rgba(100,200,100,.2);font-size:12px;color:var(--muted);"
-          data-i18n="config_memory.embed_local_hint">Kein externer Service nötig. Modell wird beim ersten Start heruntergeladen.</div>
-        <div class="form-group" style="margin-top:8px;">
-          <select id="embed-local-model-select" style="display:none;margin-top:4px;" onchange="selectLocalEmbedModel(this)">
-          </select>
-        </div>
-        <div class="form-group" style="margin-top:8px;">
-          <label data-i18n="config_memory.embedding_model">Modell</label>
-          <div style="display:flex;gap:6px;align-items:center;">
-            <input type="text" id="embed-model" value="" style="flex:1;"
-              oninput="updateEmbedDims()" placeholder="z.B. bge-m3, text-embedding-3-small">
-            <button class="btn btn-secondary" style="font-size:11px;padding:4px 10px;flex-shrink:0;"
-              onclick="fetchEmbeddingModels()" data-i18n="config_memory.embedding_fetch_models">Modelle laden</button>
-            <span id="embed-model-status" style="font-size:11px;color:var(--muted);white-space:nowrap;"></span>
-          </div>
-          <select id="embed-model-select" style="display:none;margin-top:6px;" onchange="selectEmbedModel(this)">
-          </select>
-        </div>
-        <div class="form-row" style="margin-top:8px;">
-          <div class="form-group">
-            <label data-i18n="config_memory.embedding_dims">Dimensions</label>
-            <input type="number" id="embed-dims" value="1024" readonly style="opacity:0.7;cursor:default;width:100px;">
-          </div>
-          <div class="form-group">
-            <label data-i18n="config_memory.embedding_fallback_provider">Fallback Embedding-Provider</label>
-            <select id="embed-fallback-provider"><!-- JS --></select>
+          <div class="form-group" style="flex:1;">
+            <label data-i18n="config_embeddings.fallback">Fallback Embedding</label>
+            <select id="mem-fallback-embedding-id"><!-- JS --></select>
           </div>
         </div>
-        <div id="embed-test-result" style="display:none;margin-top:8px;padding:8px 12px;border-radius:6px;font-size:12px;"></div>
         <p class="form-warning" data-i18n="config_memory.embedding_warning">
-          Beim Wechsel des Embedding-Modells muessen alle Qdrant-Collections neu aufgebaut werden
+          Beim Wechsel des Embedding-Modells müssen alle Qdrant-Collections neu aufgebaut werden
           (andere Dimensionen sind nicht kompatibel).
         </p>
       </div>
@@ -963,31 +958,36 @@
   <!-- Neuer-User-Karte (einblendbar oben) -->
   <div id="new-user-card" style="display:none;margin-bottom:16px;">
     <div class="config-section">
-      <div class="config-section-header">Neuer User</div>
+      <div class="config-section-header" data-i18n="users.new_user">Neuer User</div>
       <div class="config-section-body">
         <div class="form-row">
-          <div class="form-group">
-            <label>ID <span class="hint">(einmalig, nur a-z 0-9 -)</span></label>
-            <input type="text" id="nuf-id" placeholder="z.B. anna" pattern="[a-z0-9-]+" maxlength="30">
-          </div>
-          <div class="form-group">
-            <label>Anzeigename</label>
-            <input type="text" id="nuf-display-name" placeholder="z.B. Anna">
+          <div class="form-group" style="flex:1;">
+            <label data-i18n="users.ha_select_label">HA-Benutzer (optional)</label>
+            <div style="display:flex;gap:6px;">
+              <select id="nuf-ha-user" style="flex:1;" onchange="_onNewUserHaSelect()">
+                <option value="">-- HA-User wählen --</option>
+              </select>
+              <button class="btn btn-secondary" style="font-size:11px;padding:4px 8px;flex-shrink:0;" onclick="_loadHaUsersForNewForm()">&#x21BA;</button>
+            </div>
+            <span id="nuf-ha-hint" style="font-size:11px;color:var(--muted);display:none;" data-i18n="users.ha_select_hint">HA nicht verbunden — Name manuell eingeben</span>
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label>Rolle</label>
-            <select id="nuf-role">
-              <option value="user">User (eingeschränkt)</option>
-              <option value="admin">Admin (voller Zugriff)</option>
-            </select>
+            <label data-i18n="users.display_name">Anzeigename</label>
+            <input type="text" id="nuf-display-name" placeholder="z.B. Anna" oninput="_autoGenerateUserId()">
           </div>
           <div class="form-group">
-            <label>CLAUDE.md Template</label>
-            <select id="nuf-template">
-              <option value="user">User (Standard)</option>
-              <option value="admin">Admin</option>
+            <label data-i18n="users.id">ID <span class="hint" data-i18n="users.id_hint">(einmalig, nur a-z 0-9 -)</span></label>
+            <input type="text" id="nuf-id" placeholder="z.B. anna" pattern="[a-z0-9-]+" maxlength="30" oninput="this.dataset.manualEdit='true'">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label data-i18n="users.role">Rolle</label>
+            <select id="nuf-role">
+              <option value="user" data-i18n="users.role_user">User (eingeschränkt)</option>
+              <option value="admin" data-i18n="users.role_admin">Admin (voller Zugriff)</option>
             </select>
           </div>
           <div class="form-group">
@@ -1003,8 +1003,8 @@
           </div>
         </div>
         <div class="form-inline" style="margin-top:4px;">
-          <button class="btn" onclick="submitNewUser()">User anlegen</button>
-          <button class="btn btn-secondary" onclick="document.getElementById('new-user-card').style.display='none'">Abbrechen</button>
+          <button class="btn" onclick="submitNewUser()" data-i18n="users.create">User anlegen</button>
+          <button class="btn btn-secondary" onclick="document.getElementById('new-user-card').style.display='none'" data-i18n="users.cancel">Abbrechen</button>
           <span id="nuf-status" class="form-hint"></span>
         </div>
       </div>
@@ -1088,8 +1088,8 @@
 
 <!-- Feature-Module -->
 <script src="/static/js/chat.js?v=5"></script>
-<script src="/static/js/config.js?v=10"></script>
-<script src="/static/js/users.js?v=6"></script>
+<script src="/static/js/config.js?v=12"></script>
+<script src="/static/js/users.js?v=7"></script>
 <script src="/static/js/status.js?v=3"></script>
 <script src="/static/js/logs.js?v=6"></script>
 <script src="/static/js/whatsapp.js?v=3"></script>

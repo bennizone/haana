@@ -315,6 +315,16 @@
     "embed_model_bge_small": "Englisch optimiert, schnell, ~50MB RAM",
     "embed_model_bge_m3": "Multilingual, bessere Qualität, ~600MB RAM"
   },
+  "config_embeddings": {
+    "title": "Embeddings",
+    "add": "+ Embedding",
+    "name": "Name",
+    "provider": "Provider",
+    "model": "Modell",
+    "dims": "Dimensions",
+    "select": "Embedding",
+    "fallback": "Fallback Embedding"
+  },
   "config_services": {
     "ha_title": "Home Assistant",
     "ha_url": "Home Assistant URL",
@@ -483,7 +493,9 @@
     "claude_md_expand": "Bearbeiten",
     "claude_md_collapse": "Schließen",
     "language": "Antwortsprache",
-    "language_help": "Sprache in der der Assistent antwortet"
+    "language_help": "Sprache in der der Assistent antwortet",
+    "ha_select_hint": "HA nicht verbunden — Name manuell eingeben",
+    "ha_select_label": "HA-Benutzer (optional)"
   },
   "status": {
     "loading": "Status wird geladen...",

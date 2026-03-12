@@ -99,11 +99,11 @@ def test_default_config_has_memory():
 
 def test_default_config_has_embedding():
     main = _import_main()
-    emb = main.DEFAULT_CONFIG["embedding"]
-    assert "provider_id" in emb
-    assert "model" in emb
-    assert "dims" in emb
-    assert "fallback_provider_id" in emb
+    assert "embeddings" in main.DEFAULT_CONFIG
+    assert isinstance(main.DEFAULT_CONFIG["embeddings"], list)
+    mem = main.DEFAULT_CONFIG["memory"]
+    assert "embedding_id" in mem
+    assert "fallback_embedding_id" in mem
 
 
 def test_default_config_has_users():
@@ -214,7 +214,7 @@ def test_find_references_provider():
             {"id": "l1", "name": "L1", "provider_id": "p1", "model": "m1"},
             {"id": "l2", "name": "L2", "provider_id": "other", "model": "m2"},
         ],
-        "embedding": {"provider_id": "p1", "fallback_provider_id": ""},
+        "embeddings": [{"id": "emb-1", "name": "Embedding 1", "provider_id": "p1", "model": "", "dims": 1024}],
         "users": [],
         "memory": {},
     }
@@ -277,8 +277,10 @@ def test_load_config_reads_existing_file(tmp_path):
              "api_port": 8001, "container_name": "haana-test-1"},
         ],
         "memory": {"window_size": 30, "window_minutes": 120, "min_messages": 5,
-                    "extraction_llm": "l1", "extraction_llm_fallback": ""},
-        "embedding": {"provider_id": "p1", "model": "bge-m3", "dims": 1024, "fallback_provider_id": ""},
+                    "extraction_llm": "l1", "extraction_llm_fallback": "",
+                    "embedding_id": "emb-1", "fallback_embedding_id": ""},
+        "embeddings": [{"id": "emb-1", "name": "Embedding 1", "provider_id": "p1",
+                         "model": "bge-m3", "dims": 1024}],
     }
     conf_file = tmp_path / "config.json"
     conf_file.write_text(json.dumps(custom_cfg), encoding="utf-8")
@@ -372,9 +374,12 @@ def _make_cfg(**overrides):
             "qdrant_url": "http://qdrant:6333",
         },
         "memory": {"window_size": 20, "window_minutes": 60,
-                    "extraction_llm": "ollama-extract", "extraction_llm_fallback": ""},
-        "embedding": {"provider_id": "ollama-home", "model": "bge-m3", "dims": 1024,
-                       "fallback_provider_id": ""},
+                    "extraction_llm": "ollama-extract", "extraction_llm_fallback": "",
+                    "embedding_id": "emb-1", "fallback_embedding_id": ""},
+        "embeddings": [
+            {"id": "emb-1", "name": "bge-m3 lokal", "provider_id": "ollama-home",
+             "model": "bge-m3", "dims": 1024},
+        ],
     }
     cfg.update(overrides)
     return cfg
@@ -618,7 +623,8 @@ def test_find_ollama_url_from_embedding():
 def test_find_ollama_url_from_extraction():
     main = _import_main()
     cfg = _make_cfg()
-    cfg["embedding"]["provider_id"] = "anthropic-1"  # nicht Ollama
+    # Punkt embedding auf nicht-Ollama-Provider → fällt auf Extraction zurück
+    cfg["embeddings"][0]["provider_id"] = "anthropic-1"
     url = main._find_ollama_url(cfg)
     assert url == "http://ollama:11434"
 
@@ -626,7 +632,7 @@ def test_find_ollama_url_from_extraction():
 def test_find_ollama_url_from_first_provider():
     main = _import_main()
     cfg = _make_cfg()
-    cfg["embedding"]["provider_id"] = "anthropic-1"
+    cfg["embeddings"][0]["provider_id"] = "anthropic-1"
     cfg["memory"]["extraction_llm"] = "claude-primary"
     url = main._find_ollama_url(cfg)
     assert url == "http://ollama:11434"
@@ -637,7 +643,8 @@ def test_find_ollama_url_empty():
     cfg = _make_cfg(providers=[
         {"id": "a1", "name": "Anthropic", "type": "anthropic", "key": "sk-x", "url": ""},
     ])
-    cfg["embedding"]["provider_id"] = "a1"
+    cfg["embeddings"] = [{"id": "emb-1", "name": "Embedding 1",
+                           "provider_id": "a1", "model": "", "dims": 1024}]
     cfg["memory"]["extraction_llm"] = ""
     url = main._find_ollama_url(cfg)
     assert url == ""

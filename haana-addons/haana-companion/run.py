@@ -54,6 +54,34 @@ async def _detect_ha_url(session: aiohttp.ClientSession) -> str:
     return ""
 
 
+async def _fetch_ha_persons(session: aiohttp.ClientSession) -> list:
+    """Holt Person-Entitaeten aus HA via Supervisor-Proxy."""
+    if not SUPERVISOR_TOKEN:
+        return []
+    try:
+        async with session.get(
+            "http://supervisor/core/api/states",
+            headers={"Authorization": f"Bearer {SUPERVISOR_TOKEN}"},
+            timeout=aiohttp.ClientTimeout(total=5),
+        ) as r:
+            if r.status != 200:
+                logger.warning(f"HA States-Abfrage fehlgeschlagen: HTTP {r.status}")
+                return []
+            states = await r.json()
+            persons = []
+            for state in states:
+                eid = state.get("entity_id", "")
+                if eid.startswith("person."):
+                    uid = eid[len("person."):]
+                    name = state.get("attributes", {}).get("friendly_name", uid)
+                    persons.append({"id": eid, "uid": uid, "display_name": name})
+            logger.info(f"HA Personen geladen: {len(persons)}")
+            return persons
+    except Exception as e:
+        logger.warning(f"HA Personen-Abfrage fehlgeschlagen: {e}")
+        return []
+
+
 async def _handshake(haana_url: str, token: str, ha_url: str, session: aiohttp.ClientSession) -> None:
     """Ping + Register beim HAANA-Stack."""
     headers = {"Authorization": f"Bearer {token}"}
@@ -68,12 +96,13 @@ async def _handshake(haana_url: str, token: str, ha_url: str, session: aiohttp.C
         logger.warning(f"Companion-Ping Fehler: {e}")
         return
 
+    ha_persons = await _fetch_ha_persons(session)
     supervisor_token = SUPERVISOR_TOKEN
     try:
         async with session.post(
             f"{haana_url}/api/companion/register",
             headers=headers,
-            json={"ha_url": ha_url, "ha_token": supervisor_token},
+            json={"ha_url": ha_url, "ha_token": supervisor_token, "ha_persons": ha_persons},
             timeout=aiohttp.ClientTimeout(total=5),
         ) as r:
             if r.status == 200:
