@@ -4196,12 +4196,11 @@ async def companion_register(request: Request):
         raise HTTPException(400, "Ungueltiges JSON")
     ha_url = (body.get("ha_url") or "").strip().rstrip("/")
     ha_token = (body.get("ha_token") or "").strip()
-    if not ha_url:
-        raise HTTPException(400, "ha_url fehlt")
-    if not ha_token:
-        raise HTTPException(400, "ha_token fehlt")
-    cfg.setdefault("services", {})["ha_url"] = ha_url
-    cfg["services"]["ha_token"] = ha_token
+    services = cfg.setdefault("services", {})
+    if ha_url:
+        services["ha_url"] = ha_url
+    if ha_token:
+        services["ha_token"] = ha_token
     ha_persons = body.get("ha_persons", [])
     if ha_persons:
         cfg["services"]["ha_persons"] = ha_persons
