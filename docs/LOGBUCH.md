@@ -23,7 +23,7 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 - Keine
 
 **Rollback:**
-- `git revert <hash>` (wird nach Commit ergaenzt)
+- `git revert bcf1698`
 
 **Reviewer Score:** 9/10
 
