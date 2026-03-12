@@ -452,7 +452,22 @@ function extractText(msg) {
   const m = msg.message;
   if (!m) return null;
   if (m.conversation) return m.conversation;
-  if (m.extendedTextMessage?.text) return m.extendedTextMessage.text;
+  if (m.extendedTextMessage?.text) {
+    const text = m.extendedTextMessage.text;
+    const qi = m.extendedTextMessage.contextInfo?.quotedMessage;
+    if (qi) {
+      const raw =
+        qi.conversation ||
+        qi.extendedTextMessage?.text ||
+        qi.imageMessage?.caption ||
+        null;
+      if (raw) {
+        const snippet = raw.length > 300 ? raw.slice(0, 300) + "..." : raw;
+        return `[Zitierte Nachricht: "${snippet}"]\n\n${text}`;
+      }
+    }
+    return text;
+  }
   if (m.imageMessage?.caption) return m.imageMessage.caption;
   if (m.documentMessage?.caption) return m.documentMessage.caption;
   // audioMessage wird separat im Message-Handler verarbeitet (STT)
