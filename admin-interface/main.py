@@ -1981,7 +1981,7 @@ async def ha_users():
 
     # Fallback: Live-Abfrage via gespeichertem HA-Token
     ha_url   = (services.get("ha_url", "") or os.environ.get("HA_URL", "")).rstrip("/")
-    ha_token = (services.get("ha_token", "") or os.environ.get("SUPERVISOR_TOKEN", "")).strip()
+    ha_token = services.get("ha_token", "").strip()
     if not ha_url or not ha_token:
         return {"ok": False, "error": "HA URL oder Token nicht konfiguriert", "users": []}
     import httpx
@@ -4195,12 +4195,9 @@ async def companion_register(request: Request):
     except Exception:
         raise HTTPException(400, "Ungueltiges JSON")
     ha_url = (body.get("ha_url") or "").strip().rstrip("/")
-    ha_token = (body.get("ha_token") or "").strip()
     services = cfg.setdefault("services", {})
     if ha_url:
         services["ha_url"] = ha_url
-    if ha_token:
-        services["ha_token"] = ha_token
     ha_persons = body.get("ha_persons", [])
     if ha_persons:
         cfg["services"]["ha_persons"] = ha_persons

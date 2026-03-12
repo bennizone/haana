@@ -5,6 +5,28 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ---
 
+## 2026-03-12 — HA Long-Lived Token Integration
+
+**Aenderungen:**
+- `admin-interface/main.py`: `companion/register` schreibt `ha_token` nicht mehr (SUPERVISOR_TOKEN des Companions ueberschrieb manuell eingetragenen LLAT)
+- `core/ha-users` (via main.py): SUPERVISOR_TOKEN env-Fallback entfernt, nur noch `services.ha_token` aus config.json genutzt
+- `admin-interface/templates/index.html`: Hint-Text unter Token-Feld mit Link zur HA-Profil-Seite (i18n-ready)
+- `admin-interface/static/js/config.js`: `_checkHaMcpAddon()` befuellt MCP-URL-Feld automatisch wenn Addon erkannt
+- `admin-interface/static/i18n/de.json` + `en.json`: neue i18n-Keys fuer Token-Hint-Text
+
+**Entscheidungen:**
+- Companion-Addon wird optional: HAANA spricht HA direkt per Long-Lived Access Token (LLAT) an
+- SUPERVISOR_TOKEN-Fallback war problematisch, da er manuell eingetragene Tokens ueberschrieb
+
+**Offene Punkte:**
+- Companion-Addon-Dokumentation aktualisieren (optional-Hinweis)
+
+**Score:** 9/10 (reviewer), validate.sh: 261/261 gruen
+
+**Rollback:** `git revert <hash>` (Hash nach Commit eintragen)
+
+---
+
 ## 2026-03-11 — MS6: UX-Verbesserungen
 
 **Aenderungen:**

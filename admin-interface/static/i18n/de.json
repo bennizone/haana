@@ -333,6 +333,7 @@
     "ha_title": "Home Assistant",
     "ha_url": "Home Assistant URL",
     "ha_token": "HA Long-Lived Token",
+    "ha_token_hint": "Token erstellen: HA → Profil → Sicherheit → Langzeit-Zugriffstoken",
     "ha_test": "Verbindung testen",
     "mcp_title": "MCP Server",
     "mcp_enabled": "aktiviert",

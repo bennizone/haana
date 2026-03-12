@@ -123,6 +123,13 @@ async function _checkHaMcpAddon() {
   try {
     const r = await fetch('/api/ha-mcp-status');
     const data = await r.json();
+    // Auto-fill MCP URL wenn erkannt und Feld noch leer
+    if (data.url) {
+      const mcpUrlField = document.getElementById('svc-mcp-url');
+      if (mcpUrlField && !mcpUrlField.value) {
+        mcpUrlField.value = data.url;
+      }
+    }
     const notifEl = document.getElementById('ha-mcp-notice');
     if (!notifEl) return;
     if (data.installed && data.running) {
