@@ -23,7 +23,7 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 **Score:** 9/10 (reviewer), validate.sh: 261/261 gruen
 
-**Rollback:** `git revert <hash>` (Hash nach Commit eintragen)
+**Rollback:** `git revert 7d1ac5c`
 
 ---
 
