@@ -5,6 +5,32 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ---
 
+## 2026-03-12 — Entwicklung-Tab: Claude Code Provider-Auswahl
+
+**Aenderungen:**
+- `admin-interface/templates/index.html`: Provider-UI im Entwicklung-Tab aktiv; Terminal und Git ausgegraut mit "Demnaechst verfuegbar"-Badge
+- `admin-interface/static/js/terminal.js`: `loadDevProvider()` beim Tab-Init aufgerufen; Ollama-Modelle live von `/api/tags` geladen; Cache-Buster `terminal.js?v=4`
+- `admin-interface/main.py`: `GET/POST /api/dev/claude-provider`, `_sanitize_env_value()` fuer Shell-Safety
+- `install.sh`: `.bashrc` sourcet automatisch `.claude_provider.env`
+- `admin-interface/static/i18n/de.json` + `en.json`: `dev.*` Keys (Paritaet 685 Keys)
+
+**Entscheidungen:**
+- Provider-Dropdown waehlt welcher konfigurierter Provider fuer `claude` CLI genutzt wird
+- Modell-Dropdown: bei Minimax/Ollama sichtbar; Ollama-Modelle live von API geladen
+- MCP-Checkboxen: sichtbar wenn Minimax-Provider konfiguriert ist
+- Speichern schreibt `/opt/haana/.claude_provider.env` mit `export`-Zeilen
+- Terminal + Git: komplex, spaeter ergaenzen — fokussierter Scope verhindert Overengineering
+
+**Offene Punkte:**
+- Terminal-Tab: ssh/tmux-Integration fuer spaetere MS
+- Git-Tab: Status/Diff/Commit-Workflow fuer spaetere MS
+
+**Score:** 8/10 (reviewer)
+
+**Rollback:** `git revert aa42c76`
+
+---
+
 ## 2026-03-12 — HA Long-Lived Token Integration
 
 **Aenderungen:**

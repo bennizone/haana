@@ -31,6 +31,17 @@ async function loadDevProvider() {
 
     // Modell-Dropdown befüllen
     _devPopulateModels(sel.value, providers, llms, savedRes.model);
+
+    // Bei Ollama: Modelle live nachladen
+    const selectedProvider = providers.find(p => p.id === sel.value);
+    if (selectedProvider && selectedProvider.type === 'ollama' && selectedProvider.url) {
+      _devLoadOllamaModels(selectedProvider.url).then(() => {
+        if (savedRes.model) {
+          const modelSel = document.getElementById('dev-model-select');
+          if (modelSel) modelSel.value = savedRes.model;
+        }
+      });
+    }
   } catch (e) {
     console.warn('loadDevProvider:', e);
   }
@@ -59,9 +70,37 @@ function _devPopulateModels(providerId, providers, llms, selectedModel) {
 async function _devOnProviderChange(providerId) {
   try {
     const cfg = await fetch('/api/config').then(r => r.json());
-    _devPopulateModels(providerId, cfg.providers || [], cfg.llms || [], '');
+    const providers = cfg.providers || [];
+    const llms = cfg.llms || [];
+    const provider = providers.find(p => p.id === providerId);
+
+    _devPopulateModels(providerId, providers, llms, '');
+
+    // Bei Ollama: Modelle live von der API laden
+    if (provider && provider.type === 'ollama' && provider.url) {
+      _devLoadOllamaModels(provider.url);
+    }
   } catch (e) {
     console.warn('_devOnProviderChange:', e);
+  }
+}
+
+async function _devLoadOllamaModels(url) {
+  const modelSel = document.getElementById('dev-model-select');
+  const modelRow = document.getElementById('dev-model-row');
+  if (!modelSel || !modelRow) return;
+
+  try {
+    const data = await fetch(url.replace(/\/$/, '') + '/api/tags').then(r => r.json());
+    const models = (data.models || []).map(m => m.name || m.model || m);
+    if (models.length > 0) {
+      modelRow.style.display = '';
+      modelSel.innerHTML = models.map(m =>
+        `<option value="${escAttr(m)}">${escHtml(m)}</option>`
+      ).join('');
+    }
+  } catch (e) {
+    console.warn('_devLoadOllamaModels:', e);
   }
 }
 
@@ -144,6 +183,7 @@ function initTerminal() {
     // Provider laden und Status pruefen
     _termLoadProviders();
     _termLoadStatus();
+    loadDevProvider();
 
     // Willkommensnachricht
     _term.writeln('\x1b[1;36mHAANA Development Terminal\x1b[0m');
