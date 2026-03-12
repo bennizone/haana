@@ -182,20 +182,27 @@ function _wizRenderStep(step) {
 
   _wizUpdateNextBtn();
 
-  // Skip-Link: nur auf Step 1 im fresh-Modus
+  // Skip-Link: nur auf Step 1 im fresh-Modus — direkt in .wizard-nav einbauen
   const existingSkip = document.getElementById('wiz-skip-link');
-  if (existingSkip) existingSkip.parentElement.remove();
+  if (existingSkip) existingSkip.remove();
   if (step === 1 && _wizState.mode === 'fresh') {
-    const skipDiv = document.createElement('div');
-    skipDiv.style.cssText = 'text-align:center;margin-top:16px';
-    skipDiv.innerHTML = '<a href="#" id="wiz-skip-link" style="color:var(--muted);font-size:0.85rem">Einrichtung \u00FCberspringen</a>';
-    const contentEl = document.getElementById('wizard-content');
-    if (contentEl) contentEl.after(skipDiv);
-    document.getElementById('wiz-skip-link')?.addEventListener('click', async (e) => {
+    const skipLink = document.createElement('a');
+    skipLink.href = '#';
+    skipLink.id = 'wiz-skip-link';
+    skipLink.style.cssText = 'color:var(--muted);font-size:0.85rem;white-space:nowrap;';
+    skipLink.textContent = 'Einrichtung \u00FCberspringen';
+    skipLink.addEventListener('click', async (e) => {
       e.preventDefault();
       await fetch('/api/setup/skip', {method: 'POST'});
       location.reload();
     });
+    const navEl = document.getElementById('wizard-nav');
+    if (navEl) {
+      // Vor dem Spacer (flex:1 div) einfuegen — so erscheint der Link links, Buttons bleiben rechts
+      const spacer = navEl.querySelector('div[style*="flex:1"]');
+      if (spacer) navEl.insertBefore(skipLink, spacer);
+      else navEl.appendChild(skipLink);
+    }
   }
 }
 
