@@ -65,6 +65,7 @@ services:
       - haana-media:/media/haana
       - /var/run/docker.sock:/var/run/docker.sock
       - /home/haana/.claude:/claude-auth
+      - /opt/haana:/opt/haana:rw
     restart: unless-stopped
     depends_on:
       qdrant:

@@ -532,7 +532,9 @@
     "delete_label": "Löschen",
     "dims_mismatch": "Embedding-Dimensionen stimmen nicht überein – Collections müssen neu aufgebaut werden (Memory-Tab).",
     "rebuild_banner": "Qdrant ist leer – Memory kann aus Konversations-Logs neu aufgebaut werden.",
-    "restart_all_btn": "Alle Agenten neu starten"
+    "restart_all_btn": "Alle Agenten neu starten",
+    "update_btn": "Update",
+    "updating": "Update gestartet — Seite lädt in ~60 Sekunden neu"
   },
   "whatsapp": {
     "connected": "Verbunden",

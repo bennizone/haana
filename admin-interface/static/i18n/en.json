@@ -532,7 +532,9 @@
     "delete_label": "Delete",
     "dims_mismatch": "Embedding dimensions mismatch – collections need to be rebuilt (Memory tab).",
     "rebuild_banner": "Qdrant is empty – memory can be rebuilt from conversation logs.",
-    "restart_all_btn": "Restart all agents"
+    "restart_all_btn": "Restart all agents",
+    "update_btn": "Update",
+    "updating": "Update started — page reloads in ~60 seconds"
   },
   "whatsapp": {
     "connected": "Connected",

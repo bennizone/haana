@@ -4154,6 +4154,58 @@ async def api_git_log():
     return await _git.git_log()
 
 
+@app.post("/api/system/update")
+async def system_update():
+    """Git pull + Agent-Image rebuild + Admin-Interface rebuild + Neustart."""
+    host_path = HOST_BASE or "/opt/haana"
+
+    async def _do_update():
+        import asyncio as _asyncio
+        loop = _asyncio.get_running_loop()
+        docker_client = getattr(_agent_manager, "_client", None)
+        try:
+            # 1. Git pull auf Host-Repo
+            p1 = await _asyncio.create_subprocess_exec(
+                "git", "-C", host_path, "fetch", "origin",
+                stdout=_asyncio.subprocess.DEVNULL, stderr=_asyncio.subprocess.DEVNULL,
+            )
+            await p1.wait()
+            p2 = await _asyncio.create_subprocess_exec(
+                "git", "-C", host_path, "reset", "--hard", "origin/main",
+                stdout=_asyncio.subprocess.DEVNULL, stderr=_asyncio.subprocess.DEVNULL,
+            )
+            await p2.wait()
+
+            if docker_client:
+                # 2. Agent-Base-Image bauen
+                await loop.run_in_executor(
+                    None,
+                    lambda: list(docker_client.api.build(
+                        path=host_path, tag="haana-instanz:latest", rm=True, decode=True
+                    )),
+                )
+                # 3. Admin-Interface-Image bauen
+                await loop.run_in_executor(
+                    None,
+                    lambda: list(docker_client.api.build(
+                        path=f"{host_path}/admin-interface",
+                        tag="haana-admin-interface:latest", rm=True, decode=True
+                    )),
+                )
+                # 4. Container neu starten (Response wurde bereits gesendet)
+                await _asyncio.sleep(1)
+                try:
+                    c = docker_client.containers.get("haana-admin-interface-1")
+                    c.restart()
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.error(f"[system/update] Fehler: {e}")
+
+    asyncio.create_task(_do_update())
+    return {"ok": True, "message": "Update gestartet — Seite lädt in ~60 Sekunden neu"}
+
+
 # ── MS7: Companion API ─────────────────────────────────────────────────────────
 
 def _verify_companion_token(request: Request, config: dict) -> bool:

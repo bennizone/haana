@@ -184,3 +184,20 @@ async function restartAllAgentsStatus() {
   }
   setTimeout(loadStatus, 2000);
 }
+
+async function systemUpdate() {
+  toast(t('status.updating'), 'ok');
+  try {
+    const r = await fetch('/api/system/update', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      toast(d.message || t('status.updating'), 'ok');
+      // Seite nach 60s neu laden (Container-Neustart dauert ~30s)
+      setTimeout(() => location.reload(), 60000);
+    } else {
+      toast((d.error || d.message || '?'), 'err');
+    }
+  } catch(e) {
+    toast(e.message, 'err');
+  }
+}
