@@ -4,6 +4,31 @@ Chronologische Dokumentation der wichtigsten Aenderungen am HAANA-Projekt.
 
 ---
 
+## 2026-03-12 — Embedding-Refactoring, HA Users Sync, UI-Fixes (Commit b6967f8)
+
+**Aenderungen:**
+- `admin-interface/main.py`: Embedding-Config als benannte Liste (`embeddings[]`) statt einzelner Inline-Config; `process_manager.py` liest benanntes Embedding aus der Liste; HA-Companion-Registrierung gibt Personen-Liste zurueck und wird gecacht
+- `admin-interface/static/js/config.js`: Memory-Tab auf Dropdown-Auswahl des konfigurierten Embeddings vereinfacht; LLM/Provider Unsaved-State-Fix (DOM wird vor Re-Render synchronisiert); stale-DOM-Fix in `saveSectionLlms`; `resetSectionMemory` laed Embeddings neu vom Server
+- `admin-interface/static/js/users.js`: User-Formular: HA-Selector an Anfang verschoben, fuellt Anzeigename + ID automatisch aus; `claude.md`-Template-Feld entfernt (wird aus Rolle abgeleitet)
+- `admin-interface/templates/index.html`: HTML fuer neues Embedding-Dropdown + HA-User-Selector
+- `haana-addons/haana-companion/run.py`: Supervisor-Proxy-Call zum Abrufen der Personen-Liste bei Registrierung; Liste wird an HAANA uebergeben
+- `core/process_manager.py`: Liest benanntes Embedding aus `embeddings[]`-Liste; keine Inline-Config mehr
+- `admin-interface/static/i18n/de.json` + `en.json`: i18n-Keys fuer Embedding-Dropdown + HA-User-Selector ergaenzt
+- `tests/test_config.py`: Tests fuer neue Embedding-Listen-Struktur angepasst
+
+**Entscheidungen:**
+- Embedding als benannte Liste statt Inline-Config: ermoeglicht mehrere Embeddings (z.B. lokal + cloud), einfachere Auswahl im UI per Dropdown
+- Empty Default (kein vorkonfiguriertes fastembed): verhindert unbeabsichtigte Modell-Downloads bei Erstinstallation
+- HA-Personen-Liste vom Companion gecacht: HAANA kennt HA-Entitaeten ohne separaten API-Call; bleibt aktuell bei jedem Companion-Neustart
+- `claude.md`-Template aus User-Formular entfernt: Template wird vollstaendig aus der Rolle abgeleitet — weniger Redundanz, weniger Fehlerquellen
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert b6967f8`
+
+---
+
 ## 2026-03-11 — README aktualisiert (Proxmox Oneliner + Companion Addon)
 
 **Aenderungen:**
