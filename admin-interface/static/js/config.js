@@ -1241,7 +1241,7 @@ async function _fetchEmbModelsForCard(i) {
     const r = await fetch('/api/fetch-embedding-models', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider_type: prov.type, url: prov.url, key: prov.key }),
+      body: JSON.stringify({ type: prov.type, url: prov.url, key: prov.key }),
     });
     const data = await r.json();
     if (data.ok && data.models && data.models.length > 0) {
