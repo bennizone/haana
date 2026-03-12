@@ -90,6 +90,17 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     # startup
     global _agent_manager
+    # Log-Verzeichnisse anlegen und haana-User zuweisen
+    media_dir = Path(os.environ.get("HAANA_MEDIA_DIR", "/media/haana"))
+    haana_uid = int(os.environ.get("HAANA_UID", "1000"))
+    for subdir in ["logs/conversations", "logs/memory-ops", "logs/dream", "logs/errors"]:
+        log_path = media_dir / subdir
+        try:
+            log_path.mkdir(parents=True, exist_ok=True)
+            os.chown(str(log_path), haana_uid, haana_uid)
+        except Exception as e:
+            logger.warning("[Startup] Log-Verzeichnis konnte nicht erstellt/chown werden: %s — %s", log_path, e)
+    logger.info("[Startup] Log-Verzeichnisse in %s initialisiert.", media_dir)
     asyncio.create_task(_cleanup_loop())
     asyncio.create_task(_dream_scheduler())
     _sync_rebuild_state()
