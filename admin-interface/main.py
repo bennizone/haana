@@ -170,7 +170,9 @@ _SSO_LOCK = _threading.Lock()
 
 # Pfade die OHNE Authentifizierung zugänglich sind
 _AUTH_EXEMPT_PREFIXES = ("/static/", "/ws/", "/api/wa-proxy/", "/api/companion/")  # WICHTIG: WS-Endpoints müssen intern selbst auth prüfen!
-_AUTH_EXEMPT_EXACT = {"/", "/api/auth/login", "/api/auth/logout", "/api/auth/status", "/api/health", "/api/setup-status", "/api/whatsapp-config", "/api/auth/sso"}
+_AUTH_EXEMPT_EXACT = {"/", "/api/auth/login", "/api/auth/logout", "/api/auth/status",
+                      "/api/health", "/api/setup-status", "/api/whatsapp-config", "/api/auth/sso",
+                      "/api/tags", "/api/chat", "/api/version", "/api/ps", "/api/show"}
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
