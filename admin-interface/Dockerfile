@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends tmux git curl c
     chmod a+r /etc/apt/keyrings/docker.gpg && \
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable" > /etc/apt/sources.list.d/docker.list && \
     curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
-    apt-get install -y --no-install-recommends docker-ce-cli nodejs && \
+    apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin nodejs && \
     npm install -g @anthropic-ai/claude-code && \
     rm -rf /var/lib/apt/lists/*
 
