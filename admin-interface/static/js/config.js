@@ -1125,7 +1125,12 @@ function renderEmbeddings(c) {
           </div>
           <div class="form-group" style="flex:3;">
             <label data-i18n="config_embeddings.model">Modell</label>
-            <input type="text" id="emb-${i}-model" value="${escAttr(e.model || '')}" oninput="_onEmbModelChange(${i})" placeholder="z.B. BAAI/bge-m3">
+            <div style="display:flex;gap:6px;align-items:center;">
+              <input type="text" id="emb-${i}-model" value="${escAttr(e.model || '')}" oninput="_onEmbModelChange(${i})" placeholder="z.B. BAAI/bge-m3" style="flex:1;">
+              <button class="btn btn-secondary" style="font-size:11px;padding:4px 10px;flex-shrink:0;" onclick="_fetchEmbModelsForCard(${i})" data-i18n="config_embeddings.load_models">Modelle laden</button>
+              <span id="emb-${i}-model-status" style="font-size:11px;color:var(--muted);white-space:nowrap;"></span>
+            </div>
+            <select id="emb-${i}-model-select" style="display:none;margin-top:6px;"></select>
           </div>
           <div class="form-group" style="flex:0 0 110px;">
             <label data-i18n="config_embeddings.dims">Dims</label>
@@ -1185,6 +1190,85 @@ function _onEmbModelChange(i) {
   if (!modEl || !dimsEl) return;
   const known = _EMBED_DIMS[modEl.value] || _EMBED_DIMS[modEl.value.split(':')[0]];
   if (known) dimsEl.value = known;
+}
+
+async function _fetchEmbModelsForCard(i) {
+  const provEl   = document.getElementById(`emb-${i}-provider`);
+  const modelEl  = document.getElementById(`emb-${i}-model`);
+  const selEl    = document.getElementById(`emb-${i}-model-select`);
+  const statusEl = document.getElementById(`emb-${i}-model-status`);
+  if (!provEl || !modelEl) return;
+  const provId = provEl.value;
+  if (!cfg) return;
+
+  // fastembed: show preset list inline (no API call)
+  if (provId === '__local__') {
+    const presets = [
+      { id: 'BAAI/bge-small-en-v1.5', dims: 384,  hint: t('config_memory.embed_model_bge_small') },
+      { id: 'BAAI/bge-m3',            dims: 1024, hint: t('config_memory.embed_model_bge_m3') },
+      { id: 'nomic-ai/nomic-embed-text-v1.5', dims: 768, hint: 'Multilingual, 768 dims' },
+      { id: 'sentence-transformers/all-MiniLM-L6-v2', dims: 384, hint: 'English, fast, 384 dims' },
+    ];
+    if (selEl) {
+      selEl.innerHTML = presets.map(m =>
+        `<option value="${escAttr(m.id)}" data-dims="${m.dims}">${escHtml(m.id)} — ${escHtml(m.hint)}</option>`
+      ).join('');
+      selEl.style.display = '';
+      selEl.onchange = () => {
+        const opt = selEl.selectedOptions[0];
+        modelEl.value = opt.value;
+        const dims = parseInt(opt.dataset.dims) || 384;
+        const dimsEl = document.getElementById(`emb-${i}-dims`);
+        if (dimsEl) dimsEl.value = dims;
+      };
+      if (modelEl.value) {
+        const match = presets.find(m => m.id === modelEl.value);
+        if (match) selEl.value = match.id;
+      }
+    }
+    if (statusEl) statusEl.textContent = `${presets.length} ${t('config_memory.embedding_models_found')}`;
+    return;
+  }
+
+  // API-based providers (ollama, openai, gemini, custom)
+  const prov = (cfg.providers || []).find(p => p.id === provId);
+  if (!prov) return;
+
+  if (statusEl) { statusEl.textContent = t('config_memory.embedding_testing'); }
+  if (selEl) selEl.style.display = 'none';
+
+  try {
+    const r = await fetch('/api/fetch-embedding-models', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider_type: prov.type, url: prov.url, key: prov.key }),
+    });
+    const data = await r.json();
+    if (data.ok && data.models && data.models.length > 0) {
+      if (selEl) {
+        selEl.innerHTML = data.models.map(m => {
+          const dims = _EMBED_DIMS[m] || _EMBED_DIMS[m.split(':')[0]] || 0;
+          return `<option value="${escAttr(m)}" data-dims="${dims}">${escHtml(m)}${dims ? ' — ' + dims + ' dims' : ''}</option>`;
+        }).join('');
+        selEl.style.display = '';
+        selEl.onchange = () => {
+          const opt = selEl.selectedOptions[0];
+          modelEl.value = opt.value;
+          const dims = parseInt(opt.dataset.dims) || 0;
+          if (dims) {
+            const dimsEl = document.getElementById(`emb-${i}-dims`);
+            if (dimsEl) dimsEl.value = dims;
+          }
+        };
+        if (modelEl.value) selEl.value = modelEl.value;
+      }
+      if (statusEl) statusEl.textContent = `${data.models.length} ${t('config_memory.embedding_models_found')}`;
+    } else {
+      if (statusEl) statusEl.textContent = data.error || t('config_memory.embedding_test');
+    }
+  } catch(e) {
+    if (statusEl) statusEl.textContent = t('config.load_error') || 'Fehler';
+  }
 }
 
 async function saveSectionEmbeddings() {

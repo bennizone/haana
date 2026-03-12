@@ -326,7 +326,8 @@
     "model": "Modell",
     "dims": "Dimensions",
     "select": "Embedding",
-    "fallback": "Fallback Embedding"
+    "fallback": "Fallback Embedding",
+    "load_models": "Modelle laden"
   },
   "config_services": {
     "ha_title": "Home Assistant",
