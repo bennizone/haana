@@ -767,6 +767,7 @@
             <div class="form-inline">
               <button class="btn btn-sm btn-secondary" onclick="refreshWaStatus()">Aktualisieren</button>
               <button class="btn btn-sm btn-secondary" id="wa-logout-btn" style="display:none;" onclick="waLogout()">Trennen</button>
+              <button class="btn btn-sm btn-danger" onclick="waBridgeStop()" id="wa-stop-btn" style="display:none" data-i18n="whatsapp.stop_bridge">Bridge stoppen</button>
             </div>
           </div>
           <div id="wa-account-info" class="wa-account-info" style="display:none;">
@@ -779,6 +780,7 @@
           </div>
           <div id="wa-offline-info" class="form-hint" style="display:none;">
             Bridge-Container nicht erreichbar. Starte mit: <code class="tag">docker compose --profile agents up -d</code>
+            <br><button class="btn btn-primary" onclick="waBridgeStart()" id="wa-start-btn" data-i18n="whatsapp.start_bridge" style="margin-top:8px;">Bridge starten</button>
           </div>
         </div>
 
@@ -1065,7 +1067,7 @@
 <script src="/static/js/users.js?v=7"></script>
 <script src="/static/js/status.js?v=5"></script>
 <script src="/static/js/logs.js?v=6"></script>
-<script src="/static/js/whatsapp.js?v=3"></script>
+<script src="/static/js/whatsapp.js?v=4"></script>
 <script src="/static/js/git.js?v=1"></script>
 <script src="/static/lib/xterm.min.js"></script>
 <script src="/static/lib/xterm-addon-fit.min.js"></script>

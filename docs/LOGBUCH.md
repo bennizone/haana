@@ -5,6 +5,29 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ---
 
+## 2026-03-12 — WhatsApp Bridge Start/Stop Buttons
+
+**Aenderungen:**
+- `admin-interface/static/js/whatsapp.js`: `waBridgeStart()` + `waBridgeStop()` mit Polling-Integration
+- `admin-interface/templates/index.html`: Start-Button im Offline-Bereich, Stop-Button in der Status-Row
+- `admin-interface/main.py`: `POST /api/whatsapp/start` + `POST /api/whatsapp/stop` via subprocess (shell=False)
+- `admin-interface/static/i18n/de.json` + `en.json`: 5 neue `whatsapp.*` Keys (690 gesamt, paritaetisch)
+
+**Entscheidungen:**
+- Start-Button nur bei `offline`-Status sichtbar, Stop-Button bei `connected` oder `qr`
+- Backend nutzt `docker compose up -d whatsapp-bridge` bzw. `docker compose stop whatsapp-bridge`
+- Docker-Socket `/var/run/docker.sock` ist bereits im admin-interface Container gemountet
+- Blocking subprocess akzeptabel: Start/Stop ist seltene Admin-Aktion, kein Performance-Problem
+
+**Offene Punkte:**
+- Langfristig: async subprocess fuer nicht-blockierendes Backend (technische Schuld, unkritisch)
+
+**Score:** 8/10 (reviewer)
+
+**Rollback:** `git revert <hash>` — Hash nach Commit eintragen
+
+---
+
 ## 2026-03-12 — Entwicklung-Tab: Claude Code Provider-Auswahl
 
 **Aenderungen:**

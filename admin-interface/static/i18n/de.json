@@ -545,7 +545,12 @@
     "disconnected": "WhatsApp getrennt – QR-Code erscheint gleich",
     "disconnect_confirm": "WhatsApp-Session wirklich trennen? Du musst danach den QR-Code erneut scannen.",
     "error": "Fehler",
-    "unknown": "Unbekannt"
+    "unknown": "Unbekannt",
+    "start_bridge": "Bridge starten",
+    "stop_bridge": "Bridge stoppen",
+    "starting": "Wird gestartet…",
+    "stopping": "Wird gestoppt…",
+    "stop_confirm": "WhatsApp Bridge wirklich stoppen?"
   },
   "common": {
     "save": "Speichern",

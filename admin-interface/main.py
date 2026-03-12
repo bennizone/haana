@@ -2232,6 +2232,52 @@ async def whatsapp_logout():
         return {"ok": False, "error": str(e)[:200]}
 
 
+@app.post("/api/whatsapp/start")
+async def whatsapp_start(request: Request):
+    """WhatsApp-Bridge Container starten."""
+    if not _auth.is_authenticated(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["docker", "compose", "up", "-d", "whatsapp-bridge"],
+            cwd="/opt/haana",
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            raise HTTPException(status_code=500, detail=result.stderr or "Failed to start bridge")
+        return {"ok": True}
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="Timeout starting bridge")
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="docker not found")
+
+
+@app.post("/api/whatsapp/stop")
+async def whatsapp_stop(request: Request):
+    """WhatsApp-Bridge Container stoppen."""
+    if not _auth.is_authenticated(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["docker", "compose", "stop", "whatsapp-bridge"],
+            cwd="/opt/haana",
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            raise HTTPException(status_code=500, detail=result.stderr or "Failed to stop bridge")
+        return {"ok": True}
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="Timeout stopping bridge")
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="docker not found")
+
+
 def _is_trivial_entry(rec: dict) -> bool:
     """Prüft ob ein Konversations-Eintrag trivial ist (kein Memory-Wert)."""
     user_msg = (rec.get("user") or "").strip()

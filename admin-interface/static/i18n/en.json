@@ -545,7 +545,12 @@
     "disconnected": "WhatsApp disconnected – QR code will appear shortly",
     "disconnect_confirm": "Really disconnect WhatsApp session? You will need to scan the QR code again.",
     "error": "Error",
-    "unknown": "Unknown"
+    "unknown": "Unknown",
+    "start_bridge": "Start Bridge",
+    "stop_bridge": "Stop Bridge",
+    "starting": "Starting…",
+    "stopping": "Stopping…",
+    "stop_confirm": "Really stop WhatsApp Bridge?"
   },
   "common": {
     "save": "Save",

@@ -19,6 +19,9 @@ async function refreshWaStatus() {
     offl.style.display  = 'none';
     logoutBtn.style.display = 'none';
 
+    const stopBtn  = document.getElementById('wa-stop-btn');
+    const startBtn = document.getElementById('wa-start-btn');
+
     if (d.status === 'connected') {
       dot.style.background = 'var(--accent)';
       txt.textContent = t('whatsapp.connected');
@@ -28,6 +31,8 @@ async function refreshWaStatus() {
         info.style.display = 'block';
       }
       logoutBtn.style.display = 'inline-block';
+      if (stopBtn)  stopBtn.style.display  = 'inline-block';
+      if (startBtn) startBtn.style.display = 'none';
       stopWaPolling();
     } else if (d.status === 'qr') {
       dot.style.background = '#f59e0b';
@@ -39,21 +44,31 @@ async function refreshWaStatus() {
         document.getElementById('wa-qr-img').src = qd.qr;
         qrBox.style.display = 'block';
       }
+      if (stopBtn)  stopBtn.style.display  = 'inline-block';
+      if (startBtn) startBtn.style.display = 'none';
       startWaPolling();
     } else if (d.status === 'offline') {
       dot.style.background = '#888';
       txt.textContent = t('whatsapp.bridge_offline');
       offl.style.display = 'block';
+      if (stopBtn)  stopBtn.style.display  = 'none';
+      if (startBtn) startBtn.style.display = '';
       stopWaPolling();
     } else {
       dot.style.background = '#ef4444';
       txt.textContent = t('whatsapp.not_connected');
+      if (stopBtn)  stopBtn.style.display  = 'inline-block';
+      if (startBtn) startBtn.style.display = 'none';
       startWaPolling();
     }
   } catch (e) {
     dot.style.background = '#888';
     txt.textContent = t('whatsapp.bridge_unreachable');
     offl.style.display = 'block';
+    const stopBtn  = document.getElementById('wa-stop-btn');
+    const startBtn = document.getElementById('wa-start-btn');
+    if (stopBtn)  stopBtn.style.display  = 'none';
+    if (startBtn) startBtn.style.display = '';
     stopWaPolling();
   }
 }
@@ -78,4 +93,32 @@ async function waLogout() {
       toast(t('whatsapp.error') + ': ' + (d.error || t('whatsapp.unknown')), 'err');
     }
   });
+}
+
+async function waBridgeStart() {
+  const btn = document.getElementById('wa-start-btn');
+  if (btn) { btn.disabled = true; btn.textContent = t('whatsapp.starting') || '…'; }
+  try {
+    const r = await fetch('/api/whatsapp/start', { method: 'POST' });
+    if (!r.ok) throw new Error(await r.text());
+    // Polling starten, Bridge braucht ~5s zum Hochfahren
+    startWaPolling();
+  } catch(e) {
+    toast(e.message || t('whatsapp.error'), 'error');
+    if (btn) { btn.disabled = false; btn.textContent = t('whatsapp.start_bridge') || 'Bridge starten'; }
+  }
+}
+
+async function waBridgeStop() {
+  if (!confirm(t('whatsapp.stop_confirm') || 'Bridge wirklich stoppen?')) return;
+  const btn = document.getElementById('wa-stop-btn');
+  if (btn) { btn.disabled = true; btn.textContent = t('whatsapp.stopping') || '…'; }
+  try {
+    const r = await fetch('/api/whatsapp/stop', { method: 'POST' });
+    if (!r.ok) throw new Error(await r.text());
+    setTimeout(() => refreshWaStatus(), 2000);
+  } catch(e) {
+    toast(e.message || t('whatsapp.error'), 'error');
+    if (btn) { btn.disabled = false; btn.textContent = t('whatsapp.stop_bridge') || 'Bridge stoppen'; }
+  }
 }
