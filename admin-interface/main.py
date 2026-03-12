@@ -2291,11 +2291,11 @@ async def whatsapp_start(request: Request):
     import subprocess
     try:
         result = subprocess.run(
-            ["docker", "compose", "up", "-d", "whatsapp-bridge"],
+            ["docker", "compose", "--profile", "agents", "up", "-d", "whatsapp-bridge"],
             cwd="/opt/haana",
             capture_output=True,
             text=True,
-            timeout=60,
+            timeout=120,
         )
         if result.returncode != 0:
             raise HTTPException(status_code=500, detail=result.stderr or "Failed to start bridge")
@@ -2314,7 +2314,7 @@ async def whatsapp_stop(request: Request):
     import subprocess
     try:
         result = subprocess.run(
-            ["docker", "compose", "stop", "whatsapp-bridge"],
+            ["docker", "compose", "--profile", "agents", "stop", "whatsapp-bridge"],
             cwd="/opt/haana",
             capture_output=True,
             text=True,
