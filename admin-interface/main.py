@@ -3100,6 +3100,7 @@ def _start_oauth_login_sync():
 
     env = os.environ.copy()
     env["HOME"] = tmp_home
+    env["CLAUDE_CONFIG_DIR"] = f"{tmp_home}/.claude"
     # TERM=dumb disables TUI mode so setup-token accepts stdin input
     env["TERM"] = "dumb"
     env["NO_COLOR"] = "1"
