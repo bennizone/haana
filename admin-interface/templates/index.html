@@ -296,7 +296,6 @@
     <button class="cfg-tab-btn"        onclick="showCfgTab('memory')"     id="cfgtab-memory" data-i18n="config.sub_tabs.memory">Memory</button>
     <button class="cfg-tab-btn"        onclick="showCfgTab('ha')"         id="cfgtab-ha" data-i18n="config.sub_tabs.home_assistant">Home Assistant</button>
     <button class="cfg-tab-btn"        onclick="showCfgTab('whatsapp')"   id="cfgtab-whatsapp" data-i18n="config.sub_tabs.whatsapp">WhatsApp</button>
-    <button class="cfg-tab-btn"        onclick="showCfgTab('infra')"      id="cfgtab-infra" data-i18n="config.sub_tabs.infra">Infra</button>
     <button class="cfg-tab-btn"        onclick="showCfgTab('logs')"       id="cfgtab-logs" data-i18n="config.sub_tabs.retention">Retention</button>
   </div>
 
@@ -815,49 +814,6 @@
 
   </div>
 
-  <!-- ── Sub-Tab: Infra ── -->
-  <div id="cfgpanel-infra" class="cfg-tab-panel" style="display:none;">
-
-    <div class="config-section">
-      <div class="config-section-header" data-i18n="config_services.infra_title">Infrastruktur</div>
-      <div class="config-section-body">
-        <div class="form-row">
-          <div class="form-group">
-            <label>Qdrant URL</label>
-            <div class="form-inline">
-              <input type="url" id="svc-qdrant-url" placeholder="http://qdrant:6333" style="flex:1;">
-              <button class="btn btn-sm btn-secondary"
-                onclick="testSvcConn('qdrant', document.getElementById('svc-qdrant-url').value, 'test-qdrant')">Test</button>
-            </div>
-            <span id="test-qdrant" class="form-hint"></span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Geplante Infra-Features -->
-    <div class="config-section muted">
-      <div class="config-section-header">Geplante Features</div>
-      <div class="config-section-body" style="display:flex;flex-direction:column;gap:12px;">
-        <div class="planned-card">
-          <div class="planned-card-title">Backup · Phase 2+</div>
-          <div class="planned-card-desc">Automatisches Backup der Qdrant-Collections auf TrueNAS (SMB).</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="cfg-section-save-bar">
-      <button class="btn btn-primary" id="save-btn-infra" onclick="saveSectionInfra()">
-        <span data-i18n="config.section_save">Speichern</span>
-      </button>
-      <button class="btn btn-secondary" onclick="resetSectionInfra()">
-        <span data-i18n="config.section_reset">&#8635; Zurücksetzen</span>
-      </button>
-      <span id="save-status-infra" class="cfg-section-save-status"></span>
-    </div>
-
-  </div>
-
   <!-- ── Sub-Tab: Logs ── -->
   <div id="cfgpanel-logs" class="cfg-tab-panel" style="display:none;">
 
@@ -1091,7 +1047,7 @@
 
 <!-- Feature-Module -->
 <script src="/static/js/chat.js?v=5"></script>
-<script src="/static/js/config.js?v=18"></script>
+<script src="/static/js/config.js?v=19"></script>
 <script src="/static/js/users.js?v=7"></script>
 <script src="/static/js/status.js?v=3"></script>
 <script src="/static/js/logs.js?v=6"></script>

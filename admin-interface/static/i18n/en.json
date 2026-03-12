@@ -144,7 +144,6 @@
       "memory": "Memory",
       "home_assistant": "Home Assistant",
       "whatsapp": "WhatsApp",
-      "infra": "Infra",
       "logs": "Logs",
       "retention": "Retention"
     }
@@ -383,9 +382,7 @@
     "auto_backup_title": "Auto-Backup",
     "auto_backup_label": "Automatic HA backup before agent changes",
     "auto_backup_desc": "Creates a Home Assistant backup before the agent modifies automations, scripts or other HA configurations.",
-    "infra_title": "Infrastructure",
     "ollama_url": "Ollama URL",
-    "qdrant_url": "Qdrant URL",
     "test": "Test",
     "claude_auth_title": "Claude OAuth",
     "claude_auth_desc": "Claude Code Agent SDK requires a valid OAuth session. The token must be renewed periodically.",

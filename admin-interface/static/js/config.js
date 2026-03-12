@@ -67,7 +67,6 @@ function renderConfig(c) {
   const sv = c.services || {};
   _setVal('svc-ha-url',    sv.ha_url    || '');
   _setVal('svc-ha-token',  sv.ha_token  || '');
-  _setVal('svc-qdrant-url', sv.qdrant_url || '');
 
   // MCP
   const mcpEnabled = !!sv.ha_mcp_enabled;
@@ -915,7 +914,6 @@ async function testEmbedding() {
 
 // ── Restart Detection ───────────────────────────────────────────────────────
 const RESTART_FIELDS = {
-  'services.qdrant_url':     'Qdrant URL',
   'services.ha_url':         'Home Assistant URL',
   'services.ha_token':       'Home Assistant Token',
   'services.ha_mcp_enabled': 'HA MCP',
@@ -1562,52 +1560,6 @@ async function resetSectionWhatsapp() {
     const waPfxGrp = document.getElementById('svc-wa-prefix-group');
     if (waPfxGrp) waPfxGrp.style.display = (wa.mode === 'self') ? '' : 'none';
     const st = document.getElementById('save-status-whatsapp');
-    if (st) { st.textContent = '\u21ba ' + t('config.section_reset_done'); st.style.color = 'var(--muted)'; setTimeout(() => { st.textContent = ''; }, 2000); }
-  } catch(e) { toast(e.message, 'err'); }
-}
-
-// ── Infra Section ─────────────────────────────────────────────────────────────
-async function saveSectionInfra() {
-  if (!cfg) return;
-  const services = {
-    ...(cfg.services || {}),
-    qdrant_url: document.getElementById('svc-qdrant-url')?.value || '',
-  };
-  try {
-    const newCfg = { ...cfg, services };
-    const r = await _patchConfig(newCfg);
-    if (r.ok) {
-      const restartChanges = _detectRestartChanges(cfg, newCfg);
-      cfg.services = services;
-      _sectionSaveOk('save-status-infra', 'save-btn-infra');
-      toast(t('config.section_saved'), 'ok');
-      if (restartChanges.length > 0) {
-        const changedList = restartChanges.join('\n  - ');
-        Modal.show({
-          title: t('config.restart_title'),
-          body: `<p class="modal-message">${escHtml(t('config.restart_changes_intro') + '\n\n- ' + changedList + '\n\n' + t('config.restart_changes_warning')).replace(/\n/g, '<br>')}</p>`,
-          confirmText: t('config.restart_now'),
-          onConfirm: async () => { await restartAllAgents(); },
-          onCancel: () => { toast(t('config.restart_pending'), 'warn'); },
-        });
-      }
-    } else {
-      _sectionSaveErr('save-status-infra', t('config.save_error'));
-      toast(t('config.save_error'), 'err');
-    }
-  } catch(e) {
-    _sectionSaveErr('save-status-infra', e.message);
-    toast(e.message, 'err');
-  }
-}
-
-async function resetSectionInfra() {
-  try {
-    const r = await fetch('/api/config');
-    const fresh = await r.json();
-    cfg.services = { ...fresh.services };
-    _setVal('svc-qdrant-url', fresh.services?.qdrant_url || '');
-    const st = document.getElementById('save-status-infra');
     if (st) { st.textContent = '\u21ba ' + t('config.section_reset_done'); st.style.color = 'var(--muted)'; setTimeout(() => { st.textContent = ''; }, 2000); }
   } catch(e) { toast(e.message, 'err'); }
 }
