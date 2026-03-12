@@ -1254,7 +1254,7 @@ async function _fetchEmbModelsForCard(i) {
       body: JSON.stringify({ type: prov.type, url: prov.url, key: prov.key }),
     });
     const data = await r.json();
-    if (data.ok && data.models && data.models.length > 0) {
+    if (data.models && data.models.length > 0) {
       if (selEl) {
         selEl.innerHTML = '';
         selEl.style.display = '';
