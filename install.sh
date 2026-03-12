@@ -350,12 +350,15 @@ BPEOF
            /home/haana/.claude/projects/-opt-haana/memory/architecture.md
         chown -R haana:haana /home/haana/.claude
 
-        cd /opt/haana && docker compose up -d
-
         # Agent-Image bauen (für Instanz-Container)
         echo -e '\033[1;33m→ Agent-Image bauen...\033[m'
-        docker build -t haana-instanz:latest /opt/haana/ 2>&1 | tail -3
-        echo -e '\033[1;92m  Agent-Image gebaut.\033[m'
+        if docker build -t haana-instanz:latest /opt/haana/ 2>&1 | tail -3; then
+            echo -e '\033[1;92m  Agent-Image gebaut.\033[m'
+        else
+            echo -e '\033[1;33m  WARNUNG: Agent-Image Build fehlgeschlagen — Agenten können nicht gestartet werden.\033[m'
+        fi
+
+        cd /opt/haana && docker compose up -d
 
         # Warten bis Admin-Interface bereit ist
         echo \"Warte auf Admin-Interface...\"

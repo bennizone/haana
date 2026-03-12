@@ -110,8 +110,11 @@ echo ""
 
 # ── Agent-Image bauen ─────────────────────────────────────────────────────────
 echo -e "${YELLOW}→ Agent-Image bauen...${NC}"
-docker build -t haana-instanz:latest /opt/haana/ 2>&1 | tail -3
-echo -e "${GREEN}  Agent-Image gebaut.${NC}"
+if docker build -t haana-instanz:latest /opt/haana/ 2>&1 | tail -3; then
+    echo -e "${GREEN}  Agent-Image gebaut.${NC}"
+else
+    echo -e "${YELLOW}  WARNUNG: Agent-Image Build fehlgeschlagen — Agenten können nicht gestartet werden.${NC}"
+fi
 echo ""
 
 # ── Docker Compose neu starten ────────────────────────────────────────────────
