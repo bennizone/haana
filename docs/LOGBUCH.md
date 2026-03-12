@@ -24,7 +24,7 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 **Score:** 8/10 (reviewer)
 
-**Rollback:** `git revert <hash>` — Hash nach Commit eintragen
+**Rollback:** `git revert fac0379`
 
 ---
 
