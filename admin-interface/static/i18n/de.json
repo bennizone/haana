@@ -135,6 +135,9 @@
     "section_reset": "Zurücksetzen",
     "section_saved": "Abschnitt gespeichert",
     "section_reset_done": "Zurückgesetzt",
+    "ha_mcp_detected": "ha-mcp Addon erkannt unter",
+    "ha_mcp_add": "Provider hinzufügen",
+    "ha_mcp_notice_hint": "Secret-Pfad als Modell-Pfad oder URL-Suffix eintragen",
     "sub_tabs": {
       "llms": "LLMs",
       "providers": "Providers",

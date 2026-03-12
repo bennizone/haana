@@ -4206,6 +4206,10 @@ async def companion_register(request: Request):
     if ha_persons:
         cfg["services"]["ha_persons"] = ha_persons
         logger.info(f"[companion] ha_persons gespeichert: {len(ha_persons)}")
+    ha_mcp = body.get("ha_mcp")
+    if ha_mcp is not None:
+        cfg["services"]["ha_mcp"] = ha_mcp
+        logger.info(f"[companion] ha_mcp gespeichert: {ha_mcp}")
     save_config(cfg)
     logger.info(f"[companion] Registered: ha_url={ha_url}")
     return {"status": "registered"}
@@ -4254,3 +4258,27 @@ async def companion_token_regenerate(request: Request):
     save_config(cfg)
     logger.info("[companion] Companion-Token neu generiert")
     return {"companion_token": new_token}
+
+
+@app.post("/api/companion/ha-mcp-status")
+async def companion_ha_mcp_status(request: Request):
+    """Companion meldet ha-mcp Addon Status."""
+    cfg = load_config()
+    if not _verify_companion_token(request, cfg):
+        raise HTTPException(status_code=401, detail="Invalid companion token")
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Ungueltiges JSON")
+    ha_mcp = body.get("ha_mcp", {})
+    cfg.setdefault("services", {})["ha_mcp"] = ha_mcp
+    save_config(cfg)
+    logger.info(f"[companion] ha-mcp Status aktualisiert: {ha_mcp}")
+    return {"ok": True}
+
+
+@app.get("/api/ha-mcp-status")
+async def ha_mcp_status():
+    """Gibt den bekannten ha-mcp Status zurueck."""
+    cfg = load_config()
+    return cfg.get("services", {}).get("ha_mcp", {"installed": False})

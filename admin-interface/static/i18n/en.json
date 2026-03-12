@@ -135,6 +135,9 @@
     "section_reset": "Reset",
     "section_saved": "Section saved",
     "section_reset_done": "Reset",
+    "ha_mcp_detected": "ha-mcp addon detected at",
+    "ha_mcp_add": "Add provider",
+    "ha_mcp_notice_hint": "Enter secret path as model path or URL suffix",
     "sub_tabs": {
       "llms": "LLMs",
       "providers": "Providers",

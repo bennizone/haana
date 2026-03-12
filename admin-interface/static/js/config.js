@@ -115,6 +115,50 @@ function renderConfig(c) {
   const waPfxGrp = document.getElementById('svc-wa-prefix-group');
   if (waPfxGrp) waPfxGrp.style.display = (wa.mode === 'self') ? '' : 'none';
 
+  _checkHaMcpAddon();
+}
+
+// ── ha-mcp Addon Detection ─────────────────────────────────────────────────────
+async function _checkHaMcpAddon() {
+  try {
+    const r = await fetch('/api/ha-mcp-status');
+    const data = await r.json();
+    const notifEl = document.getElementById('ha-mcp-notice');
+    if (!notifEl) return;
+    if (data.installed && data.running) {
+      const alreadyConfigured = (cfg.providers || []).some(p =>
+        p.url && p.url.includes(':9583')
+      );
+      if (!alreadyConfigured) {
+        notifEl.style.display = '';
+        const safeUrl = escAttr(data.url || '');
+        const safeUrlHtml = escHtml(data.url || 'http://<ha-ip>:9583');
+        notifEl.innerHTML = `<span>${t('config.ha_mcp_detected')} <code>${safeUrlHtml}</code> &mdash; <a href="#" onclick="event.preventDefault();_addHaMcpProvider('${safeUrl}')">+ ${t('config.ha_mcp_add')}</a></span>`;
+      } else {
+        notifEl.style.display = 'none';
+      }
+    } else {
+      notifEl.style.display = 'none';
+    }
+  } catch(e) { /* silent */ }
+}
+
+// url is passed pre-escaped via escAttr() in _checkHaMcpAddon; goes into cfg.providers (rendered into text input via renderProviders)
+function _addHaMcpProvider(url) {
+  if (!cfg.providers) cfg.providers = [];
+  const newProv = {
+    id: 'ha-mcp',
+    name: 'ha-mcp',
+    type: 'openai',
+    url: url || '',
+    api_key: '',
+  };
+  cfg.providers.push(newProv);
+  renderProviders(cfg);
+  const idx = cfg.providers.length - 1;
+  const el = document.getElementById(`prov-${idx}`);
+  if (el) el.scrollIntoView({ behavior: 'smooth' });
+  toast(t('config.ha_mcp_notice_hint'), 'info');
 }
 
 // ── Provider Rendering ────────────────────────────────────────────────────────
@@ -1165,6 +1209,20 @@ async function saveSectionEmbeddings() {
     }
   } catch(e) {
     toast(e.message, 'err');
+  }
+}
+
+async function resetSectionEmbeddings() {
+  if (!cfg) return;
+  try {
+    const r = await fetch('/api/config');
+    const fresh = await r.json();
+    cfg.embeddings = fresh.embeddings || [];
+    renderEmbeddings(cfg);
+    _refreshEmbeddingDropdowns();
+    toast(t('config.section_reset'), 'ok');
+  } catch(e) {
+    toast(t('config.load_failed'), 'error');
   }
 }
 
