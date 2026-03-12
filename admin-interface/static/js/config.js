@@ -1127,10 +1127,10 @@ function renderEmbeddings(c) {
             <label data-i18n="config_embeddings.model">Modell</label>
             <div style="display:flex;gap:6px;align-items:center;">
               <input type="text" id="emb-${i}-model" value="${escAttr(e.model || '')}" oninput="_onEmbModelChange(${i})" placeholder="z.B. BAAI/bge-m3" style="flex:1;">
-              <button class="btn btn-secondary" style="font-size:11px;padding:4px 10px;flex-shrink:0;" onclick="_fetchEmbModelsForCard(${i})" data-i18n="config_embeddings.load_models">Modelle laden</button>
+              <button class="btn btn-secondary" style="font-size:11px;padding:4px 10px;flex-shrink:0;" onclick="event.stopPropagation();_fetchEmbModelsForCard(${i})" data-i18n="config_embeddings.load_models">Modelle laden</button>
               <span id="emb-${i}-model-status" style="font-size:11px;color:var(--muted);white-space:nowrap;"></span>
             </div>
-            <select id="emb-${i}-model-select" style="display:none;margin-top:6px;"></select>
+            <div id="emb-${i}-model-select" style="display:none;margin-top:6px;flex-wrap:wrap;"></div>
           </div>
           <div class="form-group" style="flex:0 0 110px;">
             <label data-i18n="config_embeddings.dims">Dims</label>
@@ -1210,21 +1210,31 @@ async function _fetchEmbModelsForCard(i) {
       { id: 'sentence-transformers/all-MiniLM-L6-v2', dims: 384, hint: 'English, fast, 384 dims' },
     ];
     if (selEl) {
-      selEl.innerHTML = presets.map(m =>
-        `<option value="${escAttr(m.id)}" data-dims="${m.dims}">${escHtml(m.id)} — ${escHtml(m.hint)}</option>`
-      ).join('');
+      selEl.innerHTML = '';
       selEl.style.display = '';
-      selEl.onchange = () => {
-        const opt = selEl.selectedOptions[0];
-        modelEl.value = opt.value;
-        const dims = parseInt(opt.dataset.dims) || 384;
-        const dimsEl = document.getElementById(`emb-${i}-dims`);
-        if (dimsEl) dimsEl.value = dims;
-      };
-      if (modelEl.value) {
-        const match = presets.find(m => m.id === modelEl.value);
-        if (match) selEl.value = match.id;
-      }
+      presets.forEach(m => {
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-secondary';
+        btn.style.cssText = 'font-size:11px;padding:3px 8px;margin:2px;';
+        btn.textContent = m.id.split('/').pop() + ' (' + m.dims + 'd)';
+        btn.title = m.id + ' — ' + m.hint;
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          modelEl.value = m.id;
+          const dimsEl = document.getElementById(`emb-${i}-dims`);
+          if (dimsEl) dimsEl.value = m.dims;
+          // Mark selected
+          selEl.querySelectorAll('button').forEach(b => b.classList.remove('btn-primary'));
+          btn.classList.add('btn-primary');
+          btn.classList.remove('btn-secondary');
+        };
+        // Mark if currently selected
+        if (modelEl.value === m.id) {
+          btn.classList.add('btn-primary');
+          btn.classList.remove('btn-secondary');
+        }
+        selEl.appendChild(btn);
+      });
     }
     if (statusEl) statusEl.textContent = `${presets.length} ${t('config_memory.embedding_models_found')}`;
     return;
@@ -1246,21 +1256,36 @@ async function _fetchEmbModelsForCard(i) {
     const data = await r.json();
     if (data.ok && data.models && data.models.length > 0) {
       if (selEl) {
-        selEl.innerHTML = data.models.map(m => {
-          const dims = _EMBED_DIMS[m] || _EMBED_DIMS[m.split(':')[0]] || 0;
-          return `<option value="${escAttr(m)}" data-dims="${dims}">${escHtml(m)}${dims ? ' — ' + dims + ' dims' : ''}</option>`;
-        }).join('');
+        selEl.innerHTML = '';
         selEl.style.display = '';
-        selEl.onchange = () => {
-          const opt = selEl.selectedOptions[0];
-          modelEl.value = opt.value;
-          const dims = parseInt(opt.dataset.dims) || 0;
-          if (dims) {
-            const dimsEl = document.getElementById(`emb-${i}-dims`);
-            if (dimsEl) dimsEl.value = dims;
+        data.models.forEach(m => {
+          const modelId = typeof m === 'string' ? m : m.id;
+          const dims = typeof m === 'object' ? m.dims : (_EMBED_DIMS[modelId] || _EMBED_DIMS[modelId.split(':')[0]] || 0);
+          const btn = document.createElement('button');
+          btn.className = 'btn btn-secondary';
+          btn.style.cssText = 'font-size:11px;padding:3px 8px;margin:2px;';
+          btn.textContent = modelId + (dims ? ' (' + dims + 'd)' : '');
+          btn.title = modelId;
+          btn.onclick = (e) => {
+            e.stopPropagation();
+            modelEl.value = modelId;
+            if (dims) {
+              const dimsEl = document.getElementById(`emb-${i}-dims`);
+              if (dimsEl) dimsEl.value = dims;
+            }
+            selEl.querySelectorAll('button').forEach(b => {
+              b.classList.remove('btn-primary');
+              b.classList.add('btn-secondary');
+            });
+            btn.classList.add('btn-primary');
+            btn.classList.remove('btn-secondary');
+          };
+          if (modelEl.value === modelId) {
+            btn.classList.add('btn-primary');
+            btn.classList.remove('btn-secondary');
           }
-        };
-        if (modelEl.value) selEl.value = modelEl.value;
+          selEl.appendChild(btn);
+        });
       }
       if (statusEl) statusEl.textContent = `${data.models.length} ${t('config_memory.embedding_models_found')}`;
     } else {
