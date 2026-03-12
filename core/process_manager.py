@@ -313,6 +313,13 @@ class DockerAgentManager:
                     return c.image.tags[0] if c.image.tags else self._agent_image
         except Exception:
             pass
+        # Fallback: Basis-Image haana-instanz:latest
+        for tag in ["haana-instanz:latest", "haana-instanz"]:
+            try:
+                self._client.images.get(tag)
+                return tag
+            except Exception:
+                pass
         return self._agent_image
 
     def _get_network(self) -> str:
@@ -337,6 +344,11 @@ class DockerAgentManager:
             return {"ok": False, "error": "Docker nicht verfügbar (kein Socket gemountet?)"}
 
         uid = user["id"]
+
+        # Guard: kein Start ohne LLM
+        if not cfg.get("llms"):
+            return {"ok": False, "error": "Kein LLM konfiguriert — bitte zuerst ein LLM im Admin-Interface anlegen"}
+
         api_port = user["api_port"]
         self._port_cache[uid] = api_port
         container_name = self._container_name(user)

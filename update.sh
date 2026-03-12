@@ -108,6 +108,12 @@ else
 fi
 echo ""
 
+# ── Agent-Image bauen ─────────────────────────────────────────────────────────
+echo -e "${YELLOW}→ Agent-Image bauen...${NC}"
+docker build -t haana-instanz:latest /opt/haana/ 2>&1 | tail -3
+echo -e "${GREEN}  Agent-Image gebaut.${NC}"
+echo ""
+
 # ── Docker Compose neu starten ────────────────────────────────────────────────
 echo -e "${YELLOW}→ Docker-Services neu starten...${NC}"
 docker compose pull

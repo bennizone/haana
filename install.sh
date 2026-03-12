@@ -352,6 +352,11 @@ BPEOF
 
         cd /opt/haana && docker compose up -d
 
+        # Agent-Image bauen (für Instanz-Container)
+        echo -e '\033[1;33m→ Agent-Image bauen...\033[m'
+        docker build -t haana-instanz:latest /opt/haana/ 2>&1 | tail -3
+        echo -e '\033[1;92m  Agent-Image gebaut.\033[m'
+
         # Warten bis Admin-Interface bereit ist
         echo \"Warte auf Admin-Interface...\"
         for i in \$(seq 1 30); do
