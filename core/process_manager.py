@@ -407,6 +407,7 @@ class DockerAgentManager:
 
             container = self._client.containers.run(
                 image,
+                command=["python3", "-m", "core.agent"],
                 name=container_name,
                 environment=env,
                 volumes=volumes,
