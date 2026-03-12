@@ -163,6 +163,11 @@ function initTerminal() {
     _term.loadAddon(_fitAddon);
 
     const container = document.getElementById('terminal-xterm');
+    if (!container) {
+        // Terminal-Bereich ist deaktiviert — nur Provider-UI initialisieren
+        loadDevProvider();
+        return;
+    }
     _term.open(container);
     _fitAddon.fit();
 
