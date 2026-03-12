@@ -152,7 +152,7 @@
   <button class="tab-btn" onclick="showTab('config', event)" data-i18n="tabs.config">Config</button>
   <button class="tab-btn" onclick="showTab('users', event)" data-i18n="tabs.users">Users</button>
   <button class="tab-btn" onclick="showTab('status', event)" data-i18n="tabs.status">Status</button>
-  <button class="tab-btn" onclick="showTab('terminal', event)" data-i18n="terminal.tab">Entwicklung</button>
+  <button class="tab-btn" onclick="showTab('terminal', event); loadDevProvider()" data-i18n="terminal.tab">Entwicklung</button>
 </div>
 
 <!-- ══════════════════════════════════════════ CONVERSATIONS (Chat + Logs) -->
@@ -961,52 +961,64 @@
 <!-- ══════════════════════════════════════════ TERMINAL (Claude Code) -->
 <div id="panel-terminal" class="panel">
 
-  <!-- ══ GIT REPOSITORY ══ -->
-  <div class="cfg-section" id="git-section" style="padding:var(--sp-4);border-top:1px solid var(--border);margin-top:var(--sp-2);">
-    <div style="margin-bottom:var(--sp-3);">
+  <!-- ══ CLAUDE CODE PROVIDER ══ -->
+  <div class="cfg-section">
+    <h3 class="cfg-section-title" data-i18n="dev.provider_section">Claude Code Provider (su - haana)</h3>
+
+    <div class="form-group">
+      <label data-i18n="dev.provider_label">Provider</label>
+      <select id="dev-provider-select" onchange="_devOnProviderChange(this.value)" style="width:100%;max-width:320px;"></select>
+    </div>
+
+    <div class="form-group" id="dev-model-row" style="display:none;">
+      <label data-i18n="dev.model_label">Modell</label>
+      <select id="dev-model-select" style="width:100%;max-width:320px;"></select>
+    </div>
+
+    <div id="dev-mcp-row" style="display:none;margin-top:var(--sp-3);">
+      <label style="display:block;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:var(--sp-2);">MCP</label>
+      <label style="display:flex;align-items:center;gap:var(--sp-2);cursor:pointer;margin-bottom:var(--sp-2);">
+        <input type="checkbox" id="dev-mcp-web-search"> <span data-i18n="dev.mcp_websearch">Minimax Web Search MCP</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:var(--sp-2);cursor:pointer;">
+        <input type="checkbox" id="dev-mcp-image"> <span data-i18n="dev.mcp_image">Minimax Bildverstehen MCP</span>
+      </label>
+    </div>
+
+    <div style="margin-top:var(--sp-4);">
+      <button class="btn btn-primary btn-sm" onclick="saveDevProvider()" data-i18n="dev.save_btn">Speichern</button>
+      <span id="dev-save-msg" style="margin-left:var(--sp-3);font-size:12px;color:var(--success);display:none;" data-i18n="dev.saved">Gespeichert</span>
+    </div>
+  </div>
+
+  <!-- ══ TERMINAL — ausgegraut ══ -->
+  <div style="pointer-events:none;opacity:0.35;margin-top:var(--sp-4);">
+    <div class="cfg-section" style="position:relative;">
+      <div style="position:absolute;top:var(--sp-3);right:var(--sp-3);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:2px 8px;font-size:11px;color:var(--muted);" data-i18n="dev.coming_soon">Demnächst verfügbar</div>
+      <div class="terminal-toolbar">
+        <label data-i18n="terminal.provider_label">Claude Code Provider</label>
+        <select disabled></select>
+        <button class="btn btn-primary btn-sm" disabled data-i18n="terminal.connect_btn">Verbinden</button>
+        <div class="terminal-status-dot disconnected"></div>
+      </div>
+      <div style="height:160px;background:var(--bg);border-radius:var(--radius-sm);border:1px solid var(--border);margin-top:var(--sp-2);"></div>
+    </div>
+  </div>
+
+  <!-- ══ GIT — ausgegraut ══ -->
+  <div style="pointer-events:none;opacity:0.35;margin-top:var(--sp-4);">
+    <div class="cfg-section" style="position:relative;">
+      <div style="position:absolute;top:var(--sp-3);right:var(--sp-3);background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:2px 8px;font-size:11px;color:var(--muted);" data-i18n="dev.coming_soon">Demnächst verfügbar</div>
       <h3 style="margin:0 0 var(--sp-2) 0;font-size:14px;font-weight:600;" data-i18n="git.section_title">Git Repository</h3>
-    </div>
-
-    <!-- Status-Zeile -->
-    <div id="git-status-bar" style="display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-3);flex-wrap:wrap;">
-      <span id="git-branch-badge" style="font-family:monospace;font-size:13px;background:var(--bg);padding:2px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);">–</span>
-      <span id="git-sync-info" style="font-size:12px;color:var(--muted);"></span>
-      <button class="btn btn-secondary btn-sm" onclick="gitShowLog()" data-i18n="git.log_btn">Verlauf</button>
-      <button class="btn btn-secondary btn-sm" onclick="gitToggleConnect()" data-i18n="git.connect_btn">Verbinden</button>
-      <button class="btn btn-primary btn-sm" onclick="gitPull()" data-i18n="git.pull_btn">↓ Pull</button>
-      <button class="btn btn-secondary btn-sm" onclick="gitPush()" data-i18n="git.push_btn">↑ Push</button>
-    </div>
-
-    <!-- Connect-Formular (initial versteckt) -->
-    <div id="git-connect-form" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:var(--sp-4);margin-bottom:var(--sp-3);">
-      <div class="form-group">
-        <label data-i18n="git.url_label">Repository-URL</label>
-        <input type="url" id="git-url-input" placeholder="https://github.com/user/repo.git" style="width:100%;">
+      <div style="display:flex;align-items:center;gap:var(--sp-3);flex-wrap:wrap;">
+        <button class="btn btn-secondary btn-sm" disabled data-i18n="git.log_btn">Verlauf</button>
+        <button class="btn btn-secondary btn-sm" disabled data-i18n="git.connect_btn">Verbinden</button>
+        <button class="btn btn-primary btn-sm" disabled data-i18n="git.pull_btn">↓ Pull</button>
+        <button class="btn btn-secondary btn-sm" disabled data-i18n="git.push_btn">↑ Push</button>
       </div>
-      <div class="form-group" style="margin-top:var(--sp-3);">
-        <label data-i18n="git.token_label">Access Token</label>
-        <input type="password" id="git-token-input" placeholder="ghp_..." style="width:100%;">
-      </div>
-      <button class="btn btn-primary btn-sm" style="margin-top:var(--sp-3);" onclick="gitConnect()" data-i18n="git.save_btn">Speichern &amp; Verbinden</button>
     </div>
-
-    <!-- Output -->
-    <pre id="git-output" style="display:none;background:#1e1e1e;color:#d4d4d4;padding:var(--sp-3);border-radius:var(--radius-sm);font-size:12px;max-height:200px;overflow-y:auto;white-space:pre-wrap;"></pre>
   </div>
 
-  <div class="terminal-toolbar">
-    <label data-i18n="terminal.provider_label">Claude Code Provider</label>
-    <select id="term-provider-select"></select>
-    <button id="term-conn-btn" class="btn btn-primary btn-sm" onclick="termConnect()"
-            data-i18n="terminal.connect_btn">Verbinden</button>
-    <div class="terminal-status-dot disconnected" id="term-status-dot"></div>
-    <span id="term-status-text" style="font-size:12px;color:var(--muted);"></span>
-    <button class="btn btn-secondary btn-sm" onclick="termDetach()"
-            style="margin-left:auto;" data-i18n="terminal.detach">&#x2197; Detach</button>
-  </div>
-  <div class="terminal-wrap">
-    <div id="terminal-xterm"></div>
-  </div>
 </div>
 
 <div id="toast"></div>
@@ -1057,6 +1069,6 @@
 <script src="/static/js/git.js?v=1"></script>
 <script src="/static/lib/xterm.min.js"></script>
 <script src="/static/lib/xterm-addon-fit.min.js"></script>
-<script src="/static/js/terminal.js?v=2"></script>
+<script src="/static/js/terminal.js?v=3"></script>
 </body>
 </html>

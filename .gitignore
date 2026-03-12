@@ -218,3 +218,6 @@ instanzen/*/
 !instanzen/haana-admin/
 !instanzen/ha-assist/
 !instanzen/templates/
+
+# Generierte Env-Dateien mit potentiellen Secrets
+.claude_provider.env

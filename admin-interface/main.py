@@ -4348,3 +4348,110 @@ async def ha_mcp_status():
     """Gibt den bekannten ha-mcp Status zurueck."""
     cfg = load_config()
     return cfg.get("services", {}).get("ha_mcp", {"installed": False})
+
+
+# ── Dev: Claude Code Provider ─────────────────────────────────────────────────
+
+def _sanitize_env_value(value: str) -> str:
+    """Bereinigt einen Wert fuer die Verwendung in export VAR="..." Shell-Zeilen."""
+    # Doppelte Anfuehrungszeichen escapen, Newlines und Null-Bytes entfernen
+    return value.replace('"', '\\"').replace('\n', '').replace('\r', '').replace('\x00', '')
+
+
+def _build_claude_provider_env(provider: dict, model: str, mcp_web_search: bool, mcp_image: bool, cfg: dict) -> list[str]:
+    """Baut export/unset-Zeilen fuer /opt/haana/.claude_provider.env."""
+    lines = ["# HAANA Claude Code Provider — automatisch generiert"]
+    for var in ["ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN",
+                "ANTHROPIC_MODEL", "CLAUDE_CONFIG_DIR",
+                "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+                "MINIMAX_API_KEY", "MINIMAX_API_HOST"]:
+        lines.append(f"unset {var}")
+    lines.append("")
+    ptype = provider.get("type", "")
+    if ptype == "anthropic":
+        if provider.get("auth_method") == "oauth":
+            oauth_dir = provider.get("oauth_dir", "/data/claude-auth")
+            lines.append(f'export CLAUDE_CONFIG_DIR="{_sanitize_env_value(oauth_dir)}"')
+        else:
+            key = provider.get("key", "")
+            if key:
+                lines.append(f'export ANTHROPIC_API_KEY="{_sanitize_env_value(key)}"')
+    elif ptype == "minimax":
+        url = provider.get("url", "https://api.minimax.io/anthropic")
+        key = provider.get("key", "")
+        lines.append(f'export ANTHROPIC_BASE_URL="{_sanitize_env_value(url)}"')
+        if key:
+            lines.append(f'export ANTHROPIC_AUTH_TOKEN="{_sanitize_env_value(key)}"')
+        if model:
+            lines.append(f'export ANTHROPIC_MODEL="{_sanitize_env_value(model)}"')
+        lines.append('export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1"')
+    elif ptype == "ollama":
+        url = provider.get("url", "http://ollama:11434")
+        lines.append(f'export ANTHROPIC_BASE_URL="{_sanitize_env_value(url)}"')
+        lines.append('export ANTHROPIC_AUTH_TOKEN="ollama"')
+        if model:
+            lines.append(f'export ANTHROPIC_MODEL="{_sanitize_env_value(model)}"')
+    else:
+        url = provider.get("url", "")
+        key = provider.get("key", "")
+        if url:
+            lines.append(f'export ANTHROPIC_BASE_URL="{_sanitize_env_value(url)}"')
+        if key:
+            lines.append(f'export ANTHROPIC_API_KEY="{_sanitize_env_value(key)}"')
+        if model:
+            lines.append(f'export ANTHROPIC_MODEL="{_sanitize_env_value(model)}"')
+    # MCP: Minimax-Provider suchen falls vorhanden
+    if mcp_web_search or mcp_image:
+        mm = next((p for p in cfg.get("providers", []) if p.get("type") == "minimax"), provider if ptype == "minimax" else None)
+        if mm:
+            mcp_key = mm.get("key", "")
+            mcp_host = mm.get("url", "https://api.minimax.io/anthropic").replace("/anthropic", "")
+            if mcp_key:
+                lines.append(f'export MINIMAX_API_KEY="{_sanitize_env_value(mcp_key)}"')
+            lines.append(f'export MINIMAX_API_HOST="{_sanitize_env_value(mcp_host)}"')
+    return lines
+
+
+@app.get("/api/dev/claude-provider")
+async def get_dev_claude_provider(request: Request):
+    if not _auth.is_authenticated(request):
+        raise HTTPException(status_code=403, detail="Nicht autorisiert")
+    cfg = load_config()
+    return cfg.get("dev", {}).get("claude_provider", {})
+
+
+@app.post("/api/dev/claude-provider")
+async def set_dev_claude_provider(request: Request):
+    if not _auth.is_authenticated(request):
+        raise HTTPException(status_code=403, detail="Nicht autorisiert")
+    body = await request.json()
+    provider_id = body.get("provider_id", "")
+    model = body.get("model", "")
+    mcp_web_search = bool(body.get("mcp_web_search", False))
+    mcp_image = bool(body.get("mcp_image", False))
+    cfg = load_config()
+    providers = cfg.get("providers", [])
+    provider = next((p for p in providers if p.get("id") == provider_id), None)
+    if not provider:
+        raise HTTPException(status_code=404, detail=f"Provider '{provider_id}' nicht gefunden")
+    # model: nur alphanumerisch, Bindestrich, Punkt, Doppelpunkt, Slash (fuer Ollama-Tags)
+    if model and not re.match(r'^[\w\-\.\:\/]{1,100}$', model):
+        raise HTTPException(status_code=422, detail="Ungültiger Modell-Name")
+    if "dev" not in cfg:
+        cfg["dev"] = {}
+    cfg["dev"]["claude_provider"] = {
+        "provider_id": provider_id,
+        "model": model,
+        "mcp_web_search": mcp_web_search,
+        "mcp_image": mcp_image,
+    }
+    save_config(cfg)
+    env_lines = _build_claude_provider_env(provider, model, mcp_web_search, mcp_image, cfg)
+    env_file = Path("/opt/haana/.claude_provider.env")
+    try:
+        env_file.write_text("\n".join(env_lines) + "\n", encoding="utf-8")
+        env_file.chmod(0o600)
+    except Exception as exc:
+        logger.warning("dev: Konnte .claude_provider.env nicht schreiben: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+    return {"ok": True}

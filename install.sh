@@ -341,6 +341,11 @@ fi
 BPEOF
         chown haana:haana /home/haana/.bash_profile
 
+        # Claude Code Provider Env beim haana-Login sourcen
+        grep -q 'claude_provider.env' /home/haana/.bashrc 2>/dev/null || \
+          echo '[ -f /opt/haana/.claude_provider.env ] && source /opt/haana/.claude_provider.env' \
+          >> /home/haana/.bashrc
+
         # Claude Code Seed: settings + project memory
         mkdir -p /home/haana/.claude/projects/-opt-haana/memory
         cp /opt/haana/scripts/claude-seed/settings.json /home/haana/.claude/settings.json

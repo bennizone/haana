@@ -710,6 +710,16 @@
     "hint_claude": "Tipp: 'claude' eingeben um Claude Code zu starten",
     "provider_none": "Kein Provider gewaehlt"
   },
+  "dev": {
+    "provider_section": "Claude Code Provider (su - haana)",
+    "provider_label": "Provider",
+    "model_label": "Modell",
+    "mcp_websearch": "Minimax Web Search MCP",
+    "mcp_image": "Minimax Bildverstehen MCP",
+    "save_btn": "Speichern",
+    "saved": "Gespeichert",
+    "coming_soon": "Demnächst verfügbar"
+  },
   "status_hints": {
     "no_provider": "Kein LLM-Provider konfiguriert. Gehe zu Konfiguration > Provider.",
     "no_users": "Noch keine Benutzer angelegt. Erstelle deinen ersten Assistenten.",

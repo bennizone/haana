@@ -1,6 +1,104 @@
 // HAANA Terminal - Claude Code Integration
 'use strict';
 
+// ── Dev: Claude Code Provider ─────────────────────────────────────────────────
+
+async function loadDevProvider() {
+  try {
+    const [cfgRes, savedRes] = await Promise.all([
+      fetch('/api/config').then(r => r.json()),
+      fetch('/api/dev/claude-provider').then(r => r.json()).catch(() => ({}))
+    ]);
+    const providers = cfgRes.providers || [];
+    const llms = cfgRes.llms || [];
+
+    // Provider-Dropdown befüllen
+    const sel = document.getElementById('dev-provider-select');
+    if (!sel) return;
+    sel.innerHTML = providers.map(p =>
+      `<option value="${p.id}">${escHtml(p.name)} (${escHtml(p.type)})</option>`
+    ).join('');
+    if (savedRes.provider_id) sel.value = savedRes.provider_id;
+
+    // MCP-Checkboxen: sichtbar wenn Minimax-Provider existiert
+    const hasMinimax = providers.some(p => p.type === 'minimax');
+    const mcpRow = document.getElementById('dev-mcp-row');
+    if (mcpRow) mcpRow.style.display = hasMinimax ? '' : 'none';
+    const cbWs = document.getElementById('dev-mcp-web-search');
+    const cbImg = document.getElementById('dev-mcp-image');
+    if (cbWs) cbWs.checked = !!savedRes.mcp_web_search;
+    if (cbImg) cbImg.checked = !!savedRes.mcp_image;
+
+    // Modell-Dropdown befüllen
+    _devPopulateModels(sel.value, providers, llms, savedRes.model);
+  } catch (e) {
+    console.warn('loadDevProvider:', e);
+  }
+}
+
+function _devPopulateModels(providerId, providers, llms, selectedModel) {
+  const modelRow = document.getElementById('dev-model-row');
+  const modelSel = document.getElementById('dev-model-select');
+  if (!modelRow || !modelSel) return;
+
+  const provider = providers.find(p => p.id === providerId);
+  const isAnthropic = provider && provider.type === 'anthropic';
+  const provLlms = llms.filter(l => l.provider_id === providerId);
+
+  if (isAnthropic || provLlms.length === 0) {
+    modelRow.style.display = 'none';
+  } else {
+    modelRow.style.display = '';
+    modelSel.innerHTML = provLlms.map(l =>
+      `<option value="${escAttr(l.model)}">${escHtml(l.name)} (${escHtml(l.model)})</option>`
+    ).join('');
+    if (selectedModel) modelSel.value = selectedModel;
+  }
+}
+
+async function _devOnProviderChange(providerId) {
+  try {
+    const cfg = await fetch('/api/config').then(r => r.json());
+    _devPopulateModels(providerId, cfg.providers || [], cfg.llms || [], '');
+  } catch (e) {
+    console.warn('_devOnProviderChange:', e);
+  }
+}
+
+async function saveDevProvider() {
+  const sel = document.getElementById('dev-provider-select');
+  const modelRow = document.getElementById('dev-model-row');
+  const modelSel = document.getElementById('dev-model-select');
+  const cbWs = document.getElementById('dev-mcp-web-search');
+  const cbImg = document.getElementById('dev-mcp-image');
+  const msg = document.getElementById('dev-save-msg');
+
+  const modelVisible = modelRow && modelRow.style.display !== 'none';
+  const body = {
+    provider_id: sel ? sel.value : '',
+    model: (modelVisible && modelSel) ? modelSel.value : '',
+    mcp_web_search: !!(cbWs && cbWs.checked),
+    mcp_image: !!(cbImg && cbImg.checked),
+  };
+
+  try {
+    const res = await fetch('/api/dev/claude-provider', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.ok && msg) {
+      msg.style.display = '';
+      setTimeout(() => { msg.style.display = 'none'; }, 3000);
+    }
+  } catch (e) {
+    console.error('saveDevProvider:', e);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 let _term = null;
 let _ws = null;
 let _fitAddon = null;
