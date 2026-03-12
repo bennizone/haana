@@ -172,3 +172,15 @@ function _checklistNav(e, link) {
   const tabBtn = document.querySelector(`.tab-btn[onclick*="'${tabName}'"]`);
   if (tabBtn) tabBtn.click();
 }
+
+async function restartAllAgentsStatus() {
+  const r = await fetch('/api/instances/restart-all', { method: 'POST' });
+  const d = await r.json();
+  if (d.failed && Object.keys(d.failed).length > 0) {
+    const fails = Object.entries(d.failed).map(([k,v]) => `${k}: ${v}`).join(', ');
+    toast(t('config.restart_partial') + ': ' + fails.substring(0, 80), 'warn');
+  } else {
+    toast(t('config.restart_success'), 'ok');
+  }
+  setTimeout(loadStatus, 2000);
+}

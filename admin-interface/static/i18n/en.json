@@ -531,7 +531,8 @@
     "action_failed": "failed",
     "delete_label": "Delete",
     "dims_mismatch": "Embedding dimensions mismatch – collections need to be rebuilt (Memory tab).",
-    "rebuild_banner": "Qdrant is empty – memory can be rebuilt from conversation logs."
+    "rebuild_banner": "Qdrant is empty – memory can be rebuilt from conversation logs.",
+    "restart_all_btn": "Restart all agents"
   },
   "whatsapp": {
     "connected": "Connected",
