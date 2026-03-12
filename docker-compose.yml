@@ -18,56 +18,13 @@ services:
       retries: 5
       start_period: 10s
 
-  # ── Agent-Instanzen (Profile: agents) ─────────────────────────────────────
-  # Starten mit: docker compose --profile agents up -d
+  # ── Agent-Instanzen werden dynamisch per AgentManager gestartet ───────────
+  # Agents werden aus config.json gelesen und via 'docker run' gestartet —
+  # nicht per docker-compose. Kein statischer Service-Eintrag nötig.
+  # Image-Build: docker compose --profile build-only build
 
-  instanz-alice:
-    profiles: [agents]
-    build: .
-    env_file: .env
-    environment:
-      TZ: Europe/Berlin
-      HAANA_INSTANCE: alice
-      HAANA_API_PORT: 8001
-      HAANA_MEDIA_DIR: /media/haana
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-    ports:
-      - "8001:8001"
-    volumes:
-      - ./instanzen/alice/CLAUDE.md:/app/CLAUDE.md:ro
-      - ./skills:/app/skills:ro
-      - haana-data:/data
-      - haana-media:/media/haana
-    restart: unless-stopped
-    depends_on:
-      qdrant:
-        condition: service_healthy
-
-  instanz-bob:
-    profiles: [agents]
-    build: .
-    env_file: .env
-    environment:
-      TZ: Europe/Berlin
-      HAANA_INSTANCE: bob
-      HAANA_API_PORT: 8002
-      HAANA_MEDIA_DIR: /media/haana
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-    ports:
-      - "8002:8002"
-    volumes:
-      - ./instanzen/bob/CLAUDE.md:/app/CLAUDE.md:ro
-      - ./skills:/app/skills:ro
-      - haana-data:/data
-      - haana-media:/media/haana
-    restart: unless-stopped
-    depends_on:
-      qdrant:
-        condition: service_healthy
-
-  # ha-assist + ha-advanced werden als System-User per AgentManager gestartet
-  # (nicht per docker-compose), damit sie die korrekten LLM-Env-Vars aus der Config bekommen.
-  # Image-Build: docker compose --profile agents build baut User-Instanzen — dasselbe Image.
+  # System-Instanzen (ha-assist, ha-advanced, haana-admin) werden per AgentManager
+  # gestartet. Build-Profile stellen das Image bereit:
 
   instanz-ha-assist:
     profiles: [build-only]
