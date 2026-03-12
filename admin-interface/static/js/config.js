@@ -1011,6 +1011,22 @@ async function _patchConfig(payload) {
 }
 
 // ── Providers Section ────────────────────────────────────────────────────────
+function collectProviders() {
+  return (cfg.providers || []).map((p, i) => {
+    const base = {
+      ...p,
+      name: document.getElementById(`prov-${i}-name`)?.value ?? p.name,
+      url:  document.getElementById(`prov-${i}-url`)?.value  ?? p.url,
+      key:  document.getElementById(`prov-${i}-key`)?.value  ?? p.key,
+    };
+    if (p.type === 'minimax') {
+      base.mcp_web_search     = !!(document.getElementById(`prov-${i}-mcp-web-search`)?.checked);
+      base.mcp_image_analysis = !!(document.getElementById(`prov-${i}-mcp-image-analysis`)?.checked);
+    }
+    return base;
+  });
+}
+
 async function saveSectionProviders() {
   if (!cfg) return;
   const providers = (cfg.providers || []).map((p, i) => {
