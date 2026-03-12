@@ -21,7 +21,7 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 - Keine
 
 **Rollback:**
-- `git revert <hash>` (Hash nach Commit eintragen)
+- `git revert 17245fd`
 
 **Reviewer Scores:** 9/10 (Design-Vereinheitlichung)
 
