@@ -4,6 +4,46 @@ Chronologische Dokumentation der wichtigsten Aenderungen am HAANA-Projekt.
 
 ---
 
+## 2026-03-12 — Entwicklung-Tab: Claude Code Provider-Auswahl (Commit aa42c76)
+
+**Aenderungen:**
+- `admin-interface/main.py`: `_build_claude_provider_env()` baut korrekte `export`/`unset`-Zeilen fuer `.claude_provider.env`; `GET /api/dev/claude-provider` liest aktuellen Stand; `POST /api/dev/claude-provider` validiert Provider + Modell und schreibt Env-Datei; `_sanitize_env_value()` verhindert Shell-Injection; Modell-Validierung prueft ob gewaaehltes Modell in konfigurierten LLMs vorhanden ist
+- `admin-interface/templates/index.html`: Provider-UI im Entwicklung-Tab aktiv; Terminal und Git ausgegraut (Platzhalter fuer spaeter)
+- `admin-interface/static/js/terminal.js`: `loadDevProvider()`, `saveDevProvider()`, `_devOnProviderChange()` — laedt konfigurierten Provider, zeigt kontextabhaengige Optionen (Minimax-MCP-Checkboxen, Ollama/Minimax-Modell-Dropdown)
+- `admin-interface/static/i18n/de.json` + `en.json`: `dev.*` Keys ergaenzt (685 Keys je Datei)
+- `install.sh`: `.bashrc` sourcet `.claude_provider.env` beim haana-Login (`su - haana`)
+- `.gitignore`: `.claude_provider.env` eingetragen (enthaelt keine Secrets, aber instance-spezifisch)
+
+**Entscheidungen:**
+- Entwicklung-Tab nur fuer Provider-Auswahl: Terminal und Git sind komplex und koennen spaeter ergaenzt werden; fokussierter Scope verhindert Overengineering
+- `.claude_provider.env` statt direktem Config-Schreiben: Env-Datei wird beim Login gesourct — claude-CLI erbt korrekte Provider-Umgebung ohne Container-Neustart
+- Shell-Injection-Schutz via `_sanitize_env_value()`: entfernt alle nicht-druckbaren Zeichen und Shell-Sonderzeichen; Modell-Validierung gegen konfigurierte LLM-Liste verhindert beliebige String-Injection
+- MCP-Checkboxen auch bei Nicht-Minimax-LLM: Minimax-MCP (Web-Suche, Bildanalyse) ist unabhaengig vom Primary-LLM nutzbar
+
+**Offene Punkte:**
+- Terminal-Tab (xterm.js) und Git-Tab fuer spaetere Iteration vorgesehen
+- `.claude_provider.env` wird nicht automatisch geloescht wenn Provider-Config geloescht wird
+
+**Rollback:** `git revert aa42c76`
+
+---
+
+## 2026-03-12 — Ollama-Compat-Endpoints aus Auth-Middleware ausgenommen
+
+**Aenderungen:**
+- `admin-interface/main.py`: `/api/tags`, `/api/chat`, `/api/version`, `/api/ps`, `/api/show` zu `_AUTH_EXEMPT_EXACT` hinzugefuegt
+
+**Entscheidungen:**
+- HA Voice Pipeline spricht den Fake-Ollama-Proxy ohne Auth-Header an — alle fuenf Ollama-kompatiblen Endpunkte muessen auth-frei sein, damit der Proxy erreichbar ist
+- Authentifizierung bleibt fuer alle anderen Endpunkte unveraendert aktiv
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert 5856cf5`
+
+---
+
 ## 2026-03-12 — System-Prompts auf direkte Nutzeransprache umgestellt
 
 **Aenderungen:**
