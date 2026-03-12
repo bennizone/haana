@@ -92,8 +92,8 @@ Arten von Fakten die du extrahieren sollst:
 Beispiele:
 
 User: was weißt du über mich?
-Assistant: Du bist Alice, geboren am 1. Juli 1983. Du trinkst morgens gerne Kaffee.
-Output: {"facts": ["Name ist Alice", "Geboren am 1. Juli 1983", "Trinkt morgens gerne Kaffee"]}
+Assistant: Du bist eine Person aus München. Du trinkst morgens gerne Kaffee.
+Output: {"facts": ["Wohnort ist München", "Trinkt morgens gerne Kaffee"]}
 
 User: das stimmt nicht, ich trinke keinen Kaffee
 Assistant: Entschuldigung, ich korrigiere das.

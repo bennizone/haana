@@ -67,7 +67,7 @@ services:
 
   # ha-assist + ha-advanced werden als System-User per AgentManager gestartet
   # (nicht per docker-compose), damit sie die korrekten LLM-Env-Vars aus der Config bekommen.
-  # Image-Build: docker compose --profile agents build baut alice/bob — dasselbe Image.
+  # Image-Build: docker compose --profile agents build baut User-Instanzen — dasselbe Image.
 
   instanz-ha-assist:
     profiles: [build-only]
@@ -92,13 +92,11 @@ services:
       HAANA_DATA_DIR:         /data
       HAANA_CONF_FILE:        /data/config/config.json
       HAANA_INST_DIR:         /app/instanzen
-      AGENT_URL_BENNI:        http://haana-instanz-alice-1:8001
-      AGENT_URL_DOMI:         http://haana-instanz-bob-1:8002
       # Docker-Management für User-Provisioning
       HAANA_HOST_BASE:        /opt/haana
       HAANA_DATA_VOLUME:      haana_haana-data
       HAANA_COMPOSE_NETWORK:  haana_default
-      HAANA_AGENT_IMAGE:      haana-instanz-alice  # wird beim ersten Start auto-detected
+      HAANA_AGENT_IMAGE:      ""
       WHATSAPP_BRIDGE_URL:    http://whatsapp-bridge:3001
       HAANA_ADMIN_PORT:       ${HAANA_ADMIN_PORT:-8080}
     ports:

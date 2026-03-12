@@ -750,13 +750,13 @@ def test_build_env_fallback_openai():
 def test_build_env_ollama_primary_provider():
     """Ollama als Primary-LLM setzt ANTHROPIC_BASE_URL (offizielle Ollama-Doku)."""
     cfg = _make_cfg(providers=[
-        {"id": "ollama-home", "name": "Ollama", "type": "ollama", "url": "http://10.83.1.110:11434", "key": ""},
+        {"id": "ollama-home", "name": "Ollama", "type": "ollama", "url": "http://localhost:11434", "key": ""},
     ], llms=[
         {"id": "ministral", "name": "Ministral", "provider_id": "ollama-home", "model": "ministral-3-32k:3b"},
     ])
     user = _make_user(primary_llm="ministral", extraction_llm="ministral")
     env = _build_env(user, cfg)
-    assert env["ANTHROPIC_BASE_URL"] == "http://10.83.1.110:11434"
+    assert env["ANTHROPIC_BASE_URL"] == "http://localhost:11434"
     assert env["ANTHROPIC_AUTH_TOKEN"] == "ollama"
     assert env["ANTHROPIC_API_KEY"] == ""
     assert env["HAANA_MODEL"] == "ministral-3-32k:3b"

@@ -521,14 +521,14 @@ async def test_activate_fallback_ollama():
     agent = _make_agent({
         "HAANA_FALLBACK_MODEL": "llama3:8b",
         "HAANA_FALLBACK_PROVIDER_TYPE": "ollama",
-        "HAANA_FALLBACK_BASE_URL": "http://10.0.0.1:11434",
+        "HAANA_FALLBACK_BASE_URL": "http://localhost:11434",
         "HAANA_FALLBACK_AUTH_TOKEN": "ollama",
     })
 
     await agent._activate_fallback()
 
     assert agent.model == "llama3:8b"
-    assert agent._env.get("ANTHROPIC_BASE_URL") == "http://10.0.0.1:11434"
+    assert agent._env.get("ANTHROPIC_BASE_URL") == "http://localhost:11434"
     assert agent._env.get("ANTHROPIC_AUTH_TOKEN") == "ollama"
     assert agent._cli_model == "llama3:8b"
 

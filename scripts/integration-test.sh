@@ -8,7 +8,7 @@
 
 set -uo pipefail
 
-ADMIN_URL="http://10.83.1.11:8080"
+ADMIN_URL="http://${TEST_HOST:-localhost}:8080"
 TEST_USER="int-test"
 TEST_DISPLAY="Integration Test"
 KEEP=false
@@ -149,7 +149,7 @@ pass "Container Port: $TEST_PORT"
 # Warten bis Container healthy
 echo -n "  Warte auf Agent-Container"
 for i in $(seq 1 30); do
-  HEALTH=$(curl -s -o /dev/null -w '%{http_code}' "http://10.83.1.11:${TEST_PORT}/health" 2>/dev/null)
+  HEALTH=$(curl -s -o /dev/null -w '%{http_code}' "http://${TEST_HOST:-localhost}:${TEST_PORT}/health" 2>/dev/null)
   if [[ "$HEALTH" == "200" ]]; then
     echo ""; pass "Agent-Container healthy"
     break
@@ -207,7 +207,7 @@ echo ""
 # ── 4. Chat-Test: Anthropic ─────────────────────────────────────────────────
 echo "--- Chat: Anthropic ---"
 
-CHAT_RESP=$(curl -s --max-time 90 -X POST "http://10.83.1.11:${TEST_PORT}/chat" \
+CHAT_RESP=$(curl -s --max-time 90 -X POST "http://${TEST_HOST:-localhost}:${TEST_PORT}/chat" \
   -H 'Content-Type: application/json' \
   -d '{"message": "Antworte nur mit dem Wort PONG und nichts anderes.", "channel": "integration-test"}' 2>/dev/null)
 
@@ -242,12 +242,12 @@ if [[ "$MINIMAX_READY" == "yes" ]]; then
     # Warten bis Container healthy
     echo -n "  Warte auf Restart"
     for i in $(seq 1 30); do
-      H=$(curl -s -o /dev/null -w '%{http_code}' "http://10.83.1.11:${TEST_PORT}/health" 2>/dev/null)
+      H=$(curl -s -o /dev/null -w '%{http_code}' "http://${TEST_HOST:-localhost}:${TEST_PORT}/health" 2>/dev/null)
       if [[ "$H" == "200" ]]; then echo ""; break; fi
       echo -n "."; sleep 2
     done
 
-    MM_RESP=$(curl -s --max-time 90 -X POST "http://10.83.1.11:${TEST_PORT}/chat" \
+    MM_RESP=$(curl -s --max-time 90 -X POST "http://${TEST_HOST:-localhost}:${TEST_PORT}/chat" \
       -H 'Content-Type: application/json' \
       -d '{"message": "Antworte nur mit dem Wort PONG und nichts anderes.", "channel": "integration-test"}' 2>/dev/null)
 
@@ -317,7 +317,7 @@ echo ""
 echo "--- Memory ---"
 
 # Chat-Nachricht senden die Memory erzeugt
-MEM_RESP=$(curl -s --max-time 90 -X POST "http://10.83.1.11:${TEST_PORT}/chat" \
+MEM_RESP=$(curl -s --max-time 90 -X POST "http://${TEST_HOST:-localhost}:${TEST_PORT}/chat" \
   -H 'Content-Type: application/json' \
   -d '{"message": "Merke dir bitte: Meine Lieblingsfarbe ist Smaragdgruen. Bestaetige kurz.", "channel": "integration-test"}' 2>/dev/null)
 
@@ -332,7 +332,7 @@ fi
 sleep 3
 
 # Memory abrufen
-MEM_RECALL=$(curl -s --max-time 90 -X POST "http://10.83.1.11:${TEST_PORT}/chat" \
+MEM_RECALL=$(curl -s --max-time 90 -X POST "http://${TEST_HOST:-localhost}:${TEST_PORT}/chat" \
   -H 'Content-Type: application/json' \
   -d '{"message": "Was ist meine Lieblingsfarbe?", "channel": "integration-test"}' 2>/dev/null)
 

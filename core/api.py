@@ -5,7 +5,7 @@ Stellt einen HTTP- und WebSocket-Endpunkt für einen Agent bereit.
 Wird gestartet wenn HAANA_API_PORT gesetzt ist (parallel zum REPL).
 
 Endpunkte:
-  GET  /health        → {"ok": true, "instance": "alice"}
+  GET  /health        → {"ok": true, "instance": "<instance-name>"}
   POST /chat          → {"message": "...", "channel": "webchat"} → {"response": "..."}
   WS   /ws            → bidirektionale Konversation (für Webchat-Live-Chat)
 """
