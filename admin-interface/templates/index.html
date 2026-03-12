@@ -912,39 +912,6 @@
 
   </div>
 
-  <!-- ══ GIT REPOSITORY ══ -->
-  <div class="cfg-section" id="git-section" style="padding:var(--sp-4);border-top:1px solid var(--border);margin-top:var(--sp-2);">
-    <div style="margin-bottom:var(--sp-3);">
-      <h3 style="margin:0 0 var(--sp-2) 0;font-size:14px;font-weight:600;" data-i18n="git.section_title">Git Repository</h3>
-    </div>
-
-    <!-- Status-Zeile -->
-    <div id="git-status-bar" style="display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-3);flex-wrap:wrap;">
-      <span id="git-branch-badge" style="font-family:monospace;font-size:13px;background:var(--bg);padding:2px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);">–</span>
-      <span id="git-sync-info" style="font-size:12px;color:var(--muted);"></span>
-      <button class="btn btn-secondary btn-sm" onclick="gitShowLog()" data-i18n="git.log_btn">Verlauf</button>
-      <button class="btn btn-secondary btn-sm" onclick="gitToggleConnect()" data-i18n="git.connect_btn">Verbinden</button>
-      <button class="btn btn-primary btn-sm" onclick="gitPull()" data-i18n="git.pull_btn">↓ Pull</button>
-      <button class="btn btn-secondary btn-sm" onclick="gitPush()" data-i18n="git.push_btn">↑ Push</button>
-    </div>
-
-    <!-- Connect-Formular (initial versteckt) -->
-    <div id="git-connect-form" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:var(--sp-4);margin-bottom:var(--sp-3);">
-      <div class="form-group">
-        <label data-i18n="git.url_label">Repository-URL</label>
-        <input type="url" id="git-url-input" placeholder="https://github.com/user/repo.git" style="width:100%;">
-      </div>
-      <div class="form-group" style="margin-top:var(--sp-3);">
-        <label data-i18n="git.token_label">Access Token</label>
-        <input type="password" id="git-token-input" placeholder="ghp_..." style="width:100%;">
-      </div>
-      <button class="btn btn-primary btn-sm" style="margin-top:var(--sp-3);" onclick="gitConnect()" data-i18n="git.save_btn">Speichern &amp; Verbinden</button>
-    </div>
-
-    <!-- Output -->
-    <pre id="git-output" style="display:none;background:#1e1e1e;color:#d4d4d4;padding:var(--sp-3);border-radius:var(--radius-sm);font-size:12px;max-height:200px;overflow-y:auto;white-space:pre-wrap;"></pre>
-  </div>
-
 
 </div>
 
@@ -1034,6 +1001,40 @@
 
 <!-- ══════════════════════════════════════════ TERMINAL (Claude Code) -->
 <div id="panel-terminal" class="panel">
+
+  <!-- ══ GIT REPOSITORY ══ -->
+  <div class="cfg-section" id="git-section" style="padding:var(--sp-4);border-top:1px solid var(--border);margin-top:var(--sp-2);">
+    <div style="margin-bottom:var(--sp-3);">
+      <h3 style="margin:0 0 var(--sp-2) 0;font-size:14px;font-weight:600;" data-i18n="git.section_title">Git Repository</h3>
+    </div>
+
+    <!-- Status-Zeile -->
+    <div id="git-status-bar" style="display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-3);flex-wrap:wrap;">
+      <span id="git-branch-badge" style="font-family:monospace;font-size:13px;background:var(--bg);padding:2px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);">–</span>
+      <span id="git-sync-info" style="font-size:12px;color:var(--muted);"></span>
+      <button class="btn btn-secondary btn-sm" onclick="gitShowLog()" data-i18n="git.log_btn">Verlauf</button>
+      <button class="btn btn-secondary btn-sm" onclick="gitToggleConnect()" data-i18n="git.connect_btn">Verbinden</button>
+      <button class="btn btn-primary btn-sm" onclick="gitPull()" data-i18n="git.pull_btn">↓ Pull</button>
+      <button class="btn btn-secondary btn-sm" onclick="gitPush()" data-i18n="git.push_btn">↑ Push</button>
+    </div>
+
+    <!-- Connect-Formular (initial versteckt) -->
+    <div id="git-connect-form" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:var(--sp-4);margin-bottom:var(--sp-3);">
+      <div class="form-group">
+        <label data-i18n="git.url_label">Repository-URL</label>
+        <input type="url" id="git-url-input" placeholder="https://github.com/user/repo.git" style="width:100%;">
+      </div>
+      <div class="form-group" style="margin-top:var(--sp-3);">
+        <label data-i18n="git.token_label">Access Token</label>
+        <input type="password" id="git-token-input" placeholder="ghp_..." style="width:100%;">
+      </div>
+      <button class="btn btn-primary btn-sm" style="margin-top:var(--sp-3);" onclick="gitConnect()" data-i18n="git.save_btn">Speichern &amp; Verbinden</button>
+    </div>
+
+    <!-- Output -->
+    <pre id="git-output" style="display:none;background:#1e1e1e;color:#d4d4d4;padding:var(--sp-3);border-radius:var(--radius-sm);font-size:12px;max-height:200px;overflow-y:auto;white-space:pre-wrap;"></pre>
+  </div>
+
   <div class="terminal-toolbar">
     <label data-i18n="terminal.provider_label">Claude Code Provider</label>
     <select id="term-provider-select"></select>
@@ -1089,7 +1090,7 @@
 
 <!-- Feature-Module -->
 <script src="/static/js/chat.js?v=5"></script>
-<script src="/static/js/config.js?v=13"></script>
+<script src="/static/js/config.js?v=14"></script>
 <script src="/static/js/users.js?v=7"></script>
 <script src="/static/js/status.js?v=3"></script>
 <script src="/static/js/logs.js?v=6"></script>
