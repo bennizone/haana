@@ -497,7 +497,10 @@
     "language": "Antwortsprache",
     "language_help": "Sprache in der der Assistent antwortet",
     "ha_select_hint": "HA nicht verbunden — Name manuell eingeben",
-    "ha_select_label": "HA-Benutzer (optional)"
+    "ha_select_label": "HA-Benutzer (optional)",
+    "whatsapp_lid_label": "WhatsApp LID",
+    "whatsapp_lid_hint": "Wird automatisch gesetzt wenn die erste Nachricht eingeht.",
+    "whatsapp_lid_placeholder": "Wird automatisch ermittelt"
   },
   "status": {
     "loading": "Status wird geladen...",

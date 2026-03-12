@@ -102,6 +102,14 @@ async function translateJid(jid, sock) {
       const phoneJid = `${pn.split("@")[0].split(":")[0]}@s.whatsapp.net`;
       _lidToPhone[lidUser] = phoneJid;
       log.info({ lidJid: jid, phoneJid }, "LID→Phone (signalRepository)");
+      // LID beim Admin-Interface persistieren (Fire-and-forget)
+      const phone = phoneJid.replace("@s.whatsapp.net", "");
+      fetch(`${ADMIN_URL}/api/users/whatsapp-lid`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Bridge-Token": process.env.HAANA_BRIDGE_SECRET || "" },
+        body: JSON.stringify({ phone, lid: lidUser }),
+        timeout: 5000,
+      }).catch(() => {}); // Fehler ignorieren
       return phoneJid;
     }
   } catch (err) {

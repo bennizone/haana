@@ -5,6 +5,30 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ---
 
+## 2026-03-12 — WhatsApp Auto-LID-Learning
+
+**Aenderungen:**
+- `whatsapp-bridge/index.js`: Nach erfolgreichem LID-Resolve via `signalRepository` wird `POST /api/users/whatsapp-lid` gefeuert (Fire-and-forget, timeout 5000ms)
+- `admin-interface/main.py`: Neuer Endpunkt `POST /api/users/whatsapp-lid` — speichert `whatsapp_lid` in `config.json`, Auth via Bridge-Token oder Session
+- `admin-interface/static/js/users.js`: LID-Feld im User-Formular als readonly mit Hinweis "Wird automatisch ermittelt"
+- `admin-interface/templates/index.html`: Markup-Ergaenzung fuer LID-Anzeige im User-Formular
+- `admin-interface/static/i18n/de.json` + `en.json`: Neue i18n-Keys fuer LID-Feld (703 Keys, Paritaet gewahrt)
+
+**Entscheidungen:**
+- LID wird automatisch beim ersten Eingang einer Nachricht persistiert — keine manuelle Eingabe noetig
+- Fire-and-forget mit `timeout: 5000` verhindert, dass ein haengendes Admin-Interface die Bridge blockiert
+- LID im UI readonly (nicht editierbar), da sie ausschliesslich vom Bridge-Prozess gesetzt wird
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:**
+- `git revert <hash>` (wird nach Commit ergaenzt)
+
+**Reviewer Score:** 9/10
+
+---
+
 ## 2026-03-12 — Design-Vereinheitlichung + Bugfixes
 
 **Aenderungen:**

@@ -72,6 +72,16 @@ function renderUserCard(u) {
           <input type="text" id="uf-${escAttr(u.id)}-wa-phone" value="${escAttr(u.whatsapp_phone||'')}" placeholder="${t('users.wa_phone_placeholder')}">
         </div>
       </div>
+      <div class="form-row">
+        <div class="form-group" id="uf-${escAttr(u.id)}-lid-group">
+          <label>${t('users.whatsapp_lid_label')}</label>
+          <input type="text" id="uf-${escAttr(u.id)}-wa-lid" readonly
+                 style="background:var(--surface);color:var(--muted);cursor:default;"
+                 value="${escAttr(u.whatsapp_lid||'')}"
+                 placeholder="${t('users.whatsapp_lid_placeholder')}">
+          <span style="font-size:11px;color:var(--muted);">${t('users.whatsapp_lid_hint')}</span>
+        </div>
+      </div>
       ` : ''}
       <div class="form-row three">
         <div class="form-group">

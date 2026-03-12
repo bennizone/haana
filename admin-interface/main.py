@@ -2283,6 +2283,37 @@ async def whatsapp_logout():
         return {"ok": False, "error": str(e)[:200]}
 
 
+@app.post("/api/users/whatsapp-lid")
+async def set_user_whatsapp_lid(request: Request):
+    """Auto-LID-Learning: Bridge speichert aufgeloeste LID fuer einen User."""
+    cfg = load_config()
+    bridge_secret = os.environ.get("HAANA_BRIDGE_SECRET", "")
+    token = request.headers.get("X-Bridge-Token", "")
+    if not (
+        (bridge_secret and secrets.compare_digest(token, bridge_secret))
+        or _auth.is_authenticated(request)
+    ):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    body = await request.json()
+    phone = body.get("phone", "").strip()
+    lid = body.get("lid", "").strip()
+    if not phone or not lid:
+        raise HTTPException(status_code=400, detail="phone and lid required")
+
+    users = cfg.get("users", [])
+    for user in users:
+        if user.get("whatsapp_phone", "").strip() == phone:
+            if user.get("whatsapp_lid") == lid:
+                return {"ok": True, "updated": False}  # Bereits gesetzt
+            user["whatsapp_lid"] = lid
+            save_config(cfg)
+            logger.info("whatsapp_lid automatisch gesetzt: user=%s lid=%s", user["id"], lid)
+            return {"ok": True, "updated": True, "user_id": user["id"]}
+
+    return {"ok": False, "detail": "No user with this phone number found"}
+
+
 @app.post("/api/whatsapp/start")
 async def whatsapp_start(request: Request):
     """WhatsApp-Bridge Container starten."""
