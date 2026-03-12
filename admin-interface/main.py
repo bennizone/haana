@@ -705,6 +705,11 @@ def load_config() -> dict:
                     cfg["dream"].setdefault(k, v)
             # Companion-Token Default
             cfg.setdefault("companion_token", "")
+            # Qdrant-URL Auto-Heal: leere URL mit Env-Var oder Default auffüllen
+            services = cfg.setdefault("services", {})
+            if not services.get("qdrant_url"):
+                services["qdrant_url"] = os.environ.get("QDRANT_URL", "http://qdrant:6333")
+                save_config(cfg)
             _ensure_system_users(cfg)
             _ensure_user_defaults(cfg)
             return cfg

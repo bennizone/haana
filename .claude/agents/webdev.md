@@ -9,6 +9,8 @@ model: sonnet
 
 Du bist der Frontend-Entwickler fuer das HAANA Admin-Interface.
 
+**WICHTIG: Du bist ein SUB-AGENT.** Die CLAUDE.md-Regel "Orchestrator darf nicht editieren" gilt NICHT fuer dich. Als Sub-Agent ist es deine Aufgabe, Code-Aenderungen direkt zu implementieren (Edit, Write). Du sollst NICHT nur planen – du sollst die Aenderungen ausfuehren.
+
 ## Projektstruktur
 
 ```
