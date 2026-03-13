@@ -15,6 +15,8 @@ async def restart_instance(instance: str):
     """Agent-Instanz neu starten."""
     if instance not in get_all_instances():
         raise HTTPException(404)
+    if not agent_manager:
+        raise HTTPException(503, "Agent-Manager nicht verfügbar")
     cfg = load_config()
     for user in cfg.get("users", []):
         if user["id"] == instance:
@@ -27,6 +29,8 @@ async def stop_instance(instance: str):
     """Agent-Instanz graceful stoppen."""
     if instance not in get_all_instances():
         raise HTTPException(404)
+    if not agent_manager:
+        raise HTTPException(503, "Agent-Manager nicht verfügbar")
     return await agent_manager.stop_agent(instance)
 
 
@@ -35,12 +39,16 @@ async def force_stop_instance(instance: str):
     """Agent-Instanz sofort beenden."""
     if instance not in get_all_instances():
         raise HTTPException(404)
+    if not agent_manager:
+        raise HTTPException(503, "Agent-Manager nicht verfügbar")
     return await agent_manager.stop_agent(instance, force=True)
 
 
 @router.post("/api/instances/restart-all")
 async def restart_all_instances():
     """Alle Agent-Instanzen mit aktueller Config neu starten."""
+    if not agent_manager:
+        raise HTTPException(503, "Agent-Manager nicht verfügbar")
     cfg = load_config()
     results = {}
 

@@ -20,7 +20,7 @@ async def get_users():
     users = cfg.get("users", [])
     result = []
     for u in users:
-        status = agent_manager.agent_status(u["id"])
+        status = agent_manager.agent_status(u["id"]) if agent_manager else "unknown"
         result.append({**u, "container_status": status})
     return result
 
@@ -76,6 +76,8 @@ async def create_user(request: Request):
     (claude_md_dir / "CLAUDE.md").write_text(claude_md_content, encoding="utf-8")
 
     # Agent starten
+    if not agent_manager:
+        raise HTTPException(503, "Agent-Manager nicht verfügbar")
     result = await agent_manager.start_agent(user, cfg)
 
     # User in config speichern
@@ -119,6 +121,8 @@ async def update_user(user_id: str, request: Request):
 
     container_result = None
     if needs_restart:
+        if not agent_manager:
+            raise HTTPException(503, "Agent-Manager nicht verfügbar")
         container_result = await agent_manager.start_agent(user, cfg)
 
     return {"ok": True, "user": user, "restarted": needs_restart, "container": container_result}
@@ -135,6 +139,8 @@ async def delete_user(user_id: str):
     if user.get("system"):
         raise HTTPException(403, "System-Instanzen können nicht gelöscht werden")
 
+    if not agent_manager:
+        raise HTTPException(503, "Agent-Manager nicht verfügbar")
     remove_result = await agent_manager.remove_agent(user_id)
     container_removed = remove_result.get("ok", False)
 
@@ -158,6 +164,8 @@ async def restart_user_container(user_id: str):
     user = next((u for u in cfg.get("users", []) if u["id"] == user_id), None)
     if not user:
         raise HTTPException(404, f"User '{user_id}' nicht gefunden")
+    if not agent_manager:
+        raise HTTPException(503, "Agent-Manager nicht verfügbar")
     result = await agent_manager.start_agent(user, cfg)
     return {"ok": result.get("ok", False), "container": result}
 
@@ -169,4 +177,6 @@ async def stop_user_container(user_id: str):
     user = next((u for u in cfg.get("users", []) if u["id"] == user_id), None)
     if not user:
         raise HTTPException(404, f"User '{user_id}' nicht gefunden")
+    if not agent_manager:
+        raise HTTPException(503, "Agent-Manager nicht verfügbar")
     return await agent_manager.stop_agent(user_id)
