@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import glob as _glob
 from pathlib import Path
 
@@ -14,7 +15,7 @@ import auth as _auth
 import git_integration as _git
 from .deps import (
     load_config, save_config, get_all_instances, find_ollama_url,
-    agent_manager, SYSTEM_USER_IDS, HOST_BASE, LOG_ROOT,
+    agent_manager, SYSTEM_USER_IDS, HOST_BASE, LOG_ROOT, CLAUDE_AUTH_DIR,
 )
 
 logger = logging.getLogger(__name__)
@@ -353,8 +354,7 @@ def _build_claude_provider_env(provider: dict, model: str, mcp_web_search: bool,
     ptype = provider.get("type", "")
     if ptype == "anthropic":
         if provider.get("auth_method") == "oauth":
-            oauth_dir = provider.get("oauth_dir", "/data/claude-auth")
-            lines.append(f'export CLAUDE_CONFIG_DIR="{_sanitize_env_value(oauth_dir)}"')
+            pass  # CLAUDE_CONFIG_DIR nicht setzen — Default ~/.claude ist korrekt
         else:
             key = provider.get("key", "")
             if key:
@@ -427,6 +427,22 @@ async def set_dev_claude_provider(request: Request):
         "mcp_image": mcp_image,
     }
     save_config(cfg)
+    # OAuth-Credentials fuer su - haana auf Host-Pfad kopieren
+    if provider.get("type") == "anthropic" and provider.get("auth_method") == "oauth":
+        provider_id_str = provider.get("id", provider_id)
+        oauth_dir = Path(provider.get("oauth_dir", f"/data/claude-auth/{provider_id_str}"))
+        src = oauth_dir / ".credentials.json"
+        dst = CLAUDE_AUTH_DIR / ".credentials.json"
+        try:
+            if src.exists():
+                CLAUDE_AUTH_DIR.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+                dst.chmod(0o600)
+                logger.info("dev: OAuth-Credentials nach %s kopiert", dst)
+            else:
+                logger.warning("dev: OAuth-Credentials nicht gefunden: %s", src)
+        except Exception as exc:
+            logger.warning("dev: Konnte Credentials nicht kopieren: %s", exc)
     env_lines = _build_claude_provider_env(provider, model, mcp_web_search, mcp_image, cfg)
     env_file = Path("/opt/haana/.claude_provider.env")
     try:
