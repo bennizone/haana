@@ -4,6 +4,29 @@ Chronologische Dokumentation der wichtigsten Aenderungen am HAANA-Projekt.
 
 ---
 
+## 2026-03-13 — Phase 3: Dynamisches Admin-Interface
+
+**Aenderungen:**
+- `admin-interface/main.py`: `GET /api/modules` gibt vollstaendige `config_schema` + `user_config_schema` zurueck; `GET /api/modules/config` liest Modul-Konfiguration aus `config.services.{id}.*`; `POST /api/modules/config` speichert Modul-Konfiguration
+- `admin-interface/static/js/modules.js` (neu): `loadModuleConfigTabs`, `saveModuleConfig`, `loadSkillsTab`, `loadModuleUserFields`
+- Config-Tab: neue Channel/Skill-Sub-Tabs erscheinen automatisch per JS
+- Skills-Haupttab: sichtbar wenn mindestens ein Skill registriert
+- User-Karten: dynamische Modul-Felder werden beim Ausklappen nachgeladen
+- `channels/telegram/channel.py`: `is_enabled()` liest jetzt aus `config.services.telegram.*`
+- `admin-interface/static/i18n/de.json` + `en.json`: `skills.*`-Block (6 Keys) + `tabs.skills` ergaenzt — Paritaet gewahrt (708 Keys)
+- XSS-Fix: `JSON.stringify(u)` in `onclick` jetzt korrekt durch `escAttr()` escaped
+
+**Entscheidungen:**
+- Ein neues Modul erscheint automatisch in der UI nach: (1) `channel.py`/`skill.py` schreiben, (2) in `module_registry.py` registrieren, (3) Admin-Interface neu starten — kein HTML/JS-Anfassen noetig
+- Konfigurationswerte unter `config.services.{id}.*` gespeichert: klar separiert von bestehenden Top-Level-Config-Feldern
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert <hash-nach-commit>`
+
+---
+
 ## 2026-03-12 — Entwicklung-Tab: Claude Code Provider-Auswahl (Commit aa42c76)
 
 **Aenderungen:**

@@ -17,7 +17,8 @@
     "logs": "Logs",
     "config": "Config",
     "users": "Users",
-    "status": "Status"
+    "status": "Status",
+    "skills": "Skills"
   },
   "chat": {
     "placeholder": "Message to HAANA... (Enter to send, Shift+Enter for new line)",
@@ -753,5 +754,17 @@
     "pull_success": "Pull successful",
     "push_success": "Push successful",
     "error": "Git error"
+  },
+  "skills": {
+    "tab": "Skills",
+    "no_skills": "No skills registered.",
+    "tools_count": "fields configured",
+    "active": "Active",
+    "inactive": "Inactive",
+    "config_missing": "Configuration missing — skill is inactive."
+  },
+  "modules": {
+    "kind_skill": "Skill",
+    "kind_channel": "Channel"
   }
 }

@@ -159,3 +159,43 @@ oberster Ebene gespeichert (z.B. `config["telegram_bot_token"]`).
 im Users-Tab erscheinen. Die `ModuleRegistry.get_user_config_schema()` führt
 alle aktiven Module zusammen. Diese Felder werden in `config.json` unter
 `users[].{key}` gespeichert (z.B. `user["telegram_chat_id"]`).
+
+---
+
+## Admin-Interface Integration (Phase 3)
+
+Sobald ein Channel oder Skill registriert ist, erscheint er **automatisch** in der Admin-UI.
+Kein Anfassen von HTML oder JavaScript nötig.
+
+### Config-Tab: neue Modul-Sub-Tabs
+
+`get_config_schema()` liefert die globalen Felder eines Moduls. Das Admin-Interface lädt
+via `GET /api/modules` alle registrierten Module und erstellt automatisch einen Sub-Tab
+im Config-Bereich — sofern mindestens ein Feld vorhanden ist.
+
+**Schritte um einen neuen Channel/Skill in der UI erscheinen zu lassen:**
+1. `channel.py` (oder `skill.py`) schreiben mit `get_config_schema()`
+2. In `module_registry.py` registrieren
+3. Admin-Interface neu starten → Sub-Tab erscheint automatisch
+
+Die Konfigurationswerte werden unter `config.services.{id}.*` gespeichert.
+
+### Skills-Tab
+
+Ein eigener Haupttab "Skills" erscheint automatisch in der Navigationsleiste,
+sobald mindestens ein Skill registriert ist. Er zeigt Status (aktiv/inaktiv),
+Anzahl konfigurierter Felder und Hinweis bei fehlender Konfiguration.
+
+### User-Karten: dynamische Felder
+
+`get_user_config_schema()` liefert pro-User-Felder. Diese erscheinen automatisch
+am Ende jeder User-Karte, gruppiert nach Modul-Name, mit Trennlinie zu bestehenden Feldern.
+Werte werden in `config.users[].{key}` gespeichert.
+
+### API-Endpunkte
+
+| Endpunkt | Methode | Beschreibung |
+|----------|---------|--------------|
+| `/api/modules` | GET | Alle registrierten Module mit vollständigen Feld-Schemas |
+| `/api/modules/config` | GET | Aktuelle Config-Werte aller Module (`services.{id}.*`) |
+| `/api/modules/config` | POST | Speichert Config-Werte für Module |

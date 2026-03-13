@@ -66,6 +66,6 @@ class TelegramChannel(BaseChannel):
         return None
 
     def is_enabled(self, config: dict) -> bool:
-        """Telegram ist aktiv wenn ein Bot-Token konfiguriert ist."""
-        token = config.get("telegram_bot_token", "").strip()
+        """Telegram ist aktiv wenn ein Bot-Token in services.telegram konfiguriert ist."""
+        token = config.get("services", {}).get("telegram", {}).get("telegram_bot_token", "").strip()
         return bool(token)

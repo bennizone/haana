@@ -1,7 +1,9 @@
 """Modules endpoint: listet registrierte Channels und Skills."""
 
-from fastapi import APIRouter
-from .deps import load_config, logger
+import dataclasses
+
+from fastapi import APIRouter, Request
+from .deps import load_config, save_config, logger
 
 router = APIRouter(tags=["modules"])
 
@@ -30,12 +32,22 @@ async def get_modules():
                 n_user = len(ch.get_user_config_schema())
             except Exception:
                 n_user = 0
+            try:
+                config_schema = [dataclasses.asdict(f) for f in ch.get_config_schema()]
+            except Exception:
+                config_schema = []
+            try:
+                user_config_schema = [dataclasses.asdict(f) for f in ch.get_user_config_schema()]
+            except Exception:
+                user_config_schema = []
             channels.append({
                 "id": ch.channel_id,
                 "display_name": ch.display_name,
                 "enabled": ch.channel_id in active_channel_ids,
                 "config_fields": n_config,
                 "user_config_fields": n_user,
+                "config_schema": config_schema,
+                "user_config_schema": user_config_schema,
             })
 
         skills = []
@@ -48,12 +60,22 @@ async def get_modules():
                 n_user = len(sk.get_user_config_schema())
             except Exception:
                 n_user = 0
+            try:
+                config_schema = [dataclasses.asdict(f) for f in sk.get_config_schema()]
+            except Exception:
+                config_schema = []
+            try:
+                user_config_schema = [dataclasses.asdict(f) for f in sk.get_user_config_schema()]
+            except Exception:
+                user_config_schema = []
             skills.append({
                 "id": sk.skill_id,
                 "display_name": sk.display_name,
                 "enabled": sk.skill_id in active_skill_ids,
                 "config_fields": n_config,
                 "user_config_fields": n_user,
+                "config_schema": config_schema,
+                "user_config_schema": user_config_schema,
             })
 
         return {"channels": channels, "skills": skills}
@@ -61,3 +83,42 @@ async def get_modules():
     except Exception as e:
         logger.error("[modules] Fehler beim Laden der Module: %s", e)
         return {"channels": [], "skills": [], "error": str(e)[:200]}
+
+
+@router.get("/api/modules/config")
+async def get_modules_config():
+    """Gibt aktuelle Config-Werte aller registrierten Module zurück."""
+    try:
+        from module_registry import registry
+        cfg = load_config()
+        result = {}
+        for ch in registry.get_all_channels():
+            result[ch.channel_id] = cfg.get("services", {}).get(ch.channel_id, {})
+        for sk in registry.get_all_skills():
+            result[sk.skill_id] = cfg.get("services", {}).get(sk.skill_id, {})
+        return result
+    except Exception as e:
+        logger.error("[modules] Fehler beim Laden der Modul-Config: %s", e)
+        return {}
+
+
+@router.post("/api/modules/config")
+async def save_modules_config(request: Request):
+    """Speichert Config-Werte für Module in config.services.{id}.*"""
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            return {"ok": False, "error": "Invalid body"}
+        cfg = load_config()
+        services = cfg.setdefault("services", {})
+        for mod_id, fields in body.items():
+            if not isinstance(fields, dict):
+                continue
+            svc = services.setdefault(mod_id, {})
+            for key, val in fields.items():
+                svc[key] = val
+        save_config(cfg)
+        return {"ok": True}
+    except Exception as e:
+        logger.error("[modules] Fehler beim Speichern der Modul-Config: %s", e)
+        return {"ok": False, "error": str(e)[:200]}

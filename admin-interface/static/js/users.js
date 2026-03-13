@@ -36,7 +36,7 @@ function renderUserCard(u) {
       <div style="display:flex;gap:5px;flex-shrink:0;" onclick="event.stopPropagation()">
         <button class="btn btn-secondary" style="font-size:11px;padding:3px 8px;" title="Neu starten" onclick="restartUserContainer('${escAttr(u.id)}')">↺</button>
         <button class="btn btn-secondary" style="font-size:11px;padding:3px 8px;" title="Stoppen" onclick="stopUserContainer('${escAttr(u.id)}')">Stop</button>
-        <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" id="uedit-btn-${escAttr(u.id)}" onclick="toggleUserExpand('${escAttr(u.id)}')">\u270e ${t('users.edit')}</button>
+        <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px;" id="uedit-btn-${escAttr(u.id)}" onclick="toggleUserExpand('${escAttr(u.id)}', ${escAttr(JSON.stringify(u))})">\u270e ${t('users.edit')}</button>
         ${!u.system ? `<button class="btn btn-danger" style="font-size:11px;padding:3px 8px;" onclick="deleteUser('${escAttr(u.id)}')">\u2715</button>` : ''}
       </div>
     </div>
@@ -163,7 +163,7 @@ async function loadUsers() {
   }
 }
 
-function toggleUserExpand(uid) {
+function toggleUserExpand(uid, userData) {
   const el  = document.getElementById(`user-expand-${uid}`);
   const btn = document.getElementById(`uedit-btn-${uid}`);
   if (!el) return;
@@ -173,6 +173,7 @@ function toggleUserExpand(uid) {
   if (!open) {
     loadHaUsersForCard(uid);
     loadUserClaudeMdPreview(uid);
+    loadModuleUserFields(uid, userData || {});
   }
 }
 
@@ -270,6 +271,15 @@ async function saveUserEdit(uid) {
   if (!isVoice) {
     body.ha_user        = document.getElementById(`uf-${uid}-ha`)?.value || '';
     body.whatsapp_phone = document.getElementById(`uf-${uid}-wa-phone`)?.value?.trim() || '';
+  }
+  // Dynamische Modul-Felder einsammeln
+  const expandEl = document.getElementById(`user-expand-${uid}`);
+  if (expandEl && expandEl.dataset.modulesLoaded) {
+    const dynFields = expandEl.querySelectorAll(`[id^="uf-${uid}-modfield-"]`);
+    dynFields.forEach(el => {
+      const key = el.id.replace(`uf-${uid}-modfield-`, '');
+      body[key] = el.type === 'checkbox' ? el.checked : el.value;
+    });
   }
   if (status) { status.textContent = '\u2026'; status.style.color = 'var(--muted)'; }
   try {

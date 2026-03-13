@@ -20,6 +20,7 @@ function showTab(name, e) {
   if (name === 'config') { loadConfig(); loadMemoryStats(); loadGitStatus(); }
   if (name === 'users')  loadUsers();
   if (name === 'status') loadStatus();
+  if (name === 'skills') loadSkillsTab();
   if (name === 'terminal') { loadDevProvider(); }
 }
 
@@ -279,6 +280,7 @@ function _appInit() {
   initConversationsView();
   loadStatus();
   refreshWaStatus();
+  initSkillsTabVisibility();
 }
 
 // ── Wizard-Shortcuts (für Header-Button) ───────────────────────────────────

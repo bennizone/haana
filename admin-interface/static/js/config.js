@@ -115,6 +115,7 @@ function renderConfig(c) {
   if (waPfxGrp) waPfxGrp.style.display = (wa.mode === 'self') ? '' : 'none';
 
   _checkHaMcpAddon();
+  loadModuleConfigTabs();
 }
 
 // ── ha-mcp Addon Detection ─────────────────────────────────────────────────────
