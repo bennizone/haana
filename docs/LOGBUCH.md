@@ -7,7 +7,7 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ## 2026-03-13 — WhatsApp-Tab dynamisch: custom_tab_html Pattern + config_root
 
-**Commits:** (wird nach Commit ergaenzt)
+**Commits:** 1f7f345
 
 **Aenderungen:**
 - `channels/base.py`: `config_root: str | None = None` + abstrakte `get_custom_tab_html() -> str` (gibt `""` zurueck) zu `BaseChannel` hinzugefuegt
@@ -32,7 +32,7 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 **Reviewer Score:** 8/10
 
 **Rollback:**
-- `git revert <hash>` (wird nach Commit ergaenzt)
+- `git revert 1f7f345`
 
 ---
 
