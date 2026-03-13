@@ -324,9 +324,11 @@ bootstrap() {
         fi
 
         cat > /home/haana/.bash_profile << 'BPEOF'
-export PATH=\$PATH:/usr/local/bin
+# .bash_profile — wird bei Login-Shells gelesen (z.B. su - haana)
+# .bashrc einbinden damit Aliases, PATH und Env-Vars verfuegbar sind
+[ -f /home/haana/.bashrc ] && source /home/haana/.bashrc
 
-if [[ \$- == *i* ]]; then
+if [[ $- == *i* ]]; then
     cd /opt/haana
     echo ''
     echo '  HAANA Dev-Umgebung  |  exit beendet Claude Code'
@@ -341,10 +343,28 @@ fi
 BPEOF
         chown haana:haana /home/haana/.bash_profile
 
+        # PATH fuer haana: lokale npm/pip Binaries + Claude Code (global via /usr/local/bin)
+        grep -q '/home/haana/.local/bin' /home/haana/.bashrc 2>/dev/null || \
+          echo 'export PATH="/home/haana/.local/bin:/usr/local/bin:$PATH"' \
+          >> /home/haana/.bashrc
+
         # Claude Code Provider Env beim haana-Login sourcen
         grep -q 'claude_provider.env' /home/haana/.bashrc 2>/dev/null || \
           echo '[ -f /opt/haana/.claude_provider.env ] && source /opt/haana/.claude_provider.env' \
           >> /home/haana/.bashrc
+        chown haana:haana /home/haana/.bashrc
+
+        # Template .claude_provider.env erstellen falls nicht vorhanden
+        if [ ! -f /opt/haana/.claude_provider.env ]; then
+            cat > /opt/haana/.claude_provider.env << 'ENVEOF'
+# HAANA Claude Provider Env
+# Wird automatisch vom Admin-Interface befuellt wenn ein Provider konfiguriert wird.
+# Manuell setzen (nur falls kein Admin-Interface verfuegbar):
+# export ANTHROPIC_API_KEY="sk-ant-..."
+ENVEOF
+            chown haana:haana /opt/haana/.claude_provider.env
+            chmod 600 /opt/haana/.claude_provider.env
+        fi
 
         # Claude Code Seed: settings + project memory
         mkdir -p /home/haana/.claude/projects/-opt-haana/memory

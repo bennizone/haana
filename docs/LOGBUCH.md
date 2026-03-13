@@ -5,6 +5,34 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ---
 
+## 2026-03-13 — install.sh: haana-User-Shell-Setup vervollstaendigt
+
+**Aenderungen:**
+- `install.sh`: `.bash_profile` Heredoc-Quoting korrigiert (`'BPEOF'` statt `BPEOF` — verhindert Variablen-Expansion im generierten File)
+- `install.sh`: `.bash_profile` sourcet jetzt `.bashrc` am Anfang (damit `claude_provider.env` Env-Vars beim `su - haana` Login verfuegbar sind)
+- `install.sh`: `.bashrc` PATH-Eintrag ergaenzt: `/home/haana/.local/bin:/usr/local/bin` (idempotent via grep-Guard) — keine root-Pfade mehr
+- `install.sh`: `.claude_provider.env` Template-Erstellung ergaenzt (Guard: `[ ! -f ]`, Permissions 600, Owner haana:haana)
+- `install.sh`: `chown haana:haana /home/haana/.bashrc` nach Appends ergaenzt (sichert Ownership bei Frisch-Installs ohne /etc/skel)
+
+**Entscheidungen:**
+- Heredoc-Quoting (`'BPEOF'`) verhindert ungewollte Shell-Expansion beim Schreiben des generierten `.bash_profile` — kritisch fuer `$PATH`-Variablen im Template
+- `.bash_profile` sourcet `.bashrc` explizit, weil Login-Shells `.bashrc` nicht automatisch laden — ohne dies fehlen Env-Vars bei `su - haana`
+- PATH ohne root-Pfade haelt das Prinzip minimaler Privilegien aufrecht
+
+**Offene Punkte:**
+- Keine
+
+**Auswirkung:** Frisch installierte HAANA-LXC (via install.sh) haben ab sofort vollstaendiges haana-User-Setup. `su - haana` -> cd /opt/haana + claude_provider.env geladen + Claude Code im PATH.
+
+**validate.sh:** 261 Tests gruen
+
+**Reviewer Score:** 9/10
+
+**Rollback:**
+- `git revert <hash>` (wird nach Commit ergaenzt)
+
+---
+
 ## 2026-03-13 — CLAUDE.md + Sub-Agenten-Definitionen ueberarbeitet, memory-Agent eingefuehrt
 
 **Aenderungen:**
@@ -29,7 +57,7 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 **Reviewer Score:** 9/10
 
 **Rollback:**
-- `git revert <hash>` (nach Commit eintragen)
+- `git revert 6e86e46`
 
 ---
 
