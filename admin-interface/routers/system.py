@@ -22,6 +22,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["system"])
 
 
+@router.get('/health')
+async def health_check():
+    return {'status': 'ok'}
+
+
+@router.get('/api/health')
+async def api_health_check():
+    return {'status': 'ok'}
+
+
 # ── Status ───────────────────────────────────────────────────────────────────
 
 @router.get("/api/status")

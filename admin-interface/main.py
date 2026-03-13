@@ -199,7 +199,7 @@ templates = Jinja2Templates(directory="templates")
 # ── Auth-Middleware ──────────────────────────────────────────────────────────
 
 _AUTH_EXEMPT_PREFIXES = ("/static/", "/ws/", "/api/wa-proxy/", "/api/companion/")
-_AUTH_EXEMPT_EXACT = {"/", "/api/auth/login", "/api/auth/logout", "/api/auth/status",
+_AUTH_EXEMPT_EXACT = {"/health", "/", "/api/auth/login", "/api/auth/logout", "/api/auth/status",
                       "/api/health", "/api/setup-status", "/api/whatsapp-config", "/api/auth/sso",
                       "/api/tags", "/api/chat", "/api/version", "/api/ps", "/api/show"}
 
