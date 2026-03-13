@@ -6,7 +6,7 @@ HA-Steuerung, ...) plus den zugehörigen System-Prompt-Kontext.
 """
 
 from __future__ import annotations
-from channels.base import ConfigField
+from common.types import ConfigField
 
 
 class BaseSkill:

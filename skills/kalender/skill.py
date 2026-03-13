@@ -9,8 +9,8 @@ Implementierung der drei Tool-Handler-Funktionen.
 """
 
 from __future__ import annotations
+from common.types import ConfigField
 from skills.base import BaseSkill
-from channels.base import ConfigField
 
 
 class KalenderSkill(BaseSkill):

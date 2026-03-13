@@ -57,6 +57,7 @@ from routers.claude_auth import router as claude_auth_router
 from routers.companion import router as companion_router
 from routers.ha_services import router as ha_services_router
 from routers.setup import router as setup_router
+from routers.modules import router as modules_router
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +137,19 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(dream_scheduler())
     _deps.sync_rebuild_state()
     _auth.log_startup_info()
+
+    # Module-Registry initialisieren
+    from module_registry import registry as _module_registry
+    _startup_cfg2 = _deps.load_config()
+    _active_channels = _module_registry.get_active_channels(_startup_cfg2)
+    _active_skills = _module_registry.get_active_skills(_startup_cfg2)
+    logger.info(
+        "[Startup] Module geladen: %d Channel(s) aktiv, %d Skill(s) aktiv — "
+        "%d Channel(s) registriert, %d Skill(s) registriert",
+        len(_active_channels), len(_active_skills),
+        len(_module_registry.get_all_channels()),
+        len(_module_registry.get_all_skills()),
+    )
 
     # Skills-Verzeichnis sicherstellen
     _data_skills = Path("/data/skills")
@@ -251,6 +265,7 @@ app.include_router(claude_auth_router)
 app.include_router(companion_router)
 app.include_router(ha_services_router)
 app.include_router(setup_router)
+app.include_router(modules_router)
 
 
 # ── HTML ─────────────────────────────────────────────────────────────────────

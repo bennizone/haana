@@ -9,7 +9,8 @@ und ist in der ModuleRegistry registrierbar.
 """
 
 from __future__ import annotations
-from channels.base import BaseChannel, ConfigField
+from common.types import ConfigField
+from channels.base import BaseChannel
 
 
 class TelegramChannel(BaseChannel):

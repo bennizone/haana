@@ -5,6 +5,44 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ---
 
+## 2026-03-13 — Phase 2: Channel/Skill Framework Module eingebunden
+
+**Commits:** wird nach git log ergaenzt
+
+**Aenderungen:**
+- `common/types.py`: `ConfigField` als gemeinsamer Datentyp (Single-Source-of-Truth) — kein Zirkularimport zwischen `channels/base.py` und `skills/base.py` mehr
+- `channels/base.py`: re-exportiert `ConfigField` aus `common/types.py` fuer Rueckwaertskompatibilitaet
+- `channels/whatsapp/channel.py`: vollstaendige `WhatsAppChannel`-Implementierung mit globalem Schema (mode, self_prefix, bridge_url) und User-Schema (phone, lid)
+- `channels/whatsapp/MODULE.md`: Dokumentation mit JID-Handling und LID-Eigenheiten
+- `channels/ha_voice/channel.py`: vollstaendige `HAVoiceChannel`-Implementierung (Fake-Ollama-Channel, 3-Tier-Architektur) mit globalem Schema (enabled, ha_url, ha_token, stt/tts entities) und User-Schema (ha_person_entity)
+- `channels/ha_voice/MODULE.md`: Dokumentation mit 3-Tier-Architektur-Erklaerung
+- `channels/telegram/channel.py`: Import auf `common/types.py` aktualisiert
+- `skills/base.py`: Import auf `common/types.py` aktualisiert
+- `skills/kalender/skill.py`: Import auf `common/types.py` aktualisiert
+- `admin-interface/module_registry.py`: automatische Registrierung aller bekannten Module (try/except pro Modul) — 3 Channels + 1 Skill beim Start geladen
+- `admin-interface/main.py`: Registry-Initialisierung beim Start mit Log-Ausgabe; `modules_router` eingebunden
+- `admin-interface/routers/modules.py`: neuer Endpunkt `GET /api/modules` liefert Channel/Skill-Metadaten (id, display_name, enabled, config_fields, user_config_fields) fuer Phase-3-UI-Integration
+
+**Entscheidungen:**
+- `ConfigField` nach `common/types.py` verschoben: Phase-1-Design-Hinweis umgesetzt — Skills und Channels teilen denselben Typ ohne zirkulaere Abhaengigkeit
+- try/except pro Modul in der Registry: ein defektes Modul blockiert nicht den Stack-Start
+- Leerer Default fuer `bridge_url` (statt hartcodierter URL): Review-Finding behoben, kein ungewollter Default im Schema
+- channel_id-Konvention explizit dokumentiert (kebab-case): Review-Finding behoben
+
+**Offene Punkte:**
+- Phase 3: Admin-UI nutzt `/api/modules` um Channels/Skills dynamisch darzustellen
+
+**Status:**
+- 3 Channels registriert: WhatsApp, HA Voice, Telegram (Stub)
+- 1 Skill registriert: Kalender (Stub)
+- validate.sh: 0 Fehler
+- Reviewer Score: 9/10 — keine kritischen Findings
+
+**Rollback:**
+- `git revert <wird nach Commit ergaenzt>`
+
+---
+
 ## 2026-03-13 — Phase 1: Channel/Skill Framework Fundament
 
 **Aenderungen:**

@@ -114,3 +114,31 @@ class ModuleRegistry:
 
 # Globale Instanz — wird beim Import initialisiert
 registry = ModuleRegistry()
+
+# ── Automatische Registrierung aller bekannten Module ──────────────────────
+# Jedes Modul wird mit try/except geladen — ein fehlender Channel/Skill
+# verhindert nicht den Start des Admin-Interface.
+
+try:
+    from channels.whatsapp.channel import WhatsAppChannel
+    registry.register_channel(WhatsAppChannel())
+except Exception as _e:
+    logger.warning("WhatsApp Channel konnte nicht geladen werden: %s", _e)
+
+try:
+    from channels.ha_voice.channel import HAVoiceChannel
+    registry.register_channel(HAVoiceChannel())
+except Exception as _e:
+    logger.warning("HA Voice Channel konnte nicht geladen werden: %s", _e)
+
+try:
+    from channels.telegram.channel import TelegramChannel
+    registry.register_channel(TelegramChannel())
+except Exception as _e:
+    logger.warning("Telegram Channel konnte nicht geladen werden: %s", _e)
+
+try:
+    from skills.kalender.skill import KalenderSkill
+    registry.register_skill(KalenderSkill())
+except Exception as _e:
+    logger.warning("Kalender Skill konnte nicht geladen werden: %s", _e)

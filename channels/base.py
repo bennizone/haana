@@ -6,23 +6,7 @@ HA Voice, Web-Chat) und welche Konfiguration er global und pro User braucht.
 """
 
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import Any
-
-
-@dataclass
-class ConfigField:
-    """Beschreibt ein einzelnes Konfigurationsfeld für die Admin-UI."""
-    key: str                          # config.json Schlüssel
-    label: str                        # Anzeigename (Englisch)
-    label_de: str                     # Anzeigename (Deutsch)
-    field_type: str                   # "text" | "password" | "select" | "toggle" | "number"
-    required: bool = False
-    default: Any = None
-    hint: str = ""                    # Hilfetext (Englisch)
-    hint_de: str = ""                 # Hilfetext (Deutsch)
-    options: list = field(default_factory=list)  # Für field_type="select"
-    secret: bool = False              # Passwort-Felder: nie in Logs ausgeben
+from common.types import ConfigField  # noqa: F401 — re-export für Rückwärtskompatibilität
 
 
 class BaseChannel:
