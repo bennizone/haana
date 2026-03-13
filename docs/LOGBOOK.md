@@ -28,7 +28,7 @@ Chronologische Dokumentation der wichtigsten Aenderungen am HAANA-Projekt.
 
 **Review:** Score 9/10 — keine kritischen Findings, alle Warnungen behoben
 
-**Rollback:** `git revert <hash>` (Hash nach Commit ergaenzen)
+**Rollback:** `git revert a5a7b87`
 
 ---
 
