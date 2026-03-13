@@ -383,7 +383,7 @@ ENVEOF
             echo -e '\033[1;33m  WARNUNG: Agent-Image Build fehlgeschlagen — Agenten können nicht gestartet werden.\033[m'
         fi
 
-        cd /opt/haana && docker compose up -d
+        cd /opt/haana && docker compose up -d --build
 
         # Warten bis Admin-Interface bereit ist
         echo \"Warte auf Admin-Interface...\"
