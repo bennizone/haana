@@ -30,7 +30,7 @@ function showCfgTab(name) {
   document.getElementById('cfgpanel-' + name).style.display = 'block';
   document.getElementById('cfgtab-' + name).classList.add('active');
   if (name === 'memory') loadMemoryStats();
-  if (name === 'whatsapp') refreshWaStatus();
+  if (name === 'mod-whatsapp') refreshWaStatus();
 }
 
 // ── Unified Instance Selection ─────────────────────────────────────────────

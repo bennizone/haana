@@ -19,15 +19,46 @@ das Konfigurationsschema für die ModuleRegistry.
 - Baileys (WhatsApp Web Multi-Device API)
 - Docker Service: `whatsapp-bridge` (Port 3001 intern)
 
+## config_root und Schema-Keys
+
+`WhatsAppChannel` setzt `config_root = "whatsapp"`. Damit lesen und schreiben
+alle Config-Endpunkte aus `config.json["whatsapp"].*` — nicht aus dem alten
+`config.json["services"]["whatsapp"].*` Pfad.
+
+Schema-Keys (global):
+
+| Key | Typ | Beschreibung |
+|-----|-----|--------------|
+| `mode` | select | `separate` (eigene Nummer) oder `self` (geteilte Nummer) |
+| `self_prefix` | text | Prefix im Self-Modus (z.B. `!h `) |
+| `bridge_url` | text | URL der Bridge (Standard: leer — muss gesetzt werden) |
+
+## custom_tab_html
+
+`WhatsAppChannel.get_custom_tab_html()` liefert vollstaendiges HTML fuer den
+WhatsApp-Tab im Admin-Interface. `modules.js` prepended dieses HTML vor den
+dynamisch generierten Config-Feldern.
+
+Enthaltene Elemente (exakt gleiche Element-IDs wie die frueheren hardcodierten
+Bloecke in `index.html`):
+- Status-Dot + Account-Info
+- QR-Code-Container
+- Offline-Div
+- Bridge-Start/Stop-Buttons
+
+Dieses Pattern (`get_custom_tab_html()`) erlaubt Channels mit komplexer UI
+(Status, Live-Daten, interaktive Elemente) die Standarddarstellung zu ersetzen
+ohne `index.html` direkt zu veraendern.
+
 ## Konfigurationsfelder
 
 ### Global (`config.json["whatsapp"]`)
 
 | Feld | Typ | Beschreibung |
 |------|-----|--------------|
-| `whatsapp_mode` | select | `separate` (eigene Nummer) oder `self` (geteilte Nummer) |
-| `whatsapp_self_prefix` | text | Prefix im Self-Modus (z.B. `!h `) |
-| `whatsapp_bridge_url` | text | URL der Bridge (Standard: Docker-Servicename) |
+| `mode` | select | `separate` (eigene Nummer) oder `self` (geteilte Nummer) |
+| `self_prefix` | text | Prefix im Self-Modus (z.B. `!h `) |
+| `bridge_url` | text | URL der Bridge (Standard: leer) |
 
 ### Pro-User (`config.json["users"][]["..."`)
 

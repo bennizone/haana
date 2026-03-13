@@ -23,12 +23,13 @@ class WhatsAppChannel(BaseChannel):
 
     channel_id = "whatsapp"
     display_name = "WhatsApp"
+    config_root = "whatsapp"
 
     def get_config_schema(self) -> list[ConfigField]:
         """Globale WhatsApp-Konfiguration."""
         return [
             ConfigField(
-                key="whatsapp_mode",
+                key="mode",
                 label="Mode",
                 label_de="Modus",
                 field_type="select",
@@ -39,7 +40,7 @@ class WhatsAppChannel(BaseChannel):
                 hint_de="'separate': eigene HAANA-Nummer. 'self': eigene Nummer teilen (Prefix erforderlich).",
             ),
             ConfigField(
-                key="whatsapp_self_prefix",
+                key="self_prefix",
                 label="Self-Prefix",
                 label_de="Self-Prefix",
                 field_type="text",
@@ -49,7 +50,7 @@ class WhatsAppChannel(BaseChannel):
                 hint_de="Nur im 'self'-Modus. Nachrichten mit diesem Prefix werden an HAANA geroutet.",
             ),
             ConfigField(
-                key="whatsapp_bridge_url",
+                key="bridge_url",
                 label="Bridge URL (optional)",
                 label_de="Bridge-URL (optional)",
                 field_type="text",
@@ -59,6 +60,41 @@ class WhatsAppChannel(BaseChannel):
                 hint_de="URL der WhatsApp-Bridge. Leer lassen für Standard (WHATSAPP_BRIDGE_URL env oder http://whatsapp-bridge:3001).",
             ),
         ]
+
+    def get_custom_tab_html(self) -> str:
+        """Verbindungsstatus-Block, QR-Code, Bridge-Buttons für den Admin-Tab."""
+        return (
+            '<div class="config-section">'
+            '<div class="config-section-header">WhatsApp Bridge</div>'
+            '<div class="config-section-body">'
+            '<div id="wa-connection" class="wa-connection">'
+            '<div class="wa-status-row">'
+            '<div class="wa-status-indicator">'
+            '<span id="wa-status-dot" class="wa-status-dot"></span>'
+            '<strong id="wa-status-text">Status wird geladen\u2026</strong>'
+            '</div>'
+            '<div class="form-inline">'
+            '<button class="btn btn-sm btn-secondary" onclick="refreshWaStatus()">Aktualisieren</button>'
+            '<button class="btn btn-sm btn-secondary" id="wa-logout-btn" style="display:none;" onclick="waLogout()">Trennen</button>'
+            '<button class="btn btn-sm btn-danger" onclick="waBridgeStop()" id="wa-stop-btn" style="display:none">Bridge stoppen</button>'
+            '</div>'
+            '</div>'
+            '<div id="wa-account-info" class="wa-account-info" style="display:none;">'
+            'Verbunden als: <span id="wa-account-name"></span> (<span id="wa-account-jid"></span>)'
+            '</div>'
+            '<div id="wa-qr-container" class="wa-qr-container" style="display:none;">'
+            '<p class="form-hint" style="margin-bottom:8px;">QR-Code mit WhatsApp scannen (Verkn\u00fcpfte Ger\u00e4te \u2192 Ger\u00e4t hinzuf\u00fcgen):</p>'
+            '<img id="wa-qr-img" alt="QR-Code">'
+            '<p class="form-hint" style="margin-top:6px;">Code wird automatisch aktualisiert\u2026</p>'
+            '</div>'
+            '<div id="wa-offline-info" class="form-hint" style="display:none;">'
+            'Bridge-Container nicht erreichbar. Starte mit: <code class="tag">docker compose --profile agents up -d</code>'
+            '<br><button class="btn btn-primary" onclick="waBridgeStart()" id="wa-start-btn" style="margin-top:8px;">Bridge starten</button>'
+            '</div>'
+            '</div>'
+            '</div>'
+            '</div>'
+        )
 
     def get_user_config_schema(self) -> list[ConfigField]:
         """Pro-User WhatsApp-Konfiguration."""

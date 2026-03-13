@@ -43,7 +43,8 @@ async function loadModuleConfigTabs() {
     panel.style.display = 'none';
 
     const vals = modCfg[ch.id] || {};
-    panel.innerHTML = _renderModuleConfigFields(ch.id, ch.display_name, ch.config_schema, vals, false);
+    const customHtml = ch.custom_tab_html || '';
+    panel.innerHTML = customHtml + _renderModuleConfigFields(ch.id, ch.display_name, ch.config_schema, vals, false);
     const parentEl = tabsEl.closest('.panel') || tabsEl.parentElement;
     parentEl.appendChild(panel);
   }

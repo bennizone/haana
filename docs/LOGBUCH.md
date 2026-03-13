@@ -5,6 +5,37 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ---
 
+## 2026-03-13 — WhatsApp-Tab dynamisch: custom_tab_html Pattern + config_root
+
+**Commits:** (wird nach Commit ergaenzt)
+
+**Aenderungen:**
+- `channels/base.py`: `config_root: str | None = None` + abstrakte `get_custom_tab_html() -> str` (gibt `""` zurueck) zu `BaseChannel` hinzugefuegt
+- `channels/whatsapp/channel.py`: `config_root = "whatsapp"` (liest/schreibt `cfg.whatsapp.*` statt `cfg.services.whatsapp.*`); Schema-Keys auf `mode`, `self_prefix`, `bridge_url` vereinfacht; `get_custom_tab_html()` liefert vollstaendiges Tab-HTML (Status-Dot, QR-Code, Account-Info, Offline-Div, Bridge-Buttons) mit exakt gleichen Element-IDs wie bisher
+- `admin-interface/routers/modules.py`: `GET /api/modules` gibt `custom_tab_html` zurueck; GET/POST Config-Endpunkte beruecksichtigen `config_root` beim Lesen und Schreiben
+- `admin-interface/static/js/modules.js`: `loadModuleConfigTabs()` prepended `custom_tab_html` vor dynamisch generierten Config-Feldern
+- `admin-interface/templates/index.html`: hardcodierter `cfgtab-whatsapp` + `cfgpanel-whatsapp` Block entfernt
+- `admin-interface/static/js/app.js`: `showCfgTab` triggert `refreshWaStatus()` bei `mod-whatsapp` (nicht mehr bei hardcodiertem `whatsapp` Tab-ID)
+- `channels/whatsapp/MODULE.md`: `config_root`-Pattern, neue Schema-Keys und `custom_tab_html`-Abschnitt dokumentiert
+
+**Entscheidungen:**
+- `get_custom_tab_html()` Pattern eingefuehrt: Channels mit komplexer UI (Status-Dots, Live-Daten, interaktive Buttons) koennen ihr Tab-HTML selbst liefern, ohne `index.html` anzufassen — erweiterbar fuer kuenftige Channels
+- `config_root` ermoeglicht Channel-spezifische Config-Pfade ohne Spezialfall-Logik im Router
+- Element-IDs unveraendert: bestehende JS-Funktionen (`refreshWaStatus`, `waBridgeStart`, `waBridgeStop`) funktionieren ohne Anpassung weiter
+- Hardcodierte Tab-Bloecke aus `index.html` entfernt: WhatsApp ist kein Sonderfall mehr im Template
+
+**Offene Punkte:**
+- Kuenftige Channels (z.B. Telegram) koennen dasselbe Pattern nutzen sobald sie eine eigene UI benoetigen
+
+**validate.sh:** 261 Tests gruen
+
+**Reviewer Score:** 8/10
+
+**Rollback:**
+- `git revert <hash>` (wird nach Commit ergaenzt)
+
+---
+
 ## 2026-03-13 — Phase 2: Channel/Skill Framework Module eingebunden
 
 **Commits:** cab91b1

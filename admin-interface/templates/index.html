@@ -294,7 +294,6 @@
     <button class="cfg-tab-btn"        onclick="showCfgTab('embeddings')" id="cfgtab-embeddings" data-i18n="config_embeddings.title">Embeddings</button>
     <button class="cfg-tab-btn"        onclick="showCfgTab('memory')"     id="cfgtab-memory" data-i18n="config.sub_tabs.memory">Memory</button>
     <button class="cfg-tab-btn"        onclick="showCfgTab('ha')"         id="cfgtab-ha" data-i18n="config.sub_tabs.home_assistant">Home Assistant</button>
-    <button class="cfg-tab-btn"        onclick="showCfgTab('whatsapp')"   id="cfgtab-whatsapp" data-i18n="config.sub_tabs.whatsapp">WhatsApp</button>
     <button class="cfg-tab-btn"        onclick="showCfgTab('logs')"       id="cfgtab-logs" data-i18n="config.sub_tabs.retention">Retention</button>
   </div>
 
@@ -745,72 +744,6 @@
         <span data-i18n="config.section_reset">&#8635; Zurücksetzen</span>
       </button>
       <span id="save-status-ha" class="cfg-section-save-status"></span>
-    </div>
-
-  </div>
-
-  <!-- ── Sub-Tab: WhatsApp ── -->
-  <div id="cfgpanel-whatsapp" class="cfg-tab-panel" style="display:none;">
-
-    <div class="config-section">
-      <div class="config-section-header" data-i18n="config_services.wa_title">WhatsApp Bridge</div>
-      <div class="config-section-body">
-
-        <!-- Verbindungsstatus -->
-        <div id="wa-connection" class="wa-connection">
-          <div class="wa-status-row">
-            <div class="wa-status-indicator">
-              <span id="wa-status-dot" class="wa-status-dot"></span>
-              <strong id="wa-status-text">Status wird geladen...</strong>
-            </div>
-            <div class="form-inline">
-              <button class="btn btn-sm btn-secondary" onclick="refreshWaStatus()">Aktualisieren</button>
-              <button class="btn btn-sm btn-secondary" id="wa-logout-btn" style="display:none;" onclick="waLogout()">Trennen</button>
-              <button class="btn btn-sm btn-danger" onclick="waBridgeStop()" id="wa-stop-btn" style="display:none" data-i18n="whatsapp.stop_bridge">Bridge stoppen</button>
-            </div>
-          </div>
-          <div id="wa-account-info" class="wa-account-info" style="display:none;">
-            Verbunden als: <span id="wa-account-name"></span> (<span id="wa-account-jid"></span>)
-          </div>
-          <div id="wa-qr-container" class="wa-qr-container" style="display:none;">
-            <p class="form-hint" style="margin-bottom:8px;">QR-Code mit WhatsApp scannen (Verknüpfte Geräte → Gerät hinzufügen):</p>
-            <img id="wa-qr-img" alt="QR-Code">
-            <p class="form-hint" style="margin-top:6px;">Code wird automatisch aktualisiert...</p>
-          </div>
-          <div id="wa-offline-info" class="form-hint" style="display:none;">
-            Bridge-Container nicht erreichbar. Starte mit: <code class="tag">docker compose --profile agents up -d</code>
-            <br><button class="btn btn-primary" onclick="waBridgeStart()" id="wa-start-btn" data-i18n="whatsapp.start_bridge" style="margin-top:8px;">Bridge starten</button>
-          </div>
-        </div>
-
-        <!-- Modus-Konfiguration -->
-        <p class="form-hint" style="margin-bottom:14px;">
-          Globaler Modus für die WhatsApp-Bridge. Pro User wird nur die Rufnummer hinterlegt (Routing eingehender Nachrichten).
-        </p>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Modus</label>
-            <select id="svc-wa-mode" onchange="document.getElementById('svc-wa-prefix-group').style.display=this.value==='self'?'':'none'">
-              <option value="separate">Separate Nummer (eigene SIM für HAANA)</option>
-              <option value="self">An mich selbst schreiben (eigene Nummer, Prefix nötig)</option>
-            </select>
-          </div>
-          <div class="form-group" id="svc-wa-prefix-group">
-            <label>Selbst-Prefix <span class="hint">(nur bei Modus "Selbst")</span></label>
-            <input type="text" id="svc-wa-prefix" placeholder="!h " value="!h ">
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="cfg-section-save-bar">
-      <button class="btn btn-primary" id="save-btn-whatsapp" onclick="saveSectionWhatsapp()">
-        <span data-i18n="config.section_save">Speichern</span>
-      </button>
-      <button class="btn btn-secondary" onclick="resetSectionWhatsapp()">
-        <span data-i18n="config.section_reset">&#8635; Zurücksetzen</span>
-      </button>
-      <span id="save-status-whatsapp" class="cfg-section-save-status"></span>
     </div>
 
   </div>

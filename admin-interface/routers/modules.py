@@ -48,6 +48,7 @@ async def get_modules():
                 "user_config_fields": n_user,
                 "config_schema": config_schema,
                 "user_config_schema": user_config_schema,
+                "custom_tab_html": ch.get_custom_tab_html() if hasattr(ch, 'get_custom_tab_html') else "",
             })
 
         skills = []
@@ -93,9 +94,17 @@ async def get_modules_config():
         cfg = load_config()
         result = {}
         for ch in registry.get_all_channels():
-            result[ch.channel_id] = cfg.get("services", {}).get(ch.channel_id, {})
+            root = getattr(ch, 'config_root', None)
+            if root:
+                result[ch.channel_id] = cfg.get(root, {})
+            else:
+                result[ch.channel_id] = cfg.get("services", {}).get(ch.channel_id, {})
         for sk in registry.get_all_skills():
-            result[sk.skill_id] = cfg.get("services", {}).get(sk.skill_id, {})
+            root = getattr(sk, 'config_root', None)
+            if root:
+                result[sk.skill_id] = cfg.get(root, {})
+            else:
+                result[sk.skill_id] = cfg.get("services", {}).get(sk.skill_id, {})
         return result
     except Exception as e:
         logger.error("[modules] Fehler beim Laden der Modul-Config: %s", e)
@@ -111,12 +120,22 @@ async def save_modules_config(request: Request):
             return {"ok": False, "error": "Invalid body"}
         cfg = load_config()
         services = cfg.setdefault("services", {})
+        from module_registry import registry
+        all_modules = {
+            **{ch.channel_id: ch for ch in registry.get_all_channels()},
+            **{sk.skill_id: sk for sk in registry.get_all_skills()},
+        }
         for mod_id, fields in body.items():
             if not isinstance(fields, dict):
                 continue
-            svc = services.setdefault(mod_id, {})
+            mod_obj = all_modules.get(mod_id)
+            root = getattr(mod_obj, 'config_root', None) if mod_obj else None
+            if root:
+                target = cfg.setdefault(root, {})
+            else:
+                target = cfg.setdefault("services", {}).setdefault(mod_id, {})
             for key, val in fields.items():
-                svc[key] = val
+                target[key] = val
         save_config(cfg)
         return {"ok": True}
     except Exception as e:

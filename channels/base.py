@@ -18,6 +18,7 @@ class BaseChannel:
 
     channel_id: str = ""        # Eindeutige ID, z.B. "whatsapp"
     display_name: str = ""      # Anzeigename in der UI
+    config_root: str | None = None  # z.B. "whatsapp" → liest/schreibt cfg["whatsapp"] statt cfg["services"]["id"]
 
     def get_config_schema(self) -> list[ConfigField]:
         """Globale Konfigurationsfelder für diesen Channel.
@@ -37,3 +38,10 @@ class BaseChannel:
     def is_enabled(self, config: dict) -> bool:
         """Ist dieser Channel in der aktuellen Config aktiv?"""
         raise NotImplementedError(f"{self.__class__.__name__} muss is_enabled() implementieren")
+
+    def get_custom_tab_html(self) -> str:
+        """Optionaler HTML-Block der am Anfang des Config-Tab-Panels
+        eingefügt wird — vor den generierten ConfigField-Formularen.
+        Für spezielle UI-Komponenten (Status, QR-Code, etc.).
+        Standard: leerer String (kein custom HTML)."""
+        return ""
