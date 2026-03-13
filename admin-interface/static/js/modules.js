@@ -26,7 +26,7 @@ async function loadModuleConfigTabs() {
 
   // Channels mit config_schema > 0
   for (const ch of (modules.channels || [])) {
-    if (!ch.config_schema || ch.config_schema.length === 0) continue;
+    if ((!ch.config_schema || ch.config_schema.length === 0) && !ch.custom_tab_html) continue;
     const tabId = 'mod-' + ch.id;
     if (document.getElementById('cfgtab-' + tabId)) continue;
 
@@ -44,7 +44,10 @@ async function loadModuleConfigTabs() {
 
     const vals = modCfg[ch.id] || {};
     const customHtml = ch.custom_tab_html || '';
-    panel.innerHTML = customHtml + _renderModuleConfigFields(ch.id, ch.display_name, ch.config_schema, vals, false);
+    const fieldsHtml = (ch.config_schema && ch.config_schema.length > 0)
+      ? _renderModuleConfigFields(ch.id, ch.display_name, ch.config_schema, vals, false)
+      : '';
+    panel.innerHTML = customHtml + fieldsHtml;
     const parentEl = tabsEl.closest('.panel') || tabsEl.parentElement;
     parentEl.appendChild(panel);
   }

@@ -31,6 +31,7 @@ function showCfgTab(name) {
   document.getElementById('cfgtab-' + name).classList.add('active');
   if (name === 'memory') loadMemoryStats();
   if (name === 'mod-whatsapp') refreshWaStatus();
+  if (name === 'mod-ha_voice') resetSectionHa();
 }
 
 // ── Unified Instance Selection ─────────────────────────────────────────────

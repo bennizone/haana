@@ -143,7 +143,6 @@
       "llms": "LLMs",
       "providers": "Providers",
       "memory": "Memory",
-      "home_assistant": "Home Assistant",
       "whatsapp": "WhatsApp",
       "logs": "Logs",
       "retention": "Retention"
