@@ -993,6 +993,9 @@
 
     <div style="margin-top:var(--sp-4);">
       <button class="btn btn-primary btn-sm" onclick="saveDevProvider()" data-i18n="dev.save_btn">Speichern</button>
+      <button type="button" class="btn btn-danger btn-sm" onclick="clearDevSessions()" style="margin-left:8px">
+        <span data-i18n="dev.clear_sessions"></span>
+      </button>
       <span id="dev-save-msg" style="margin-left:var(--sp-3);font-size:12px;color:var(--success);display:none;" data-i18n="dev.saved">Gespeichert</span>
     </div>
   </div>
@@ -1042,7 +1045,7 @@
 
 <!-- Basis-Bibliotheken -->
 <script src="/static/js/i18n.js?v=4"></script>
-<script src="/static/js/utils.js?v=3"></script>
+<script src="/static/js/utils.js?v=5"></script>
 <script src="/static/js/modal.js?v=3"></script>
 
 <!-- App-Kern (globaler State, Tabs, Init) -->
@@ -1059,7 +1062,7 @@
 <script src="/static/js/logs.js?v=6"></script>
 <script src="/static/js/whatsapp.js?v=4"></script>
 <script src="/static/js/git.js?v=1"></script>
-<script src="/static/js/dev.js?v=1"></script>
+<script src="/static/js/dev.js?v=3"></script>
 
 </body>
 </html>

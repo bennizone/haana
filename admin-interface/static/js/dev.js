@@ -1,6 +1,8 @@
 // HAANA Dev Tab — Claude Code Provider-Auswahl
 'use strict';
 
+let _savedProviderId = '';
+
 async function loadDevProvider() {
   try {
     const [cfgRes, savedRes] = await Promise.all([
@@ -17,6 +19,7 @@ async function loadDevProvider() {
       `<option value="${escAttr(p.id)}">${escHtml(p.name)} (${escHtml(p.type)})</option>`
     ).join('');
     if (savedRes.provider_id) sel.value = savedRes.provider_id;
+    _savedProviderId = sel.value;
 
     // MCP-Checkboxen: sichtbar wenn Minimax-Provider existiert
     const hasMinimax = providers.some(p => p.type === 'minimax');
@@ -110,6 +113,7 @@ async function saveDevProvider() {
   const cbImg = document.getElementById('dev-mcp-image');
   const msg = document.getElementById('dev-save-msg');
 
+  const prevProviderId = _savedProviderId;
   const modelVisible = modelRow && modelRow.style.display !== 'none';
   const body = {
     provider_id: sel ? sel.value : '',
@@ -125,11 +129,34 @@ async function saveDevProvider() {
       body: JSON.stringify(body),
     });
     const data = await res.json();
-    if (data.ok && msg) {
-      msg.style.display = '';
-      setTimeout(() => { msg.style.display = 'none'; }, 3000);
+    if (data.ok) {
+      if (msg) {
+        msg.style.display = '';
+        setTimeout(() => { msg.style.display = 'none'; }, 3000);
+      }
+      const newProviderId = sel ? sel.value : '';
+      if (prevProviderId && newProviderId !== prevProviderId) {
+        toast(t('dev.provider_changed_warning') + ' <a href="#" onclick="clearDevSessions();return false;">' + t('dev.clear_now') + '</a>', 'warn', 8000, true);
+      }
+      _savedProviderId = newProviderId;
     }
   } catch (e) {
     console.error('saveDevProvider:', e);
+  }
+}
+
+async function clearDevSessions() {
+  if (!confirm(t('dev.clear_sessions_confirm'))) return;
+  const btn = document.querySelector('[onclick="clearDevSessions()"]');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch('/api/dev/clear-sessions', { method: 'POST' });
+    if (!r.ok) throw new Error(await r.text());
+    const d = await r.json();
+    toast(t('dev.clear_sessions_done') + (d.deleted.length ? ` (${d.deleted.length})` : ''), 'ok');
+  } catch (e) {
+    toast(t('dev.clear_sessions_error') + ': ' + e.message, 'err');
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }

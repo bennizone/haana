@@ -465,3 +465,21 @@ async def set_dev_claude_provider(request: Request):
     if credentials_warning:
         result["credentials_warning"] = credentials_warning
     return result
+
+
+@router.post("/api/dev/clear-sessions")
+async def clear_dev_sessions(request: Request):
+    if not _auth.is_authenticated(request):
+        raise HTTPException(status_code=403, detail="Nicht autorisiert")
+    pattern = "/claude-auth/projects/-opt-haana/*.jsonl"
+    files = _glob.glob(pattern)
+    deleted = []
+    errors = []
+    for f in files:
+        try:
+            Path(f).unlink()
+            deleted.append(Path(f).name)
+        except Exception as exc:
+            errors.append(f"{Path(f).name}: {exc}")
+    logger.info("dev: %d Session(s) gelöscht: %s", len(deleted), deleted)
+    return {"ok": True, "deleted": deleted, "errors": errors}

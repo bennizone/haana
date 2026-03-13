@@ -724,7 +724,13 @@
     "mcp_image": "Minimax Image Analysis MCP",
     "save_btn": "Save",
     "saved": "Saved",
-    "coming_soon": "Coming soon"
+    "coming_soon": "Coming soon",
+    "clear_sessions": "Clear Claude sessions",
+    "clear_sessions_confirm": "Delete all open Claude Code sessions? (Conversation history will be lost)",
+    "clear_sessions_done": "Sessions cleared",
+    "clear_sessions_error": "Error clearing sessions",
+    "provider_changed_warning": "Provider changed — open Claude Code sessions should be cleared.",
+    "clear_now": "Clear now"
   },
   "status_hints": {
     "no_provider": "No LLM provider configured. Go to Config > Providers.",

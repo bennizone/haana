@@ -17,14 +17,18 @@ function escAttr(s) {
 // Toast notifications
 let _toastTimer = null;
 
-function toast(msg, type) {
+function toast(msg, type, customDelay, html = false) {
   type = type || 'ok';
   const el = document.getElementById('toast');
   if (!el) return;
-  el.textContent = msg;
+  if (html) {
+    el.innerHTML = msg;
+  } else {
+    el.textContent = msg;
+  }
   el.className = 'show ' + type;
   if (_toastTimer) clearTimeout(_toastTimer);
-  const delay = type === 'err' ? 15000 : 3500;
+  const delay = customDelay || (type === 'err' ? 15000 : 3500);
   _toastTimer = setTimeout(() => { el.className = ''; }, delay);
 }
 

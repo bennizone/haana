@@ -5,6 +5,46 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ---
 
+## 2026-03-13 — Claude Session-Loeschen im Entwicklung-Tab
+
+**Aenderungen:**
+- `admin-interface/routers/system.py`: Neuer Endpunkt `POST /api/dev/clear-sessions` loescht alle `*.jsonl` Dateien in `/claude-auth/projects/-opt-haana/`
+- `admin-interface/static/js/dev.js`: Button "Claude Sessions loeschen" mit Disabled-State waehrend Fetch und r.ok-Check
+- `admin-interface/static/js/utils.js`: `toast()` HTML-Parameter explizit opt-in (`html=false` Default), kein Auto-Detect mehr
+- `admin-interface/templates/index.html`: Button-Element im Entwicklung-Tab ergaenzt
+- `admin-interface/static/i18n/de.json` + `en.json`: Neue i18n-Keys fuer Session-Loeschen-Feature
+
+**Entscheidungen:**
+- Warnung beim Provider-Wechsel mit direktem "Jetzt loeschen"-Link verbessert UX beim Umstellen auf neuen Claude-Provider
+- `html=false` Default in `toast()` verhindert versehentliche XSS-Luecken durch implizites HTML-Rendering
+
+**Rollback:**
+- `git revert <hash>` (nach Commit eintragen)
+
+---
+
+## 2026-03-13 — su - haana Credential-Fix fuer Entwicklung-Tab
+
+**Aenderungen:**
+- `admin-interface/routers/system.py`: Beim Speichern eines OAuth-Anthropic-Providers im Entwicklung-Tab werden Credentials jetzt aktiv von `{oauth_dir}/.credentials.json` nach `/claude-auth/.credentials.json` (= `/home/haana/.claude/.credentials.json` auf dem Host) kopiert
+- `admin-interface/routers/system.py`: `CLAUDE_CONFIG_DIR` wird nicht mehr gesetzt — der Default `~/.claude` ist korrekt und fuer `su - haana` erreichbar
+- `admin-interface/routers/system.py`: `oauth_dir` Pfad-Validierung — wird nur akzeptiert wenn unter `/data/claude-auth/` (verhindert Path-Traversal)
+- `admin-interface/routers/system.py`: Copy-Fehler werden als `credentials_warning` in der API-Response zurueckgegeben statt still verschluckt
+
+**Entscheidungen:**
+- Docker-Volume-Pfad `/data/claude-auth/{id}` ist auf dem Host nicht direkt erreichbar (`/var/lib/docker/` hat `drwx--x---` Permissions) — Credentials muessen explizit in den Host-Pfad kopiert werden
+- `CLAUDE_CONFIG_DIR` zu entfernen ist die sauberere Loesung als den Volume-Pfad durchzureichen: der Default `~/.claude` funktioniert ueberall ohne Env-Var-Setup
+- `credentials_warning` statt harter Fehler: der Provider wird trotzdem gespeichert, Copy-Fehler ist diagnostisch, nicht kritisch
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:**
+- `git revert 4c85be6` (Pfad-Validierung + Warning)
+- `git revert 57b194c` (Credentials-Copy + CLAUDE_CONFIG_DIR-Entfernung)
+
+---
+
 ## 2026-03-13 — install.sh: haana-User-Shell-Setup vervollstaendigt
 
 **Aenderungen:**
