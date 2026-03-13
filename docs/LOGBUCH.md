@@ -5,6 +5,34 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ---
 
+## 2026-03-13 — CLAUDE.md + Sub-Agenten-Definitionen ueberarbeitet, memory-Agent eingefuehrt
+
+**Aenderungen:**
+- `CLAUDE.md`: Kernprinzip geschaerft ("Orchestrator hat keine Haende"), Workflow auf 8 Schritte erweitert (Benni als expliziter Freigeber), Debugging-Erlaubnis (SSH lesend auf .12 + HA), memory-Agent in Tabelle, 400-Zeilen-Coding-Regel
+- `.claude/agents/dev.md`: Projektstruktur aktualisiert (cascade.py entfernt, routers/ ergaenzt), 400-Zeilen-Regel, benni/domi
+- `.claude/agents/webdev.md`: i18n-Paritaet explizit, 400-Zeilen-Regel
+- `.claude/agents/reviewer.md`: Dateigroessen-Checkliste (Warnung >= 400 Z., Kritisch >= 600 Z.)
+- `.claude/agents/docs.md`: benni/domi statt Alice/Bob, decisions.md-Abschnitt
+- `.claude/agents/memory.md`: **Neu** — pflegt docs/decisions.md als durchsuchbares Entscheidungsregister
+- `docs/decisions.md`: **Neu** — 12 rueckwirkende Architekturentscheidungen aus LOGBUCH.md rekonstruiert
+
+**Entscheidungen:**
+- Orchestrator-Prinzip explizit schriftlich verankert: jede Codeaenderung laeuft ueber Sub-Agenten
+- memory-Agent als dedizierte Rolle eingefuehrt, damit ADRs nicht im Logbuch vergraben bleiben
+- decisions.md als durchsuchbares Register ermoeglicht schnelle Architektur-Recherche ohne Logbuch-Lesen
+
+**Offene Punkte:**
+- Keine
+
+**validate.sh:** 261 Tests gruen
+
+**Reviewer Score:** 9/10
+
+**Rollback:**
+- `git revert <hash>` (nach Commit eintragen)
+
+---
+
 ## 2026-03-13 — Refactoring: admin-interface/main.py in FastAPI-Router aufgeteilt
 
 **Aenderungen:**

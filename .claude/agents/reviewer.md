@@ -48,9 +48,14 @@ Pruefe alle aktuellen Aenderungen auf Korrektheit, Stil und Sicherheit.
 - Keine Path-Traversal (Pfade validiert)
 - Input-Validierung bei API-Endpunkten
 
+### Dateigrößen
+- Neue oder veränderte Dateien über 400 Zeilen → Warnung
+- Über 600 Zeilen → Kritisch (muss aufgeteilt werden)
+- Ausnahmen: Migrations-Code, generierte Dateien — müssen explizit begründet werden
+
 ### i18n (wenn Frontend betroffen)
 - Neue Keys in BEIDEN Sprachdateien (de.json + en.json)
-- Key-Anzahl gleich (pruefen mit: `python3 -c "..."`)
+- Key-Anzahl gleich (pruefen mit: `python3 -c "..."`, Skript steht in webdev.md)
 - data-i18n Attribute im HTML
 
 ### Tests

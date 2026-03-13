@@ -99,6 +99,11 @@ Format:
 
 Diese Texte kann der webdev-Agent dann als Tooltips oder Hilfetexte einbauen.
 
+### 6. Architekturentscheidungen (`docs/decisions.md`)
+
+Wird vom `memory`-Agent gepflegt. Du (docs-Agent) beziehst dich darauf
+bei Logbuch-Einträgen: "Entscheidung dokumentiert in docs/decisions.md".
+
 ## Workflow
 
 1. **Immer zuerst lesen**: `git log`, bestehende Docs, Code-Aenderungen
@@ -112,4 +117,4 @@ Diese Texte kann der webdev-Agent dann als Tooltips oder Hilfetexte einbauen.
 - Projekt: HAANA — KI-Assistent-Stack fuer Smart Home (Home Assistant)
 - Stack: Python (FastAPI), Docker Compose, Claude Code SDK, Qdrant, Ollama
 - Sprachen: Deutsch (primaer), Englisch (i18n)
-- User: Alice (Admin), Bob (User), ha-assist, ha-advanced (System-Agenten)
+- User: benni (Admin), domi (User), ha-assist, ha-advanced (System-Agenten)
