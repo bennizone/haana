@@ -477,13 +477,6 @@
           </div>
         </div>
 
-        <!-- Status + Aktionen -->
-        <div style="display:flex;align-items:center;gap:12px;margin-top:14px;flex-wrap:wrap;">
-          <button class="btn btn-secondary" onclick="runDreamNow()" id="dream-run-btn" data-i18n="config_memory.dream_run_now">Jetzt träumen</button>
-          <button class="btn btn-secondary" onclick="openDreamDiary()" id="dream-diary-btn" data-i18n="config_memory.dream_diary">Tagebuch</button>
-          <span id="dream-status-text" style="font-size:12px;color:var(--muted);"></span>
-        </div>
-
       </div>
     </div>
 
@@ -707,6 +700,12 @@
       <div class="empty-state"><div class="icon">...</div><div data-i18n="status.loading">Status wird geladen...</div></div>
     </div>
   </div>
+  <div class="status-section-title" data-i18n="config_memory.dream_title">Traumprozess</div>
+  <div class="status-grid" id="status-dream-grid">
+    <div class="status-card">
+      <div class="empty-state"><div class="icon">...</div><div data-i18n="status.loading">Status wird geladen...</div></div>
+    </div>
+  </div>
   <div style="margin-top:16px;">
     <button class="btn btn-secondary" onclick="loadStatus()" data-i18n="status.refresh">↺ Aktualisieren</button>
     <button class="btn btn-danger" onclick="restartAllAgentsStatus()" data-i18n="status.restart_all_btn" style="margin-left:8px;">⟳ Alle Agenten neu starten</button>
@@ -812,9 +811,9 @@
 <!-- Feature-Module -->
 <script src="/static/js/chat.js?v=5"></script>
 <script src="/static/js/modules.js?v=2"></script>
-<script src="/static/js/config.js?v=21"></script>
+<script src="/static/js/config.js?v=22"></script>
 <script src="/static/js/users.js?v=10"></script>
-<script src="/static/js/status.js?v=8"></script>
+<script src="/static/js/status.js?v=10"></script>
 <script src="/static/js/logs.js?v=6"></script>
 <script src="/static/js/whatsapp.js?v=4"></script>
 <script src="/static/js/git.js?v=1"></script>

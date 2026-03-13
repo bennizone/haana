@@ -5,6 +5,28 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ---
 
+## 2026-03-13 — Dream-Status in Status-Tab migriert
+
+**Commits:** (folgt nach Commit)
+
+**Aenderungen:**
+- `admin-interface/static/js/status.js`: Dream-Funktionen (`loadDreamStatus`, `_dreamTimeAgo`, `runDreamNow`, `openDreamDiary`) migriert; zeigt alle Instanzen mit Status-Dot, letztem Lauf, Statistiken und Buttons; `loadStatus()` ruft `loadDreamStatus()` auf; Fix: `switchTab` → `showTab` in `loadModuleStatus()`
+- `admin-interface/static/js/config.js`: Dream-Funktionen + `loadDreamStatus()`-Aufruf aus `renderConfig()` entfernt
+- `admin-interface/templates/index.html`: Dream-Karte (`#status-dream-grid`) im Status-Tab nach Skills-Grid eingefuegt; "Status + Aktionen"-Block (Dream-Buttons + Status-Span) aus Config Memory-Tab entfernt
+
+**Entscheidungen:**
+- Dream-Status gehoert zum Status-Tab (Betriebsuebersicht), nicht zum Config Memory-Tab (Einstellungen) — klarere UX-Trennung
+- Alle Instanzen werden im Status-Tab gemeinsam angezeigt statt pro Instanz im Config-Tab — konsistent mit Channel/Skill-Status-Pattern
+- `switchTab` → `showTab` Fix: `loadModuleStatus()` verwendete nicht-existente Funktion — ohne Fix haetten Module den Status-Tab nicht oeffnen koennen
+
+**Offene Punkte:**
+- Keine bekannten offenen Punkte
+
+**Rollback:**
+- `git revert <hash>` (Hash folgt nach Commit)
+
+---
+
 ## 2026-03-13 — WhatsApp-Tab dynamisch: custom_tab_html Pattern + config_root
 
 **Commits:** 1f7f345
