@@ -29,7 +29,7 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 **Reviewer Score:** 9/10
 
 **Rollback:**
-- `git revert <hash>` (wird nach Commit ergaenzt)
+- `git revert e5f6ed7`
 
 ---
 
