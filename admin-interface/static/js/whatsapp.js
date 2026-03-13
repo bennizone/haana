@@ -10,6 +10,9 @@ async function refreshWaStatus() {
   const offl  = document.getElementById('wa-offline-info');
   const logoutBtn = document.getElementById('wa-logout-btn');
 
+  // Pflicht-Elemente prüfen — WA-Sektion evtl. nicht im DOM
+  if (!dot || !txt || !offl || !info || !qrBox || !logoutBtn) return;
+
   try {
     const r = await fetch('/api/whatsapp-status');
     const d = await r.json();

@@ -370,7 +370,7 @@ async function loadDreamStatus() {
       } else if (d.status === 'error') {
         info = `<span style="color:var(--red);">\u274c ${t('config_memory.dream_status_error')}: ${escHtml(d.error || '')}</span>`;
       } else {
-        const nextRun = d.next_run || (typeof cfg !== 'undefined' && cfg.dream?.schedule) || '02:00';
+        const nextRun = d.next_run || cfg?.dream?.schedule || '02:00';
         info = `<span style="color:var(--muted);">${t('config_memory.dream_status_idle')}: ${escHtml(nextRun)}</span>`;
       }
       return `<div class="status-row" style="flex-direction:column;align-items:flex-start;gap:4px;padding:6px 0;border-bottom:1px solid var(--border);">
