@@ -337,7 +337,7 @@ async function openDreamDiary(inst) {
       <div style="font-size:13px;">${escHtml(e.summary||'')}</div>
     </div>`).join('') + `</div>`;
 
-  showModal({
+  Modal.show({
     title: t('config_memory.dream_diary') + ' \u2013 ' + escHtml(inst),
     body: bodyHtml,
     confirmText: null,
