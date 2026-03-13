@@ -428,21 +428,31 @@ async def set_dev_claude_provider(request: Request):
     }
     save_config(cfg)
     # OAuth-Credentials fuer su - haana auf Host-Pfad kopieren
+    credentials_warning = None
     if provider.get("type") == "anthropic" and provider.get("auth_method") == "oauth":
         provider_id_str = provider.get("id", provider_id)
         oauth_dir = Path(provider.get("oauth_dir", f"/data/claude-auth/{provider_id_str}"))
         src = oauth_dir / ".credentials.json"
         dst = CLAUDE_AUTH_DIR / ".credentials.json"
+        # Pfad validieren — nur /data/claude-auth/ erlaubt
         try:
-            if src.exists():
-                CLAUDE_AUTH_DIR.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, dst)
-                dst.chmod(0o600)
-                logger.info("dev: OAuth-Credentials nach %s kopiert", dst)
-            else:
-                logger.warning("dev: OAuth-Credentials nicht gefunden: %s", src)
-        except Exception as exc:
-            logger.warning("dev: Konnte Credentials nicht kopieren: %s", exc)
+            resolved = src.resolve()
+        except Exception:
+            resolved = src
+        if not str(resolved).startswith("/data/claude-auth/"):
+            logger.warning("dev: oauth_dir ausserhalb erlaubtem Pfad, kein Copy: %s", src)
+        else:
+            try:
+                if src.exists():
+                    CLAUDE_AUTH_DIR.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(src, dst)
+                    dst.chmod(0o600)
+                    logger.info("dev: OAuth-Credentials nach %s kopiert", dst)
+                else:
+                    logger.warning("dev: OAuth-Credentials nicht gefunden: %s", src)
+            except Exception as exc:
+                logger.warning("dev: Konnte Credentials nicht kopieren: %s", exc)
+                credentials_warning = str(exc)
     env_lines = _build_claude_provider_env(provider, model, mcp_web_search, mcp_image, cfg)
     env_file = Path("/opt/haana/.claude_provider.env")
     try:
@@ -451,4 +461,7 @@ async def set_dev_claude_provider(request: Request):
     except Exception as exc:
         logger.warning("dev: Konnte .claude_provider.env nicht schreiben: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
-    return {"ok": True}
+    result: dict = {"ok": True}
+    if credentials_warning:
+        result["credentials_warning"] = credentials_warning
+    return result
