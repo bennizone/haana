@@ -29,7 +29,7 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 - Phase 3: Admin-UI fuer Modul-Verwaltung
 
 **Rollback:**
-- `git revert <hash>` (Hash nach Commit eintragen)
+- `git revert a2b2c01`
 
 ---
 
