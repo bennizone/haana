@@ -40,7 +40,6 @@ logger = logging.getLogger(__name__)
 
 _SYSTEM_INSTANCES: frozenset[str] = frozenset({"ha-assist", "ha-advanced", "haana-admin"})
 
-VALID_SCOPES: set[str] = {"household_memory", "admin_memory"}
 
 
 def _get_user_scopes(instance: str) -> set[str]:
@@ -1016,10 +1015,6 @@ class HaanaMemory:
         Schreibt Konversation synchron in Mem0/Qdrant.
         Wird vom async Extraktions-Task im Thread-Executor aufgerufen.
         """
-        if scope not in VALID_SCOPES:
-            logger.error(f"[{self.instance}] Ungültiger Scope: '{scope}'")
-            return False
-
         if scope not in self.write_scopes:
             logger.error(
                 f"[{self.instance}] Schreibzugriff auf '{scope}' verweigert "

@@ -4,6 +4,24 @@ Chronologische Dokumentation der wichtigsten Aenderungen am HAANA-Projekt.
 
 ---
 
+## 2026-03-13 — Fix: VALID_SCOPES-Check entfernt — User-Memory-Scopes werden nicht mehr blockiert
+
+**Aenderungen:**
+- `core/memory.py`: `VALID_SCOPES`-Konstante (`{"household_memory", "admin_memory"}`) entfernt
+- `core/memory.py`: `if scope not in VALID_SCOPES`-Check in `add()` (ehemals Zeilen 1019–1021) entfernt
+
+**Entscheidungen:**
+- Der Check blockierte faelschlicherweise alle dynamischen User-spezifischen Scopes (`{instance}_memory`) mit dem Fehler "Ungültiger Scope"
+- Der nachgelagerte `self.write_scopes`-Check ist das korrekte und ausreichende Sicherheitsnetz
+- Review: Score 9/10, validate.sh 261/261 Tests bestanden
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert <hash>` — wird nach Commit ergaenzt
+
+---
+
 ## 2026-03-13 — Fix: channels/skills/common im Admin-Interface Container
 
 **Aenderungen:**
