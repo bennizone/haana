@@ -43,7 +43,7 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 **Reviewer Score:** 9/10
 
 **Rollback:**
-- `git revert <hash>` — Hash nach Commit eintragen
+- `git revert 172ddb3`
 
 ---
 
