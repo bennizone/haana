@@ -4,6 +4,43 @@ Chronologische Dokumentation der wichtigsten Aenderungen am HAANA-Projekt.
 
 ---
 
+## 2026-03-13 — Dream-Log ohne Summary, Status-Polling, report-Felder
+
+**Aenderungen:**
+- `admin-interface/routers/dream.py`: `_run_dream()` — `log_dream_summary` wird jetzt auch aufgerufen wenn kein textuelles Summary vorhanden, aber `total_consolidated > 0` oder `total_cleaned > 0`
+- `admin-interface/static/js/status.js`: `runDreamNow()` — Status-Polling alle 3s nach Dream-Start (max. 10 Versuche / 30s); Button wird erst nach Abschluss reaktiviert; `loadDreamStatus()` — Felder korrekt aus `d.report?.consolidated`, `d.report?.contradictions`, `d.report?.duration_s` gelesen statt flacher `d.*`-Felder
+- `admin-interface/templates/index.html`: Cache-Buster `status.js?v=14`
+
+**Entscheidungen:**
+- Log-Eintrag auch ohne LLM-Summary sinnvoll, sobald Konsolidierungen oder Bereinigungen stattgefunden haben — verhindert stille Dream-Laeufe ohne Spur im Tagebuch
+- Polling-Mechanismus noetig, da Dream asynchron laeuft und der Button sonst dauerhaft disabled bleibt
+- API liefert `report` als verschachteltes Objekt — Flat-Field-Zugriffe im Frontend waren fehlerhaft (immer `null`)
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert <hash-nach-commit>`
+
+---
+
+## 2026-03-13 — Defensive Null-Checks in status.js und whatsapp.js
+
+**Aenderungen:**
+- `admin-interface/static/js/status.js`: `cfg.dream?.schedule` zu `cfg?.dream?.schedule` geaendert — verhindert TypeError wenn `cfg` noch null ist (z.B. beim ersten Tab-Laden vor der Config-Antwort)
+- `admin-interface/static/js/whatsapp.js`: Early-Return Guard in `refreshWaStatus()` auf alle 6 Pflicht-Elemente erweitert (`dot`, `txt`, `offl`, `info`, `qrBox`, `logoutBtn`) — verhindert Fehler wenn WA-Sektion noch nicht im DOM ist
+- `admin-interface/templates/index.html`: Cache-Buster `status.js?v=12` und `whatsapp.js?v=6` gesetzt
+
+**Entscheidungen:**
+- Optional chaining auf `cfg` selbst notwendig, da `cfg` beim initialen Tab-Render noch null sein kann
+- Vollstaendiger Guard auf alle 6 WA-Elemente statt nur 3 verhindert partielle DOM-Fehler bei fruehzeitigen Polling-Aufrufen
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert ba908da`
+
+---
+
 ## 2026-03-13 — Status-Tab als Standard, Modal.showAlert fuer leeres Dream-Tagebuch
 
 **Aenderungen:**

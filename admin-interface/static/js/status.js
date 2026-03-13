@@ -289,13 +289,30 @@ async function runDreamNow(inst, btn) {
   try {
     const r = await fetch(`/api/dream/run/${encodeURIComponent(inst)}`, { method: 'POST' });
     const d = await r.json();
-    if (r.ok) {
-      toast(t('config_memory.dream_run_now') + ' \u2013 ' + inst, 'ok');
-      setTimeout(loadDreamStatus, 3000);
-    } else {
+    if (!r.ok) {
       toast((d.error || '?').substring(0, 80), 'err');
       if (btn) btn.disabled = false;
+      return;
     }
+    toast(t('config_memory.dream_run_now') + ' \u2013 ' + inst, 'ok');
+    loadDreamStatus();
+    // Alle 3s pollen bis Dream fertig, max 10 Versuche (30s)
+    let attempts = 0;
+    const poll = setInterval(async () => {
+      attempts++;
+      try {
+        const sr = await fetch(`/api/dream/status/${encodeURIComponent(inst)}`);
+        const sd = await sr.json();
+        if (sd.status !== 'running' || attempts >= 10) {
+          clearInterval(poll);
+          if (btn) btn.disabled = false;
+          loadDreamStatus();
+        }
+      } catch {
+        clearInterval(poll);
+        if (btn) btn.disabled = false;
+      }
+    }, 3000);
   } catch(e) {
     toast(e.message, 'err');
     if (btn) btn.disabled = false;
@@ -361,11 +378,11 @@ async function loadDreamStatus() {
         info = `<span style="color:var(--yellow);">\u23f3 ${t('config_memory.dream_status_running')}</span>`;
       } else if (d.status === 'done') {
         const parts = [];
-        if (d.consolidated != null) parts.push(`${d.consolidated} ${t('config_memory.dream_consolidated')}`);
-        if (d.contradictions != null) parts.push(`${d.contradictions} ${t('config_memory.dream_contradictions')}`);
+        if (d.report?.consolidated != null) parts.push(`${d.report.consolidated} ${t('config_memory.dream_consolidated')}`);
+        if (d.report?.contradictions != null) parts.push(`${d.report.contradictions} ${t('config_memory.dream_contradictions')}`);
         const detail = parts.length ? ' \u2014 ' + parts.join(', ') : '';
         const ago = d.last_run ? _dreamTimeAgo(d.last_run) : '';
-        const dur = d.duration_seconds != null ? `, ${d.duration_seconds}s` : '';
+        const dur = d.report?.duration_s != null ? `, ${d.report.duration_s}s` : '';
         info = `<span style="color:var(--green);">${t('config_memory.dream_status_done')}: ${escHtml(ago)}${escHtml(detail)}${escHtml(dur)}</span>`;
       } else if (d.status === 'error') {
         info = `<span style="color:var(--red);">\u274c ${t('config_memory.dream_status_error')}: ${escHtml(d.error || '')}</span>`;

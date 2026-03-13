@@ -64,7 +64,7 @@ async def _run_dream(instance: str, cfg: dict):
 
         duration = time.monotonic() - t_start
 
-        if last_summary:
+        if last_summary or total_consolidated > 0 or total_cleaned > 0:
             from core.logger import log_dream_summary
             log_dream_summary(
                 instance=instance,
