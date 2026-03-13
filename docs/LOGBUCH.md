@@ -32,7 +32,7 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 - Keine
 
 **Rollback:**
-- `git revert <hash>` (Hash nach Commit ergaenzen)
+- `git revert f7f8d83`
 
 **Reviewer Score:** 9/10
 
