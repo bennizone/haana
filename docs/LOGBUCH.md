@@ -19,7 +19,7 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 - `html=false` Default in `toast()` verhindert versehentliche XSS-Luecken durch implizites HTML-Rendering
 
 **Rollback:**
-- `git revert <hash>` (nach Commit eintragen)
+- `git revert 8666afe`
 
 ---
 
