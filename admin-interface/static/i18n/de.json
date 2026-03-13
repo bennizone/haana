@@ -715,20 +715,8 @@
     "provider_retest": "Verbindung testen",
     "provider_retest_title": "Optional: Verbindung neu testen und Modelle nachladen"
   },
-  "terminal": {
-    "tab": "Entwicklung",
-    "provider_label": "Claude Code Provider",
-    "connect_btn": "Verbinden",
-    "disconnect_btn": "Trennen",
-    "reconnect_btn": "Neu verbinden",
-    "fullscreen": "Vollbild",
-    "detach": "Detach",
-    "session_active": "Session aktiv",
-    "no_session": "Keine Session",
-    "hint_claude": "Tipp: 'claude' eingeben um Claude Code zu starten",
-    "provider_none": "Kein Provider gewaehlt"
-  },
   "dev": {
+    "tab": "Entwicklung",
     "provider_section": "Claude Code Provider (su - haana)",
     "provider_label": "Provider",
     "model_label": "Modell",

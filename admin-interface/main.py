@@ -60,11 +60,6 @@ import sys as _sys
 import os as _os
 _sys.path.insert(0, _os.path.dirname(__file__))
 import git_integration as _git
-from terminal import (
-    ws_terminal as _ws_terminal,
-    set_provider as _term_set_provider,
-    get_status as _term_status,
-)
 from core import whatsapp_router as _wa_router
 
 try:
@@ -860,11 +855,6 @@ async def index(request: Request):
         "instances": get_all_instances(),
     })
 
-
-@app.get("/terminal", response_class=HTMLResponse)
-async def terminal_standalone(request: Request):
-    """Standalone-Terminal-Seite fuer Detach/Pop-out."""
-    return templates.TemplateResponse("terminal.html", {"request": request})
 
 
 # ── API: Konversationen ───────────────────────────────────────────────────────
@@ -4243,24 +4233,6 @@ async def check_rebuild_changed(instance: str, auto_rebuild: str = ""):
         "auto_rebuild": do_rebuild,
         "rebuild_started": rebuild_started,
     }
-
-
-# ── MS3: Claude Code Terminal ─────────────────────────────────────────────────
-
-@app.websocket("/ws/terminal")
-async def websocket_terminal(websocket: WebSocket):
-    await _ws_terminal(websocket, load_config, _auth.is_authenticated)
-
-
-@app.post("/api/terminal/set-provider")
-async def terminal_set_provider(request: Request):
-    body = await request.json()
-    return await _term_set_provider(body.get("provider_id", ""), load_config)
-
-
-@app.get("/api/terminal/status")
-async def terminal_status():
-    return await _term_status()
 
 
 # ── MS5: Git-Integration ───────────────────────────────────────────────────────

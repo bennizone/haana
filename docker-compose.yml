@@ -89,35 +89,7 @@ services:
     depends_on:
       - admin-interface
 
-  # ── Optionale Dienste (auskommentiert bis konfiguriert) ───────────────────
-
-  # trilium:
-  #   image: triliumnext/notes:latest
-  #   volumes:
-  #     - haana-trilium:/home/node/trilium-data
-  #   ports:
-  #     - "8888:8888"
-  #   restart: unless-stopped
-
-  # ollama:
-  #   image: ollama/ollama:latest
-  #   volumes:
-  #     - haana-ollama:/root/.ollama
-  #   ports:
-  #     - "11434:11434"
-  #   restart: unless-stopped
-  #   # GPU-Support:
-  #   # deploy:
-  #   #   resources:
-  #   #     reservations:
-  #   #       devices:
-  #   #         - driver: nvidia
-  #   #           count: 1
-  #   #           capabilities: [gpu]
-
 volumes:
   haana-data:
   haana-media:
   haana-whatsapp-session:
-  # haana-trilium:
-  # haana-ollama:

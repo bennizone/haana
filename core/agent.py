@@ -665,6 +665,7 @@ class HaanaAgent:
 
         # Beim ersten Prompt nach Neustart: gespeicherten Gesprächsverlauf einbauen
         if not self._startup_context_sent:
+            self._startup_context_sent = True
             window_entries = self.memory._window._entries
             if window_entries:
                 history_entries = window_entries[-10:]
@@ -680,7 +681,6 @@ class HaanaAgent:
                     '\n</gesprächs_verlauf>'
                 )
                 parts.append(history_block)
-                self._startup_context_sent = True
                 logger.debug(
                     f'[{self.instance}] Startup-Context: {len(history_entries)} '
                     'Eintraege aus letzter Session vorangestellt'

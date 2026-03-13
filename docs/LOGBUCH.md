@@ -5,6 +5,39 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ---
 
+## 2026-03-13 — Cleanup-Sprint: Altlasten entfernen
+
+**Aenderungen:**
+- `haana-addons/haana/` geloescht (veraltete Kopie des Hauptcodes, alle `core/*.py` divergiert)
+- `haana-addons/haana-whatsapp/whatsapp-bridge/` geloescht (veraltete Bridge-Kopie)
+- Terminal-Tab vollstaendig entfernt: `admin-interface/terminal.py`, `admin-interface/static/js/terminal.js`, xterm-Dateien (`xterm.min.js`, `xterm-addon-fit.min.js`, `xterm.css`), `admin-interface/templates/terminal.html`, `admin-interface/static/css/terminal.css`, Terminal-Routen aus `admin-interface/main.py`, Terminal-HTML-Sektion aus `admin-interface/templates/index.html`, `terminal.*` i18n-Keys aus `de.json` + `en.json`
+- Dev-Provider-Funktionen aus `terminal.js` in neue `admin-interface/static/js/dev.js` verschoben (`loadDevProvider`, `saveDevProvider`, `_devOnProviderChange`, `_devPopulateModels`, `_devLoadOllamaModels`)
+- `docker-compose.yml`: auskommentierte Services (`ollama`, `trilium`) und deren Volumes entfernt
+- Tote CSS-Regeln (`.terminal-status-dot.*`) aus `admin-interface/static/css/admin.css` entfernt
+- `haana-plan-v7-final.md`: veraltete Dateireferenzen korrigiert (`core/cascade.py`, `core/channels.py`, `voice-backend/main.py`), Docker-Strategie-Hinweis ergaenzt
+
+**Befund (nicht angefasst):**
+- `core/dream.py` ist aktiver Code (lazy import in `main.py` Zeile 3723 + `tests/test_dream.py`) — behalten
+
+**Entscheidungen:**
+- `haana-addons/haana/` war seit MS7 nicht mehr gepflegt und haette bei jedem Merge zu Konflikten gefuehrt
+- Terminal-Tab hatte kein aktives Use-Case mehr nach Einfuehrung des Sub-Agenten-Workflows
+- Auskommentierte docker-compose-Einträge erzeugten falschen Eindruck ueber den Stack-Umfang
+
+**i18n:** Von 721 auf 693 Keys (28 `terminal.*` Keys entfernt, `dev.tab` hinzugefuegt, Paritaet gewahrt)
+
+**validate.sh:** 261 Tests gruen
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:**
+- `git revert <hash>` (Hash nach Commit ergaenzen)
+
+**Reviewer Score:** 9/10
+
+---
+
 ## 2026-03-12 — WhatsApp Auto-LID-Learning
 
 **Aenderungen:**

@@ -478,12 +478,13 @@ haana/
 │   ├── alice/CLAUDE.md        ← Admin: voller Zugriff, Skill-Management, Konfigurator
 │   └── bob/CLAUDE.md         ← User: eingeschränkt, kein System-Zugriff
 ├── voice-backend/
-│   └── main.py                ← Schlanker Endpunkt, drei Fake-Modelle, kein Agent
+│   └── (integriert in core/ollama_compat.py — drei Fake-Modelle, kein Agent)
 ├── core/
 │   ├── agent.py               ← Claude Code SDK Agent Basis
 │   ├── memory.py              ← Mem0 + Qdrant Wrapper + Sliding Window
-│   ├── channels.py            ← WhatsApp, Webchat, HA App
-│   ├── cascade.py             ← LLM-Failover Logik
+│   ├── ollama_compat.py       ← WhatsApp/Webchat/HA Routing + LLM-Proxy (channels.py → hier)
+│   ├── whatsapp_router.py     ← WhatsApp-Routing + Admin-Modus (channels.py → hier)
+│   ├── (cascade.py → LLM-Failover Logik inline in core/agent.py)
 │   ├── dream.py               ← Traumprozess: Chunked Processing, Clustering
 │   └── logger.py              ← Strukturiertes Logging aller Operationen
 └── docker-compose.yml
@@ -619,14 +620,12 @@ API-Keys und Passwörter gehen grundsätzlich nie ans LLM – separate, immer ak
 ```
 ## Standalone (Entwicklung)
 docker-compose.yml
-├── instanz-alice          (Python, Claude Code SDK Agent, Admin)
-├── instanz-bob           (Python, Claude Code SDK Agent, User)
-├── haana-voice-backend    (Python, schlanker Endpunkt, drei Fake-Modelle)
 ├── admin-interface        (Web-UI, Port 8080, nur LAN)
 ├── whatsapp-bridge        (Baileys, Node.js)
-├── qdrant                 (Vector Store, Port 6333)
-├── mem0                   (Memory Layer)
-└── ollama                 (optional – wenn kein externer GPU-Server)
+└── qdrant                 (Vector Store, Port 6333)
+
+Hinweis: Agent-Instanzen (instanz-alice, instanz-bob, ha-assist, ha-advanced) werden
+dynamisch via DockerAgentManager gestartet — nicht als statische docker-compose-Eintraege.
 
 ## HA Add-on (Produktion)
 haana-addons/              (Multi-Add-on Repository im selben Git-Repo)
@@ -754,7 +753,7 @@ Schritt 7: Privacy
 
 ---
 
-### Phase 2 – Erster Alltagskanal
+### Phase 2 – Erster Alltagskanal ✅ Abgeschlossen (Stand 2026-03-13)
 
 **Ziel:** Alice hört auf SSH. Erster echter Alltagskanal.
 
@@ -1006,7 +1005,7 @@ Schritt 7: Privacy
 - Wyoming Whisper + Piper einrichten als HA-Fallback STT/TTS
 
 **Infrastruktur:**
-- LLM-Fallback für Memory-Operationen: Scope-Klassifikation + Extraktion nutzen konfigurierte Provider-Slots (Primär → Fallback, z.B. Ollama → MiniMax). cascade.py aktivieren, analog zur geplanten Chat-Kaskade
+- LLM-Fallback für Memory-Operationen: Scope-Klassifikation + Extraktion nutzen konfigurierte Provider-Slots (Primär → Fallback, z.B. Ollama → MiniMax). Failover-Logik ist inline in `core/agent.py` (kein separates cascade.py)
 - Authentik oder Keycloak als einheitliches Auth-System für alle Self-Hosted-Dienste
 - Multi-User-Wissensbasis (Outline/AppFlowy) wenn Auth-System steht
 - MariaDB direkter HA-Zugriff (fragil wegen undokumentiertem Schema, vorerst Webhook-Weg)
