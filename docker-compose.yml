@@ -61,6 +61,9 @@ services:
     volumes:
       - ./instanzen:/app/instanzen
       - ./core:/app/core:ro
+      - ./channels:/app/channels:ro
+      - ./skills:/app/skills:ro
+      - ./common:/app/common:ro
       - haana-data:/data
       - haana-media:/media/haana
       - /var/run/docker.sock:/var/run/docker.sock

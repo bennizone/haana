@@ -4,6 +4,26 @@ Chronologische Dokumentation der wichtigsten Aenderungen am HAANA-Projekt.
 
 ---
 
+## 2026-03-13 — Fix: channels/skills/common im Admin-Interface Container
+
+**Aenderungen:**
+- `docker-compose.yml`: drei Read-Only Volume-Mounts beim `admin-interface` Service ergaenzt:
+  - `./channels:/app/channels:ro`
+  - `./skills:/app/skills:ro`
+  - `./common:/app/common:ro`
+- Analog zum bestehenden `./core:/app/core:ro` Mount
+
+**Entscheidungen:**
+- `module_registry.py` importiert channels/skills/common beim Start; ohne diese Mounts war `ModuleNotFoundError: No module named 'channels'` die Folge
+- Read-Only-Mount genuegt, da admin-interface diese Verzeichnisse nur liest
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert <hash>`
+
+---
+
 ## 2026-03-13 — Phase 3: Dynamisches Admin-Interface
 
 **Aenderungen:**
