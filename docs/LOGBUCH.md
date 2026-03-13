@@ -7,7 +7,7 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ## 2026-03-13 — Dream-Status in Status-Tab migriert
 
-**Commits:** (folgt nach Commit)
+**Commits:** 1ffeaae
 
 **Aenderungen:**
 - `admin-interface/static/js/status.js`: Dream-Funktionen (`loadDreamStatus`, `_dreamTimeAgo`, `runDreamNow`, `openDreamDiary`) migriert; zeigt alle Instanzen mit Status-Dot, letztem Lauf, Statistiken und Buttons; `loadStatus()` ruft `loadDreamStatus()` auf; Fix: `switchTab` → `showTab` in `loadModuleStatus()`
@@ -23,7 +23,7 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 - Keine bekannten offenen Punkte
 
 **Rollback:**
-- `git revert <hash>` (Hash folgt nach Commit)
+- `git revert 1ffeaae`
 
 ---
 
