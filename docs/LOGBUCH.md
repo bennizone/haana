@@ -7,7 +7,7 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ## 2026-03-13 — Phase 2: Channel/Skill Framework Module eingebunden
 
-**Commits:** wird nach git log ergaenzt
+**Commits:** cab91b1
 
 **Aenderungen:**
 - `common/types.py`: `ConfigField` als gemeinsamer Datentyp (Single-Source-of-Truth) — kein Zirkularimport zwischen `channels/base.py` und `skills/base.py` mehr
@@ -39,7 +39,7 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 - Reviewer Score: 9/10 — keine kritischen Findings
 
 **Rollback:**
-- `git revert <wird nach Commit ergaenzt>`
+- `git revert cab91b1`
 
 ---
 
