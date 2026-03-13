@@ -1,4 +1,4 @@
-"""Tests fuer admin-interface/main.py – Config laden, Default-Merge, Migration, Env-Var Mapping."""
+"""Tests fuer admin-interface – Config laden, Default-Merge, Migration, Env-Var Mapping."""
 import json
 import os
 import sys
@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-# ── Mocks fuer Imports die im admin-interface/main.py gebraucht werden ────────
+# ── Mocks fuer Imports die im admin-interface gebraucht werden ────────────
 
 _mock_docker = types.ModuleType("docker")
 _mock_docker_client = mock.MagicMock()
@@ -28,6 +28,20 @@ if _root_path not in sys.path:
     sys.path.insert(0, _root_path)
 
 
+# ── Lazy imports from the new router modules ─────────────────────────────────
+
+def _import_deps():
+    """Import routers.deps (config, migration, resolve helpers)."""
+    from routers import deps
+    return deps
+
+
+def _import_memory():
+    """Import routers.memory (trivial entry, scan rebuild)."""
+    from routers import memory
+    return memory
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Fixtures
 # ══════════════════════════════════════════════════════════════════════════════
@@ -39,100 +53,93 @@ def _chdir_to_admin(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
 
-def _import_main():
-    if "main" in sys.modules:
-        return sys.modules["main"]
-    import main
-    return main
-
-
 # ══════════════════════════════════════════════════════════════════════════════
 # Tests: DEFAULT_CONFIG Struktur (neue Provider/LLM-Trennung)
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_default_config_has_providers():
-    main = _import_main()
-    assert "providers" in main.DEFAULT_CONFIG
+    deps = _import_deps()
+    assert "providers" in deps.DEFAULT_CONFIG
     # New installs ship with empty providers (configured via setup wizard)
-    assert isinstance(main.DEFAULT_CONFIG["providers"], list)
+    assert isinstance(deps.DEFAULT_CONFIG["providers"], list)
 
 
 def test_default_config_has_llms():
-    main = _import_main()
-    assert "llms" in main.DEFAULT_CONFIG
+    deps = _import_deps()
+    assert "llms" in deps.DEFAULT_CONFIG
     # New installs ship with empty llms (configured via setup wizard)
-    assert isinstance(main.DEFAULT_CONFIG["llms"], list)
+    assert isinstance(deps.DEFAULT_CONFIG["llms"], list)
 
 
 def test_default_config_no_llm_providers():
     """Alte llm_providers-Struktur darf nicht mehr vorhanden sein."""
-    main = _import_main()
-    assert "llm_providers" not in main.DEFAULT_CONFIG
+    deps = _import_deps()
+    assert "llm_providers" not in deps.DEFAULT_CONFIG
 
 
 def test_default_config_has_services():
-    main = _import_main()
-    assert "services" in main.DEFAULT_CONFIG
+    deps = _import_deps()
+    assert "services" in deps.DEFAULT_CONFIG
 
 
 def test_default_config_has_ha_mcp_type():
-    main = _import_main()
-    services = main.DEFAULT_CONFIG["services"]
+    deps = _import_deps()
+    services = deps.DEFAULT_CONFIG["services"]
     assert "ha_mcp_type" in services
     assert services["ha_mcp_type"] in ("builtin", "extended")
 
 
 def test_default_config_has_ha_auto_backup():
-    main = _import_main()
-    services = main.DEFAULT_CONFIG["services"]
+    deps = _import_deps()
+    services = deps.DEFAULT_CONFIG["services"]
     assert "ha_auto_backup" in services
     assert isinstance(services["ha_auto_backup"], bool)
 
 
 def test_default_config_has_memory():
-    main = _import_main()
-    assert "memory" in main.DEFAULT_CONFIG
-    mem = main.DEFAULT_CONFIG["memory"]
+    deps = _import_deps()
+    assert "memory" in deps.DEFAULT_CONFIG
+    mem = deps.DEFAULT_CONFIG["memory"]
     assert "window_size" in mem
     assert "extraction_llm" in mem
 
 
 def test_default_config_has_embedding():
-    main = _import_main()
-    assert "embeddings" in main.DEFAULT_CONFIG
-    assert isinstance(main.DEFAULT_CONFIG["embeddings"], list)
-    mem = main.DEFAULT_CONFIG["memory"]
+    deps = _import_deps()
+    assert "embeddings" in deps.DEFAULT_CONFIG
+    assert isinstance(deps.DEFAULT_CONFIG["embeddings"], list)
+    mem = deps.DEFAULT_CONFIG["memory"]
     assert "embedding_id" in mem
     assert "fallback_embedding_id" in mem
 
 
 def test_default_config_has_users():
-    main = _import_main()
-    assert "users" in main.DEFAULT_CONFIG
-    assert len(main.DEFAULT_CONFIG["users"]) >= 2
-    for u in main.DEFAULT_CONFIG["users"]:
+    deps = _import_deps()
+    assert "users" in deps.DEFAULT_CONFIG
+    assert len(deps.DEFAULT_CONFIG["users"]) >= 2
+    for u in deps.DEFAULT_CONFIG["users"]:
         assert "primary_llm" in u
         assert "fallback_llm" in u
 
 
 def test_default_config_has_whatsapp():
-    main = _import_main()
-    assert "whatsapp" in main.DEFAULT_CONFIG
-    assert "mode" in main.DEFAULT_CONFIG["whatsapp"]
+    deps = _import_deps()
+    assert "whatsapp" in deps.DEFAULT_CONFIG
+    assert "mode" in deps.DEFAULT_CONFIG["whatsapp"]
 
 
 def test_default_config_has_log_retention():
-    main = _import_main()
-    assert "log_retention" in main.DEFAULT_CONFIG
+    deps = _import_deps()
+    assert "log_retention" in deps.DEFAULT_CONFIG
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Tests: Config-Migration (alte → neue Struktur)
+# Tests: Config-Migration (alte -> neue Struktur)
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_migrate_config_from_old_format():
     """Migration von llm_providers[] zu providers[] + llms[]."""
-    main = _import_main()
+    deps = _import_deps()
     old_cfg = {
         "llm_providers": [
             {"slot": 1, "name": "Anthropic", "type": "anthropic",
@@ -152,7 +159,7 @@ def test_migrate_config_from_old_format():
         "memory": {"window_size": 20, "window_minutes": 60},
     }
 
-    result = main._migrate_config(old_cfg)
+    result = deps._migrate_config(old_cfg)
     assert result is True
 
     # providers[] wurde erstellt
@@ -173,7 +180,7 @@ def test_migrate_config_from_old_format():
     assert "primary_llm" in user
     assert "primary_llm_slot" not in user
     assert "fallback_llm" in user
-    assert user["primary_llm"] == llms[0]["id"]  # Slot 1 → erstes LLM
+    assert user["primary_llm"] == llms[0]["id"]  # Slot 1 -> erstes LLM
 
     # Embedding migriert
     assert "provider_id" in old_cfg["embedding"]
@@ -185,29 +192,29 @@ def test_migrate_config_from_old_format():
 
 def test_migrate_config_noop_if_already_migrated():
     """Migration macht nichts wenn providers[] schon existiert."""
-    main = _import_main()
+    deps = _import_deps()
     cfg = {
         "providers": [{"id": "p1", "name": "P1", "type": "anthropic", "url": "", "key": ""}],
         "llms": [{"id": "l1", "name": "L1", "provider_id": "p1", "model": "m1"}],
     }
-    result = main._migrate_config(cfg)
+    result = deps._migrate_config(cfg)
     assert result is False
 
 
 def test_migrate_config_no_llm_providers():
     """Migration macht nichts wenn llm_providers nicht existiert."""
-    main = _import_main()
+    deps = _import_deps()
     cfg = {"services": {}}
-    result = main._migrate_config(cfg)
+    result = deps._migrate_config(cfg)
     assert result is False
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Tests: _find_references
+# Tests: find_references
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_find_references_provider():
-    main = _import_main()
+    deps = _import_deps()
     cfg = {
         "providers": [{"id": "p1", "name": "P1", "type": "anthropic", "url": "", "key": ""}],
         "llms": [
@@ -218,14 +225,14 @@ def test_find_references_provider():
         "users": [],
         "memory": {},
     }
-    refs = main._find_references("provider", "p1", cfg)
+    refs = deps.find_references("provider", "p1", cfg)
     assert any("L1" in r for r in refs)
     assert any("Embedding" in r for r in refs)
     assert not any("L2" in r for r in refs)
 
 
 def test_find_references_llm():
-    main = _import_main()
+    deps = _import_deps()
     cfg = {
         "providers": [],
         "llms": [],
@@ -236,7 +243,7 @@ def test_find_references_llm():
         ],
         "memory": {"extraction_llm": "l1", "extraction_llm_fallback": ""},
     }
-    refs = main._find_references("llm", "l1", cfg)
+    refs = deps.find_references("llm", "l1", cfg)
     assert len(refs) == 3  # u1 primary, u2 fallback, memory extraction
 
 
@@ -245,10 +252,10 @@ def test_find_references_llm():
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_load_config_returns_default_when_no_file(tmp_path):
-    main = _import_main()
+    deps = _import_deps()
     fake_conf = tmp_path / "nonexistent" / "config.json"
-    with mock.patch.object(main, "CONF_FILE", fake_conf):
-        cfg = main.load_config()
+    with mock.patch.object(deps, "CONF_FILE", fake_conf):
+        cfg = deps.load_config()
     assert "providers" in cfg
     assert "llms" in cfg
     assert "services" in cfg
@@ -256,7 +263,7 @@ def test_load_config_returns_default_when_no_file(tmp_path):
 
 
 def test_load_config_reads_existing_file(tmp_path):
-    main = _import_main()
+    deps = _import_deps()
     custom_cfg = {
         "providers": [{"id": "p1", "name": "P1", "type": "anthropic", "url": "", "key": "sk-x"}],
         "llms": [{"id": "l1", "name": "L1", "provider_id": "p1", "model": "claude-sonnet-4-6"}],
@@ -285,8 +292,8 @@ def test_load_config_reads_existing_file(tmp_path):
     conf_file = tmp_path / "config.json"
     conf_file.write_text(json.dumps(custom_cfg), encoding="utf-8")
 
-    with mock.patch.object(main, "CONF_FILE", conf_file):
-        cfg = main.load_config()
+    with mock.patch.object(deps, "CONF_FILE", conf_file):
+        cfg = deps.load_config()
 
     assert cfg["services"]["ha_url"] == "http://my-ha:8123"
     assert cfg["memory"]["window_size"] == 30
@@ -294,7 +301,7 @@ def test_load_config_reads_existing_file(tmp_path):
 
 def test_load_config_migrates_old_format(tmp_path):
     """load_config migriert und speichert automatisch."""
-    main = _import_main()
+    deps = _import_deps()
     old_cfg = {
         "llm_providers": [
             {"slot": 1, "name": "Anthropic", "type": "anthropic",
@@ -311,8 +318,8 @@ def test_load_config_migrates_old_format(tmp_path):
     conf_file = tmp_path / "config.json"
     conf_file.write_text(json.dumps(old_cfg), encoding="utf-8")
 
-    with mock.patch.object(main, "CONF_FILE", conf_file):
-        cfg = main.load_config()
+    with mock.patch.object(deps, "CONF_FILE", conf_file):
+        cfg = deps.load_config()
 
     assert "providers" in cfg
     assert "llms" in cfg
@@ -323,7 +330,7 @@ def test_load_config_migrates_old_format(tmp_path):
 
 
 def test_load_config_ensures_system_users(tmp_path):
-    main = _import_main()
+    deps = _import_deps()
     custom_cfg = {
         "providers": [{"id": "p1", "name": "P1", "type": "anthropic", "url": "", "key": ""}],
         "llms": [{"id": "l1", "name": "L1", "provider_id": "p1", "model": "m"}],
@@ -336,8 +343,8 @@ def test_load_config_ensures_system_users(tmp_path):
     conf_file = tmp_path / "config.json"
     conf_file.write_text(json.dumps(custom_cfg), encoding="utf-8")
 
-    with mock.patch.object(main, "CONF_FILE", conf_file):
-        cfg = main.load_config()
+    with mock.patch.object(deps, "CONF_FILE", conf_file):
+        cfg = deps.load_config()
 
     user_ids = [u["id"] for u in cfg["users"]]
     assert "ha-assist" in user_ids
@@ -402,9 +409,9 @@ def _make_user(**overrides):
 
 def _build_env(user, cfg):
     """Helper: ruft _build_agent_env mit den richtigen Resolve-Funktionen auf."""
-    main = _import_main()
+    deps = _import_deps()
     from core.process_manager import _build_agent_env
-    return _build_agent_env(user, cfg, main._resolve_llm, main._find_ollama_url)
+    return _build_agent_env(user, cfg, deps.resolve_llm, deps.find_ollama_url)
 
 
 def test_build_env_basic():
@@ -422,7 +429,7 @@ def test_build_env_basic():
 def test_build_env_extraction_llm():
     """Extraction-LLM wird aus User oder Global-Memory aufgeloest."""
     cfg = _make_cfg()
-    user = _make_user()  # extraction_llm leer → fällt auf global zurück
+    user = _make_user()  # extraction_llm leer -> faellt auf global zurueck
     env = _build_env(user, cfg)
     assert env["HAANA_MEMORY_MODEL"] == "ministral-3-32k:3b"
     assert env["HAANA_EXTRACT_OAUTH_DIR"] == ""
@@ -514,21 +521,21 @@ def test_build_env_builtin_auto_url():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Tests: _resolve_llm
+# Tests: resolve_llm
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_resolve_llm_found():
-    main = _import_main()
+    deps = _import_deps()
     cfg = _make_cfg()
-    llm, prov = main._resolve_llm("claude-primary", cfg)
+    llm, prov = deps.resolve_llm("claude-primary", cfg)
     assert llm["model"] == "claude-sonnet-4-6"
     assert prov["type"] == "anthropic"
 
 
 def test_resolve_llm_not_found():
-    main = _import_main()
+    deps = _import_deps()
     cfg = _make_cfg()
-    llm, prov = main._resolve_llm("nonexistent", cfg)
+    llm, prov = deps.resolve_llm("nonexistent", cfg)
     assert llm == {}
     assert prov == {}
 
@@ -538,11 +545,11 @@ def test_resolve_llm_not_found():
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_slugify():
-    main = _import_main()
-    assert main._slugify("Anthropic (Primär)") == "anthropic-primaer"
-    assert main._slugify("Ollama Lokal") == "ollama-lokal"
-    assert main._slugify("   ") == "item"
-    assert main._slugify("Löwe & Bär") == "loewe-baer"
+    deps = _import_deps()
+    assert deps._slugify("Anthropic (Prim\u00e4r)") == "anthropic-primaer"
+    assert deps._slugify("Ollama Lokal") == "ollama-lokal"
+    assert deps._slugify("   ") == "item"
+    assert deps._slugify("L\u00f6we & B\u00e4r") == "loewe-baer"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -550,8 +557,8 @@ def test_slugify():
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_migrate_v2_adds_auth_method():
-    """Migration fügt auth_method zu Anthropic-Providern hinzu."""
-    main = _import_main()
+    """Migration fuegt auth_method zu Anthropic-Providern hinzu."""
+    deps = _import_deps()
     cfg = {
         "providers": [
             {"id": "a1", "name": "Anthropic", "type": "anthropic", "url": "", "key": "sk-test"},
@@ -560,23 +567,23 @@ def test_migrate_v2_adds_auth_method():
         ],
         "services": {"qdrant_url": "http://qdrant:6333"},
     }
-    result = main._migrate_providers_v2(cfg)
+    result = deps._migrate_providers_v2(cfg)
     assert result is True
     assert cfg["providers"][0]["auth_method"] == "api_key"
     assert cfg["providers"][1]["auth_method"] == "oauth"
-    assert "auth_method" not in cfg["providers"][2]  # Ollama bleibt unverändert
+    assert "auth_method" not in cfg["providers"][2]  # Ollama bleibt unveraendert
 
 
 def test_migrate_v2_removes_ollama_url():
     """Migration entfernt services.ollama_url und setzt es in Ollama-Providern."""
-    main = _import_main()
+    deps = _import_deps()
     cfg = {
         "providers": [
             {"id": "o1", "name": "Ollama", "type": "ollama", "url": "", "key": ""},
         ],
         "services": {"ollama_url": "http://gpu:11434", "qdrant_url": "http://qdrant:6333"},
     }
-    result = main._migrate_providers_v2(cfg)
+    result = deps._migrate_providers_v2(cfg)
     assert result is True
     assert "ollama_url" not in cfg["services"]
     assert cfg["providers"][0]["url"] == "http://gpu:11434"
@@ -584,69 +591,69 @@ def test_migrate_v2_removes_ollama_url():
 
 def test_migrate_v2_noop_if_already_done():
     """Migration macht nichts wenn auth_method schon vorhanden und keine ollama_url."""
-    main = _import_main()
+    deps = _import_deps()
     cfg = {
         "providers": [
             {"id": "a1", "name": "Anthropic", "type": "anthropic", "auth_method": "api_key", "key": "sk-x"},
         ],
         "services": {"qdrant_url": "http://qdrant:6333"},
     }
-    result = main._migrate_providers_v2(cfg)
+    result = deps._migrate_providers_v2(cfg)
     assert result is False
 
 
 def test_migrate_v2_oauth_dir():
-    """Migration setzt oauth_dir für OAuth-Provider."""
-    main = _import_main()
+    """Migration setzt oauth_dir fuer OAuth-Provider."""
+    deps = _import_deps()
     cfg = {
         "providers": [
             {"id": "anthropic-2", "name": "Pro", "type": "anthropic", "key": ""},
         ],
         "services": {},
     }
-    main._migrate_providers_v2(cfg)
+    deps._migrate_providers_v2(cfg)
     assert cfg["providers"][0]["auth_method"] == "oauth"
     assert cfg["providers"][0]["oauth_dir"] == "/data/claude-auth/anthropic-2"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Tests: _find_ollama_url
+# Tests: find_ollama_url
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_find_ollama_url_from_embedding():
-    main = _import_main()
+    deps = _import_deps()
     cfg = _make_cfg()
-    url = main._find_ollama_url(cfg)
+    url = deps.find_ollama_url(cfg)
     assert url == "http://ollama:11434"
 
 
 def test_find_ollama_url_from_extraction():
-    main = _import_main()
+    deps = _import_deps()
     cfg = _make_cfg()
-    # Punkt embedding auf nicht-Ollama-Provider → fällt auf Extraction zurück
+    # Punkt embedding auf nicht-Ollama-Provider -> faellt auf Extraction zurueck
     cfg["embeddings"][0]["provider_id"] = "anthropic-1"
-    url = main._find_ollama_url(cfg)
+    url = deps.find_ollama_url(cfg)
     assert url == "http://ollama:11434"
 
 
 def test_find_ollama_url_from_first_provider():
-    main = _import_main()
+    deps = _import_deps()
     cfg = _make_cfg()
     cfg["embeddings"][0]["provider_id"] = "anthropic-1"
     cfg["memory"]["extraction_llm"] = "claude-primary"
-    url = main._find_ollama_url(cfg)
+    url = deps.find_ollama_url(cfg)
     assert url == "http://ollama:11434"
 
 
 def test_find_ollama_url_empty():
-    main = _import_main()
+    deps = _import_deps()
     cfg = _make_cfg(providers=[
         {"id": "a1", "name": "Anthropic", "type": "anthropic", "key": "sk-x", "url": ""},
     ])
     cfg["embeddings"] = [{"id": "emb-1", "name": "Embedding 1",
                            "provider_id": "a1", "model": "", "dims": 1024}]
     cfg["memory"]["extraction_llm"] = ""
-    url = main._find_ollama_url(cfg)
+    url = deps.find_ollama_url(cfg)
     assert url == ""
 
 
@@ -790,7 +797,7 @@ def test_build_env_oauth_provider():
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_detect_mode_auto_no_docker():
-    """Ohne Docker-Socket → addon Modus."""
+    """Ohne Docker-Socket -> addon Modus."""
     from core.process_manager import detect_mode
     with mock.patch("core.process_manager.Path") as MockPath:
         MockPath.return_value.exists.return_value = False
@@ -881,44 +888,44 @@ def test_create_agent_manager_addon():
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_trivial_empty_entry():
-    main = _import_main()
-    assert main._is_trivial_entry({"user": "", "assistant": ""}) is True
+    mem = _import_memory()
+    assert mem._is_trivial_entry({"user": "", "assistant": ""}) is True
 
 def test_trivial_short_user_no_assistant():
-    main = _import_main()
-    assert main._is_trivial_entry({"user": "hi", "assistant": ""}) is True
+    mem = _import_memory()
+    assert mem._is_trivial_entry({"user": "hi", "assistant": ""}) is True
 
 def test_trivial_greeting():
-    main = _import_main()
-    assert main._is_trivial_entry({"user": "Hallo", "assistant": "Hi!"}) is True
-    assert main._is_trivial_entry({"user": "guten morgen", "assistant": "Guten Morgen!"}) is True
+    mem = _import_memory()
+    assert mem._is_trivial_entry({"user": "Hallo", "assistant": "Hi!"}) is True
+    assert mem._is_trivial_entry({"user": "guten morgen", "assistant": "Guten Morgen!"}) is True
 
 def test_trivial_light_command():
-    main = _import_main()
-    assert main._is_trivial_entry({"user": "Licht an im Bad", "assistant": "Erledigt."}) is True
+    mem = _import_memory()
+    assert mem._is_trivial_entry({"user": "Licht an im Bad", "assistant": "Erledigt."}) is True
 
 def test_trivial_switch_command():
-    main = _import_main()
-    assert main._is_trivial_entry({"user": "Schalte das Licht im Flur aus", "assistant": "Erledigt."}) is True
+    mem = _import_memory()
+    assert mem._is_trivial_entry({"user": "Schalte das Licht im Flur aus", "assistant": "Erledigt."}) is True
 
 def test_not_trivial_meaningful_conversation():
-    main = _import_main()
-    assert main._is_trivial_entry({
+    mem = _import_memory()
+    assert mem._is_trivial_entry({
         "user": "Ich trinke morgens gerne Kaffee, aber keinen Tee",
         "assistant": "Okay, ich merke mir das!",
     }) is False
 
 def test_not_trivial_preference():
-    main = _import_main()
-    assert main._is_trivial_entry({
+    mem = _import_memory()
+    assert mem._is_trivial_entry({
         "user": "Meine Lieblingsfarbe ist blau und ich mag Pizza",
         "assistant": "Notiert!",
     }) is False
 
 def test_not_trivial_question():
-    main = _import_main()
-    assert main._is_trivial_entry({
-        "user": "Was weißt du über mich?",
+    mem = _import_memory()
+    assert mem._is_trivial_entry({
+        "user": "Was weisst du ueber mich?",
         "assistant": "Du magst Kaffee und Pizza.",
     }) is False
 
@@ -928,8 +935,8 @@ def test_not_trivial_question():
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_scan_rebuild_entries_filters_trivial(tmp_path, monkeypatch):
-    main = _import_main()
-    # Temporäre Logs erstellen
+    mem = _import_memory()
+    # Temporaere Logs erstellen
     conv_dir = tmp_path / "conversations" / "test-user"
     conv_dir.mkdir(parents=True)
     log_file = conv_dir / "2026-03-08.jsonl"
@@ -940,15 +947,15 @@ def test_scan_rebuild_entries_filters_trivial(tmp_path, monkeypatch):
         '{"user":"Mein Geburtstag ist am 15. Mai","assistant":"Okay!"}\n',
         encoding="utf-8",
     )
-    monkeypatch.setattr(main, "LOG_ROOT", tmp_path)
-    result = main._scan_rebuild_entries("test-user", skip_trivial=True)
+    monkeypatch.setattr(mem, "LOG_ROOT", tmp_path)
+    result = mem._scan_rebuild_entries("test-user", skip_trivial=True)
     assert result["total_raw"] == 4
     assert result["total_filtered"] >= 2  # Hallo + Licht an
     assert result["total_relevant"] <= 2  # Kaffee + Geburtstag
     assert result["total_relevant"] == len(result["entries"])
 
 def test_scan_rebuild_entries_no_filter(tmp_path, monkeypatch):
-    main = _import_main()
+    mem = _import_memory()
     conv_dir = tmp_path / "conversations" / "test-user"
     conv_dir.mkdir(parents=True)
     log_file = conv_dir / "2026-03-08.jsonl"
@@ -957,8 +964,8 @@ def test_scan_rebuild_entries_no_filter(tmp_path, monkeypatch):
         '{"user":"Ich trinke gerne Kaffee","assistant":"Notiert!"}\n',
         encoding="utf-8",
     )
-    monkeypatch.setattr(main, "LOG_ROOT", tmp_path)
-    result = main._scan_rebuild_entries("test-user", skip_trivial=False)
+    monkeypatch.setattr(mem, "LOG_ROOT", tmp_path)
+    result = mem._scan_rebuild_entries("test-user", skip_trivial=False)
     assert result["total_raw"] == 2
     assert result["total_filtered"] == 0
     assert result["total_relevant"] == 2

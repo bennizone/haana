@@ -5,6 +5,48 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ---
 
+## 2026-03-13 — Refactoring: admin-interface/main.py in FastAPI-Router aufgeteilt
+
+**Aenderungen:**
+- `admin-interface/main.py` (4585 Z.) in 17 Dateien aufgeteilt
+- Neue Struktur: `admin-interface/routers/` mit 16 Modulen + `__init__.py`
+  - `routers/defaults.py` (251 Z.) — DEFAULT_CONFIG, Migrations-Logik, System-Users
+  - `routers/deps.py` (341 Z.) — Shared State, Helpers, Config-Zugriff
+  - `routers/auth_routes.py` (88 Z.) — Login/Logout/SSO
+  - `routers/agents.py` (100 Z.) — Agent Start/Stop/Status
+  - `routers/companion.py` (138 Z.) — Companion Ping/Register/Token
+  - `routers/users.py` (172 Z.) — User CRUD
+  - `routers/conversations.py` (175 Z.) — Instanzen, Chat-Proxy, SSE
+  - `routers/dream.py` (211 Z.) — Dream-Prozess
+  - `routers/ha_services.py` (241 Z.) — HA Test, Pipeline, STT/TTS
+  - `routers/setup.py` (266 Z.) — Setup-Wizard
+  - `routers/whatsapp.py` (277 Z.) — WhatsApp Status/Bridge
+  - `routers/config.py` (347 Z.) — Config CRUD, Provider
+  - `routers/memory.py` (368 Z.) — Memory-Stats, Rebuild
+  - `routers/logs.py` (420 Z.) — Log-Endpunkte
+  - `routers/system.py` (428 Z.) — Status, Git, Dev-Provider
+  - `routers/claude_auth.py` (452 Z.) — OAuth PTY-Flow
+- `admin-interface/main.py` danach: **263 Zeilen** (App-Init, Middleware, Router-Includes)
+- `tests/test_config.py`: Imports auf neue Pfade aktualisiert
+- Alle 102 Endpunkte erhalten, kein Verhalten geaendert
+
+**Entscheidungen:**
+- God-File-Pattern aufgeloest: main.py war auf ~4585 Zeilen angewachsen; jede Aenderung riskierte Kontext-Overflow bei Sub-Agenten
+- Router-Aufteilung nach fachlicher Zugehoerigkeit (nicht nach HTTP-Methode)
+- `deps.py` als zentrales Shared-State-Modul verhindert zirkulaere Imports
+
+**Offene Punkte:**
+- `claude_auth.py` (452 Z.), `system.py` (428 Z.), `logs.py` (420 Z.) leicht ueber 400-Zeilen-Grenze — separates Ticket moeglich
+
+**validate.sh:** 261 Tests gruen
+
+**Reviewer Score:** 9/10
+
+**Rollback:**
+- `git revert <hash>` — Hash nach Commit eintragen
+
+---
+
 ## 2026-03-13 — Cleanup-Sprint: Altlasten entfernen
 
 **Aenderungen:**
