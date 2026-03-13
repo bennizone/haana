@@ -5,6 +5,44 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ---
 
+## 2026-03-13 — Phase 1: Channel/Skill Framework Fundament
+
+**Aenderungen:**
+- `channels/base.py`: `BaseChannel` Abstrakt-Klasse + `ConfigField` Dataclass (55 Zeilen) — definiert Interface fuer alle kuenftigen Channel-Implementierungen
+- `skills/base.py`: `BaseSkill` Abstrakt-Klasse (43 Zeilen) — definiert Interface fuer alle kuenftigen Skill-Implementierungen
+- `admin-interface/module_registry.py`: `ModuleRegistry` mit globaler `registry`-Instanz (116 Zeilen) — auto-discovery und Verwaltung aller registrierten Module
+- `channels/telegram/channel.py`: Vollstaendiger Telegram-Channel-Stub (Referenz-Implementierung)
+- `channels/telegram/MODULE.md`: Entwickler-Doku fuer Telegram-Channel
+- `skills/kalender/skill.py`: CalDAV-Kalender-Skill-Stub mit 3 Tool-Definitionen
+- `skills/kalender/MODULE.md`: Entwickler-Doku fuer Kalender-Skill
+- `MODULE.md` (Root): Entwickler-Anleitung fuer neue Channels/Skills
+- `.gitkeep`-Dateien in: `channels/`, `channels/whatsapp/`, `channels/ha-voice/`, `channels/telegram/`, `skills/kalender/`
+
+**Entscheidungen:**
+- `ConfigField` in `channels/base.py` platziert (pragmatisch fuer Phase 1) — Design-Hinweis fuer Phase 2: ggf. nach `common/types.py` verschieben wenn Skills ebenfalls ConfigFields benoetigen
+- `sys.path`-Hack in `module_registry.py` akzeptiert — pragmatische Loesung fuer aktuelles Projekt-Layout ohne Refactoring bestehender Import-Struktur
+- Ausschliesslich neue Dateien in Phase 1 — kein bestehender Code veraendert (Zero-Risk fuer laufenden Stack)
+- Reviewer-Score: 8/10 (kritischer Fund: falscher Import-Pfad in MODULE.md — behoben vor Commit)
+
+**Offene Punkte:**
+- Phase 2: `module_registry.py` in `main.py` einbinden (Auto-Discovery beim Start)
+- Phase 3: Admin-UI fuer Modul-Verwaltung
+
+**Rollback:**
+- `git revert <hash>` (Hash nach Commit eintragen)
+
+---
+
+## 2026-03-13 — install.sh: --build Flag bei Erstinstallation
+
+**Aenderungen:**
+- `install.sh`: `docker compose up -d` auf `docker compose up -d --build` geaendert — Image wurde bei Erstinstallation ohne Build-Schritt nicht korrekt erstellt
+
+**Rollback:**
+- `git revert 5d961a5`
+
+---
+
 ## 2026-03-13 — Claude Session-Loeschen im Entwicklung-Tab
 
 **Aenderungen:**
