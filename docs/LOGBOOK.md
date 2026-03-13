@@ -4,6 +4,24 @@ Chronologische Dokumentation der wichtigsten Aenderungen am HAANA-Projekt.
 
 ---
 
+## 2026-03-13 — Status-Tab als Standard, Modal.showAlert fuer leeres Dream-Tagebuch
+
+**Aenderungen:**
+- `admin-interface/static/js/status.js`: `openDreamDiary()` — leere Eintraege zeigen jetzt `Modal.showAlert()` statt einem leeren Modal-Body; fruehzeitiger `return` verhindert unnoetige `showModal()`-Aufrufe
+- `admin-interface/static/js/modal.js`: neue Funktion `showAlert(message)` implementiert und exportiert; nutzt `hideCancel: true` + leerer `onConfirm`-Handler; XSS-safe via `escHtml`
+- `admin-interface/templates/index.html`: `active`-Klasse von `conversations`-Tab und `panel-conversations` auf `status`-Tab und `panel-status` verschoben — Status ist jetzt Standard-Tab beim Laden; Cache-Buster `modal.js?v=4` und `status.js?v=11` erhoht
+
+**Entscheidungen:**
+- `Modal.showAlert()` als wiederverwendbare Convenience-Funktion statt inline showModal mit hartcodiertem HTML verbessert Konsistenz und Lesbarkeit
+- Status-Tab als Standard sinnvoll da er den Systemzustand auf einen Blick zeigt — Conversations werden seltener direkt beim Oeffnen des Admin-UIs benoetigt
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert <hash>` — wird nach Commit ergaenzt
+
+---
+
 ## 2026-03-13 — Status-Tab Redesign: Modul-Integration
 
 **Aenderungen:**

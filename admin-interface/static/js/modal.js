@@ -94,5 +94,16 @@ const Modal = (() => {
     });
   }
 
-  return { show, close, showConfirm, showDangerConfirm };
+  // Convenience: simple info alert (no cancel button)
+  function showAlert(message) {
+    show({
+      title: '',
+      body: `<p style="margin:0;">${escHtml(message)}</p>`,
+      confirmText: 'OK',
+      hideCancel: true,
+      onConfirm: () => {},
+    });
+  }
+
+  return { show, close, showConfirm, showDangerConfirm, showAlert };
 })();

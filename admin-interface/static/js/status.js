@@ -309,16 +309,16 @@ async function openDreamDiary(inst) {
     if (r.ok) entries = await r.json();
   } catch(e) { /* still show modal */ }
 
-  let bodyHtml;
   if (!entries || entries.length === 0) {
-    bodyHtml = `<p style="color:var(--muted);text-align:center;padding:20px 0;">${t('config_memory.dream_diary_empty')}</p>`;
-  } else {
-    bodyHtml = `<div style="display:flex;flex-direction:column;gap:12px;max-height:420px;overflow-y:auto;padding-right:4px;">` +
-      entries.map(e => `<div style="border-bottom:1px solid var(--border);padding-bottom:8px;">
-        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">${escHtml(e.date||'')}</div>
-        <div style="font-size:13px;">${escHtml(e.summary||'')}</div>
-      </div>`).join('') + `</div>`;
+    Modal.showAlert(t('config_memory.dream_diary_empty'));
+    return;
   }
+
+  const bodyHtml = `<div style="display:flex;flex-direction:column;gap:12px;max-height:420px;overflow-y:auto;padding-right:4px;">` +
+    entries.map(e => `<div style="border-bottom:1px solid var(--border);padding-bottom:8px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">${escHtml(e.date||'')}</div>
+      <div style="font-size:13px;">${escHtml(e.summary||'')}</div>
+    </div>`).join('') + `</div>`;
 
   showModal({
     title: t('config_memory.dream_diary') + ' \u2013 ' + escHtml(inst),
