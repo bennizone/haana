@@ -27,7 +27,7 @@ class HAVoiceChannel(BaseChannel):
     """
 
     channel_id = "ha-voice"  # Bindestrich: externe ID-Konvention; Package-Name nutzt Unterstrich (Python)
-    display_name = "HA Voice"
+    display_name = "Home Assistant"
     config_root = "services"
 
     def get_config_schema(self) -> list[ConfigField]:

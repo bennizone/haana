@@ -4,6 +4,27 @@ Chronologische Dokumentation der wichtigsten Aenderungen am HAANA-Projekt.
 
 ---
 
+## 2026-03-13 — HA-Tab dynamisch — custom_tab_html Pattern + config_root (Commit 22de6e9)
+
+**Aenderungen:**
+- `channels/ha_voice/channel.py`: `config_root = "services"`, `get_config_schema()` → `[]`, `get_custom_tab_html()` mit vollstaendigem HTML-Block (22 Element-IDs)
+- `admin-interface/templates/index.html`: Hardcodierter `cfgtab-ha` Button und `cfgpanel-ha` Block entfernt
+- `admin-interface/static/js/modules.js`: Condition erweitert — Tabs werden auch bei leerem `config_schema` erstellt wenn `custom_tab_html` vorhanden; `_renderModuleConfigFields` wird uebersprungen wenn Schema leer
+- `admin-interface/static/js/app.js`: `showCfgTab('mod-ha_voice')` → `resetSectionHa()` Callback
+- `admin-interface/static/i18n/{de,en}.json`: Toter Key `config.sub_tabs.home_assistant` entfernt
+- Pattern etabliert: Channels mit komplexer UI koennen `config_schema=[]` + `get_custom_tab_html()` nutzen
+
+**Entscheidungen:**
+- Vollstaendig dynamischer Tab vermeidet Synchronisierungsprobleme zwischen hardcodiertem HTML und Python-Channel-Klasse
+- `config_root = "services"` stellt sicher dass save/load den richtigen Config-Bereich adressieren
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert 22de6e9`
+
+---
+
 ## 2026-03-13 — HA-Tab: Dynamische Migration (Phase 3)
 
 **Aenderungen:**
