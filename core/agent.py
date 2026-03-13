@@ -156,6 +156,7 @@ class HaanaAgent:
             # MiniMax: CLI nutzt ANTHROPIC_MODEL aus env
             self._cli_model = None
         self.session_id: Optional[str] = None
+        self._startup_context_sent: bool = False
 
         # Config aus config.json nachladen wenn Env-Vars fehlen
         # (z.B. bei docker-compose Start ohne Process Manager)
@@ -661,6 +662,30 @@ class HaanaAgent:
                 memory_context = (memory_context + "\n" + dream_context) if memory_context else dream_context
 
         parts = []
+
+        # Beim ersten Prompt nach Neustart: gespeicherten Gesprächsverlauf einbauen
+        if not self._startup_context_sent:
+            window_entries = self.memory._window._entries
+            if window_entries:
+                history_entries = window_entries[-10:]
+                history_lines = [
+                    '[Letztes Gespräch vor Neustart — zur Orientierung, nicht als aktive Aufgabe]'
+                ]
+                for entry in history_entries:
+                    history_lines.append(f'Nutzer: {entry.user}')
+                    history_lines.append(f'Assistent: {entry.assistant}')
+                history_block = (
+                    '<gesprächs_verlauf>\n' +
+                    '\n\n'.join(history_lines) +
+                    '\n</gesprächs_verlauf>'
+                )
+                parts.append(history_block)
+                self._startup_context_sent = True
+                logger.debug(
+                    f'[{self.instance}] Startup-Context: {len(history_entries)} '
+                    'Eintraege aus letzter Session vorangestellt'
+                )
+
         if memory_context:
             parts.append(f"<relevante_erinnerungen>\n{memory_context}\n</relevante_erinnerungen>")
             logger.debug(f"[{self.instance}] Memory-Kontext: {len(memory_context)} Zeichen")
