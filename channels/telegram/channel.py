@@ -69,3 +69,23 @@ class TelegramChannel(BaseChannel):
         """Telegram ist aktiv wenn ein Bot-Token in services.telegram konfiguriert ist."""
         token = config.get("services", {}).get("telegram", {}).get("telegram_bot_token", "").strip()
         return bool(token)
+
+    def get_status_info(self, config: dict) -> dict:
+        token = config.get("services", {}).get("telegram", {}).get("telegram_bot_token", "").strip()
+        if token:
+            return {
+                "status": "connected",
+                "label": "Konfiguriert",
+                "details": "Stub — Bridge noch nicht implementiert",
+                "actions": [
+                    {"id": "open_config", "label": "Konfigurieren", "style": "secondary"}
+                ],
+            }
+        return {
+            "status": "unconfigured",
+            "label": "Nicht konfiguriert",
+            "details": "Stub — Bridge noch nicht implementiert",
+            "actions": [
+                {"id": "open_config", "label": "Konfigurieren", "style": "secondary"}
+            ],
+        }

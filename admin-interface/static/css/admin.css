@@ -1251,6 +1251,27 @@ header h1 span { color: var(--accent2); }
 .status-dot-sm.warn { background: var(--yellow); }
 .status-dot-sm.muted { background: var(--muted); }
 
+/* ── Module Status Dots (Status-Tab Channels/Skills) ── */
+.status-dot-connected   { background: var(--green);  box-shadow: 0 0 6px rgba(74,222,128,.25); }
+.status-dot-degraded    { background: var(--yellow); box-shadow: 0 0 6px rgba(251,191,36,.25); }
+.status-dot-error       { background: var(--red);    box-shadow: 0 0 6px rgba(248,113,113,.25); }
+.status-dot-disabled,
+.status-dot-unconfigured { background: var(--muted); }
+
+/* ── Status Section Title ── */
+.status-section-title {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .6px; color: var(--muted);
+  margin: var(--sp-5) 0 var(--sp-3) 0;
+}
+
+/* ── Module Metrics Tags ── */
+.module-metrics { display: flex; flex-wrap: wrap; gap: 4px; margin-top: var(--sp-2); }
+.module-metric  {
+  font-size: 11px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 2px 6px; color: var(--muted);
+}
+
 /* ── Section-Box (Dev/Status-Tab) ── */
 .cfg-section {
   background: var(--surface); border: 1px solid var(--border);

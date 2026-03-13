@@ -243,3 +243,38 @@ class HAVoiceChannel(BaseChannel):
     def is_enabled(self, config: dict) -> bool:
         """HA Voice ist aktiv wenn ollama_compat aktiviert ist."""
         return bool(config.get("ollama_compat", {}).get("enabled", False))
+
+    def get_status_info(self, config: dict) -> dict:
+        svc = config.get("services", {})
+        ha_url = svc.get("ha_url", "").strip()
+        ha_token = svc.get("ha_token", "").strip()
+        mcp_enabled = bool(svc.get("mcp_enabled", False))
+        stt_entity = svc.get("stt_entity", "")
+        tts_entity = svc.get("tts_entity", "")
+
+        if ha_url and ha_token:
+            status = "connected"
+            label = "Verbunden"
+        elif ha_url:
+            status = "degraded"
+            label = "Kein Token"
+        else:
+            status = "unconfigured"
+            label = "Nicht konfiguriert"
+
+        metrics = [
+            {"label": "MCP", "value": "aktiv" if mcp_enabled else "inaktiv"},
+        ]
+        if stt_entity:
+            metrics.append({"label": "STT", "value": stt_entity})
+        if tts_entity:
+            metrics.append({"label": "TTS", "value": tts_entity})
+
+        return {
+            "status": status,
+            "label": label,
+            "metrics": metrics,
+            "actions": [
+                {"id": "open_config", "label": "Konfigurieren", "style": "secondary"}
+            ],
+        }

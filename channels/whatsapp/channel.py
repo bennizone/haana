@@ -140,3 +140,32 @@ class WhatsAppChannel(BaseChannel):
             for u in users
             if not u.get("system")
         )
+
+    def get_status_info(self, config: dict) -> dict:
+        wa_cfg = config.get("whatsapp", {})
+        mode = wa_cfg.get("mode", "separate")
+        users = config.get("users", [])
+        has_users = any(
+            u.get("whatsapp_phone", "").strip()
+            for u in users
+            if not u.get("system")
+        )
+        if has_users:
+            status = "connected"
+            label = "Verbunden"
+        else:
+            status = "unconfigured"
+            label = "Nicht konfiguriert"
+        result = {
+            "status": status,
+            "label": label,
+            "metrics": [
+                {"label": "Modus", "value": mode},
+            ],
+            "actions": [
+                {"id": "open_config", "label": "Konfigurieren", "style": "secondary"}
+            ],
+        }
+        if status == "connected":
+            result["details"] = "Bridge-Status nicht geprüft"
+        return result

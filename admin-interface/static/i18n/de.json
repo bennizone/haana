@@ -547,7 +547,14 @@
     "ollama_reason_provider_not_found": "Provider nicht gefunden",
     "ollama_reason_ollama_compat_disabled": "Fake-Ollama deaktiviert",
     "ollama_reason_unknown": "Unbekannter Fehler",
-    "no_agents": "Keine Agenten konfiguriert"
+    "no_agents": "Keine Agenten konfiguriert",
+    "channels_title": "Channels",
+    "skills_title": "Skills",
+    "module_unconfigured": "Nicht konfiguriert",
+    "module_connected": "Verbunden",
+    "module_degraded": "Eingeschränkt",
+    "module_error": "Fehler",
+    "module_disabled": "Deaktiviert"
   },
   "whatsapp": {
     "connected": "Verbunden",

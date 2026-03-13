@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HAANA Admin</title>
-<link rel="stylesheet" href="/static/css/admin.css?v=9">
+<link rel="stylesheet" href="/static/css/admin.css?v=10">
 </head>
 <body>
 
@@ -695,10 +695,16 @@
       <div class="empty-state"><div class="icon">...</div><div data-i18n="status.loading">Status wird geladen...</div></div>
     </div>
   </div>
-  <div class="cfg-section" style="margin-top:16px;">
-    <h3 style="margin:0 0 var(--sp-3) 0;font-size:14px;font-weight:600;" data-i18n="status.ollama_compat_title">Fake-Ollama-Server (HA Voice)</h3>
-    <div id="status-ollama-compat-list">
-      <span style="color:var(--muted);" data-i18n="status.loading">Status wird geladen...</span>
+  <div class="status-section-title" data-i18n="status.channels_title">Channels</div>
+  <div class="status-grid" id="status-channels-grid">
+    <div class="status-card">
+      <div class="empty-state"><div class="icon">...</div><div data-i18n="status.loading">Status wird geladen...</div></div>
+    </div>
+  </div>
+  <div class="status-section-title" data-i18n="status.skills_title">Skills</div>
+  <div class="status-grid" id="status-skills-grid">
+    <div class="status-card">
+      <div class="empty-state"><div class="icon">...</div><div data-i18n="status.loading">Status wird geladen...</div></div>
     </div>
   </div>
   <div style="margin-top:16px;">
@@ -808,7 +814,7 @@
 <script src="/static/js/modules.js?v=2"></script>
 <script src="/static/js/config.js?v=21"></script>
 <script src="/static/js/users.js?v=10"></script>
-<script src="/static/js/status.js?v=6"></script>
+<script src="/static/js/status.js?v=8"></script>
 <script src="/static/js/logs.js?v=6"></script>
 <script src="/static/js/whatsapp.js?v=4"></script>
 <script src="/static/js/git.js?v=1"></script>

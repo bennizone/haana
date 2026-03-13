@@ -45,3 +45,22 @@ class BaseChannel:
         Für spezielle UI-Komponenten (Status, QR-Code, etc.).
         Standard: leerer String (kein custom HTML)."""
         return ""
+
+    def get_status_info(self, config: dict) -> dict:
+        """Strukturierte Status-Daten für den Status-Tab.
+
+        Gibt zurück:
+        {
+            "status": "connected"|"degraded"|"error"|"disabled"|"unconfigured",
+            "label": "Verbunden",          # Kurztext
+            "details": "...",              # optional, 1 Zeile
+            "metrics": [                   # optional
+                {"label": "...", "value": "..."}
+            ],
+            "actions": [                   # optional
+                {"id": "open_config", "label": "Konfigurieren", "style": "secondary"}
+            ]
+        }
+        Standard: {"status": "unconfigured", "label": "Nicht konfiguriert"}
+        """
+        return {"status": "unconfigured", "label": "Nicht konfiguriert"}

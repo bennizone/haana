@@ -4,6 +4,34 @@ Chronologische Dokumentation der wichtigsten Aenderungen am HAANA-Projekt.
 
 ---
 
+## 2026-03-13 — Status-Tab Redesign: Modul-Integration
+
+**Aenderungen:**
+- `channels/base.py`: neue `get_status_info(self, config) -> dict` Methode mit Default-Return `{"status": "unconfigured", "label": "Nicht konfiguriert"}`
+- `skills/base.py`: analoge `get_status_info()` Default-Methode
+- `channels/whatsapp/channel.py`: `get_status_info()` — "connected" wenn User mit Phone konfiguriert (Details: "Bridge-Status nicht geprueft"), Metrik: Modus
+- `channels/ha_voice/channel.py`: `get_status_info()` — "connected" bei URL+Token, "degraded" bei nur URL, "unconfigured" sonst; Metriken: MCP-Status, STT/TTS-Entities
+- `channels/telegram/channel.py`: `get_status_info()` — "connected" wenn Bot-Token gesetzt, sonst "unconfigured"; Details: Stub-Hinweis
+- `admin-interface/routers/modules.py`: neuer `GET /api/modules/status` Endpoint aggregiert `get_status_info()` aller registrierten Channels/Skills, einzeln try/except abgesichert
+- `admin-interface/templates/index.html`: Fake-Ollama `.cfg-section` entfernt; zwei neue Sektionen: `.status-section-title` + `#status-channels-grid` und `#status-skills-grid`
+- `admin-interface/static/js/status.js`: `loadOllamaCompatStatus()` zu no-op Stub; neue `loadModuleStatus()` rendert Channels/Skills in jeweilige Grids; `moduleAction()` Placeholder; XSS-safe via escHtml/escAttr
+- `admin-interface/static/css/admin.css`: neue Klassen `.status-dot-connected/degraded/error/disabled/unconfigured`, `.status-section-title`, `.module-metrics`, `.module-metric`
+- `admin-interface/static/i18n/de.json` + `en.json`: 7 neue Keys (`status.channels_title`, `status.skills_title`, `status.module_unconfigured/connected/degraded/error/disabled`); Paritaet 714 Keys
+
+**Entscheidungen:**
+- Einheitliche `get_status_info()` Methode in Base-Klassen erlaubt erweiterbare Status-Aggregation ohne Aenderung am Endpoint
+- Fake-Ollama-Sektion im Status-Tab war redundant mit HA Voice Channel — Entfernung reduziert Duplizierung
+- try/except pro Modul im Endpoint verhindert, dass ein fehlerhaftes Modul den gesamten Status-Abruf unterbricht
+
+**Offene Punkte:**
+- `moduleAction()` ist noch ein Placeholder — konkrete Aktionen pro Modul koennen spaeter ergaenzt werden
+
+**Review:** Score 9/10 — keine kritischen Findings, alle Warnungen behoben
+
+**Rollback:** `git revert <hash>` (Hash nach Commit ergaenzen)
+
+---
+
 ## 2026-03-13 — HA-Tab dynamisch — custom_tab_html Pattern + config_root (Commit 22de6e9)
 
 **Aenderungen:**

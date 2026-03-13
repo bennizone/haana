@@ -141,3 +141,39 @@ async def save_modules_config(request: Request):
     except Exception as e:
         logger.error("[modules] Fehler beim Speichern der Modul-Config: %s", e)
         return {"ok": False, "error": str(e)[:200]}
+
+
+@router.get("/api/modules/status")
+async def get_modules_status():
+    """Status-Info aller registrierten Channels und Skills für den Status-Tab."""
+    try:
+        from module_registry import registry
+        cfg = load_config()
+        channels = []
+        for ch in registry.get_all_channels():
+            try:
+                info = ch.get_status_info(cfg)
+            except Exception as e:
+                logger.warning("Channel %s: get_status_info() fehlgeschlagen: %s", ch.channel_id, e)
+                info = {"status": "error", "label": "Fehler"}
+            channels.append({
+                "id": ch.channel_id,
+                "display_name": ch.display_name,
+                **info,
+            })
+        skills = []
+        for sk in registry.get_all_skills():
+            try:
+                info = sk.get_status_info(cfg)
+            except Exception as e:
+                logger.warning("Skill %s: get_status_info() fehlgeschlagen: %s", sk.skill_id, e)
+                info = {"status": "error", "label": "Fehler"}
+            skills.append({
+                "id": sk.skill_id,
+                "display_name": sk.display_name,
+                **info,
+            })
+        return {"channels": channels, "skills": skills}
+    except Exception as e:
+        logger.error("[modules] Fehler in get_modules_status: %s", e)
+        return {"channels": [], "skills": [], "error": str(e)[:200]}

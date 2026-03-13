@@ -41,3 +41,22 @@ class BaseSkill:
     def is_enabled(self, config: dict) -> bool:
         """Ist dieser Skill in der aktuellen Config aktiv?"""
         raise NotImplementedError(f"{self.__class__.__name__} muss is_enabled() implementieren")
+
+    def get_status_info(self, config: dict) -> dict:
+        """Strukturierte Status-Daten für den Status-Tab.
+
+        Gibt zurück:
+        {
+            "status": "connected"|"degraded"|"error"|"disabled"|"unconfigured",
+            "label": "Verbunden",          # Kurztext
+            "details": "...",              # optional, 1 Zeile
+            "metrics": [                   # optional
+                {"label": "...", "value": "..."}
+            ],
+            "actions": [                   # optional
+                {"id": "open_config", "label": "Konfigurieren", "style": "secondary"}
+            ]
+        }
+        Standard: {"status": "unconfigured", "label": "Nicht konfiguriert"}
+        """
+        return {"status": "unconfigured", "label": "Nicht konfiguriert"}

@@ -1,42 +1,76 @@
 // status.js – Systemstatus laden/rendern (Qdrant, Ollama, Instanzen)
 
-async function loadOllamaCompatStatus() {
+// loadOllamaCompatStatus() — integriert in Agenten-Karten via loadStatus()
+async function loadOllamaCompatStatus() { /* no-op, integriert in Agent-Karten */ }
+
+async function loadModuleStatus() {
+  const channelsGrid = document.getElementById('status-channels-grid');
+  const skillsGrid = document.getElementById('status-skills-grid');
+  if (!channelsGrid && !skillsGrid) return;
   try {
-    const r = await fetch('/api/status/ollama-compat');
+    const r = await fetch('/api/modules/status');
     if (!r.ok) return;
     const data = await r.json();
-    const el = document.getElementById('status-ollama-compat-list');
-    if (!el) return;
 
-    if (!data.enabled) {
-      el.innerHTML = `<span class="tag tag-warn">${t('status.ollama_compat_disabled')}</span>`;
-      return;
+    const dotClass = s => {
+      if (s === 'connected') return 'status-dot-connected';
+      if (s === 'degraded')  return 'status-dot-degraded';
+      if (s === 'error')     return 'status-dot-error';
+      return 'status-dot-unconfigured';
+    };
+
+    const renderCard = m => {
+      const dot = `<span class="status-dot-sm ${dotClass(m.status)}"></span>`;
+      const details = m.details ? `<div style="font-size:12px;color:var(--muted);margin-top:2px;">${escHtml(m.details)}</div>` : '';
+      const metrics = (m.metrics || []).length
+        ? `<div class="module-metrics">${(m.metrics || []).map(x =>
+            `<span class="module-metric">${escHtml(x.label)}: ${escHtml(x.value)}</span>`
+          ).join('')}</div>`
+        : '';
+      const actions = (m.actions || []).length
+        ? `<div style="display:flex;gap:4px;margin-top:6px;">${(m.actions || []).map(a => {
+            const cls = a.style === 'primary' ? 'btn-primary' : a.style === 'danger' ? 'btn-danger' : 'btn-secondary';
+            const onclick = a.id === 'open_config'
+              ? `onclick="switchTab && switchTab('config')"`
+              : `onclick="moduleAction('${escAttr(m.id)}','${escAttr(a.id)}')"`;
+            return `<button class="btn btn-sm ${cls}" ${onclick}>${escHtml(a.label)}</button>`;
+          }).join('')}</div>`
+        : '';
+      return `<div class="status-card">
+        <h3 style="display:flex;align-items:center;gap:6px;">${dot} ${escHtml(m.display_name)}</h3>
+        <div class="status-row">
+          <span>${escHtml(m.label)}</span>
+        </div>
+        ${details}${metrics}${actions}
+      </div>`;
+    };
+
+    if (channelsGrid) {
+      const channels = data.channels || [];
+      channelsGrid.innerHTML = channels.length
+        ? channels.map(renderCard).join('')
+        : `<div class="status-card"><div style="color:var(--muted);">–</div></div>`;
     }
-
-    const rows = (data.agents || []).map(a => {
-      const dot = `<span class="status-dot-sm ${a.available ? 'ok' : 'err'}"></span>`;
-      let detail = '';
-      if (!a.available) {
-        const reasonKey = 'status.ollama_reason_' + (a.reason || 'unknown');
-        detail = ` <span style="color:var(--muted);">— ${t(reasonKey) || escHtml(a.reason || '')}</span>`;
-      } else {
-        detail = a.llm_model ? ` <span style="color:var(--muted);">→ ${escHtml(a.llm_model)}</span>` : '';
-      }
-      const typeBadge = a.is_proxy_model
-        ? `<span class="tag tag-xs">${t('status.ollama_proxy')}</span>`
-        : `<span class="tag tag-xs">${t('status.ollama_agent')}</span>`;
-      return `<div class="status-row">${dot} ${typeBadge} <strong>${escHtml(a.name || a.id)}</strong>${detail}</div>`;
-    }).join('');
-
-    el.innerHTML = rows || `<span style="color:var(--muted);">${t('status.no_agents')}</span>`;
+    if (skillsGrid) {
+      const skills = data.skills || [];
+      skillsGrid.innerHTML = skills.length
+        ? skills.map(renderCard).join('')
+        : `<div class="status-card"><div style="color:var(--muted);">–</div></div>`;
+    }
   } catch(e) {
-    console.warn('ollama-compat status:', e);
+    console.warn('module status:', e);
   }
+}
+
+async function moduleAction(id, action) {
+  // Placeholder für zukünftige Modul-Aktionen
+  console.log('moduleAction:', id, action);
 }
 
 async function loadStatus() {
   _renderStatusChecklist();
   loadOllamaCompatStatus();
+  loadModuleStatus();
   const grid = document.getElementById('status-grid');
   grid.innerHTML = '<div class="status-card"><div class="empty-state"><div class="icon">...</div><div>' + t('status.checking') + '</div></div></div>';
   try {
