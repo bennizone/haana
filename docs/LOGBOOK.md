@@ -4,6 +4,28 @@ Chronologische Dokumentation der wichtigsten Aenderungen am HAANA-Projekt.
 
 ---
 
+## 2026-03-14 — HA-Tab Timing-Bug + einheitlicher Channel-Status-Block
+
+**Aenderungen:**
+- `channels/base.py`: `get_connection_status()` als optionale Methode mit Default `None` eingefuehrt
+- `channels/ha_voice/channel.py`: `get_connection_status()` implementiert — gibt `connected`, `error` oder `unconfigured` zurueck
+- `channels/whatsapp/channel.py`: `get_connection_status()` gibt `None` zurueck (WhatsApp hat eigenen Status-Block in `custom_tab_html`)
+- `admin-interface/routers/modules.py`: `connection_status` Feld in `GET /api/modules` Response ergaenzt
+- `admin-interface/static/js/modules.js`: `setTimeout` nach DOM-Einfuegung fuer ha-voice behebt leere Felder beim ersten Oeffnen (Timing-Bug); `_renderChannelStatusBar()` rendert kompakten Status-Bar vor Custom-HTML
+- `admin-interface/static/css/admin.css`: neue Klassen `.channel-status-bar` und `.status-dot-sm` (v11)
+- `admin-interface/templates/index.html`: Cache-Buster auf v11/v3 angehoben
+
+**Entscheidungen:**
+- HA-Tab lud Felder beim ersten Oeffnen leer, weil DOM noch nicht fertig gerendert war — `setTimeout(0)` reicht als Fix
+- Status-Block wird jetzt einheitlich via `_renderChannelStatusBar()` generiert statt je Channel individuell
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert 637e1b4`
+
+---
+
 ## 2026-03-14 — Companion v2.0.0: SSO-Gateway-Only
 
 **Aenderungen:**
