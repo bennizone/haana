@@ -96,14 +96,10 @@ async def auth_change_password(request: Request):
     except Exception:
         raise HTTPException(400, "Ungültiger JSON-Body")
 
-    current = body.get("current_password", "")
     new_pw = body.get("new_password", "")
 
-    if not current or not new_pw:
-        raise HTTPException(400, "current_password und new_password erforderlich")
-
-    if not _auth.verify_admin_password(current):
-        raise HTTPException(401, "Aktuelles Passwort falsch")
+    if not new_pw:
+        raise HTTPException(400, "new_password erforderlich")
 
     if len(new_pw) < 8:
         raise HTTPException(400, "Neues Passwort muss mindestens 8 Zeichen haben")

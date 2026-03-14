@@ -14,7 +14,9 @@
     "new_password": "New Password",
     "password_changed": "Password changed successfully",
     "password_min_length": "Minimum 8 characters required",
-    "password_change_error": "Error changing password"
+    "password_change_error": "Error changing password",
+    "confirm_password": "Confirm Password",
+    "password_mismatch": "Passwords do not match"
   },
   "app": {
     "title": "HAANA Admin",

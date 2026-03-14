@@ -617,17 +617,17 @@
         </p>
         <div class="form-row two" style="max-width:480px;">
           <div class="form-group">
-            <label data-i18n="auth.current_password">Aktuelles Passwort</label>
-            <input type="password" id="sec-current-password"
-                   autocomplete="current-password"
-                   style="width:100%;">
-          </div>
-          <div class="form-group">
             <label data-i18n="auth.new_password">Neues Passwort</label>
             <input type="password" id="sec-new-password"
                    autocomplete="new-password"
                    style="width:100%;">
             <span style="font-size:11px;color:var(--muted);" data-i18n="auth.password_min_length">Mindestens 8 Zeichen erforderlich</span>
+          </div>
+          <div class="form-group">
+            <label data-i18n="auth.confirm_password">Passwort bestätigen</label>
+            <input type="password" id="sec-confirm-password"
+                   autocomplete="new-password"
+                   style="width:100%;">
           </div>
         </div>
       </div>
@@ -850,7 +850,7 @@
 <script src="/static/js/whatsapp.js?v=6"></script>
 <script src="/static/js/git.js?v=1"></script>
 <script src="/static/js/dev.js?v=3"></script>
-<script src="/static/js/security.js?v=1"></script>
+<script src="/static/js/security.js?v=2"></script>
 
 </body>
 </html>

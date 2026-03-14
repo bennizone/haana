@@ -1,15 +1,20 @@
-// security.js – Passwort-Aenderung (v1)
+// security.js – Passwort-Aenderung (v2)
 
 async function changePassword() {
-  const currentEl = document.getElementById('sec-current-password');
   const newEl     = document.getElementById('sec-new-password');
+  const confirmEl = document.getElementById('sec-confirm-password');
   const statusEl  = document.getElementById('save-status-security');
 
-  const currentPassword = currentEl ? currentEl.value : '';
   const newPassword     = newEl     ? newEl.value     : '';
+  const confirmPassword = confirmEl ? confirmEl.value : '';
 
   if (!newPassword || newPassword.length < 8) {
     toast(t('auth.password_min_length'), 'err');
+    return;
+  }
+
+  if (newPassword !== confirmPassword) {
+    toast(t('auth.password_mismatch'), 'err');
     return;
   }
 
@@ -17,12 +22,12 @@ async function changePassword() {
     const r = await fetch('/api/auth/change-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+      body: JSON.stringify({ new_password: newPassword }),
     });
 
     if (r.ok) {
-      if (currentEl) currentEl.value = '';
       if (newEl)     newEl.value     = '';
+      if (confirmEl) confirmEl.value = '';
       toast(t('auth.password_changed'), 'ok');
       if (statusEl) {
         statusEl.textContent = t('auth.password_changed');
