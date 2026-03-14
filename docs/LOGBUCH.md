@@ -24,7 +24,7 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 **Review:** Score 8/10 — keine kritischen Findings, validate.sh gruen (261 Tests)
 
 **Rollback:**
-- `git revert <hash>` (nach Commit eintragen)
+- `git revert 0efec6a`
 
 ---
 
