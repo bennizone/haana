@@ -181,6 +181,7 @@ def _build_agent_env(user: dict, cfg: dict, resolve_llm_fn, find_ollama_url_fn) 
                     break
 
     env = {
+        "TZ":                    "Europe/Berlin",
         "HAANA_INSTANCE":        uid,
         "HAANA_API_PORT":        str(api_port),
         "HAANA_MEDIA_DIR":       os.environ.get("HAANA_MEDIA_DIR", str(_get_default_media_dir())),

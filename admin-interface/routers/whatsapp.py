@@ -184,7 +184,14 @@ async def whatsapp_config_endpoint(request: Request):
                 "tts_also_text": services.get("tts_also_text", False),
             }
 
-    return {"mode": wa.get("mode", "separate"), "self_prefix": wa.get("self_prefix", "!h "), "routes": routes, "stt": stt, "tts": tts}
+    lid_mappings = {}
+    for user in cfg.get("users", []):
+        phone = user.get("whatsapp_phone", "").strip()
+        lid   = user.get("whatsapp_lid", "").strip()
+        if phone and lid:
+            lid_mappings[lid] = f"{phone}@s.whatsapp.net"
+
+    return {"mode": wa.get("mode", "separate"), "self_prefix": wa.get("self_prefix", "!h "), "routes": routes, "stt": stt, "tts": tts, "lid_mappings": lid_mappings}
 
 
 # ── WhatsApp Proxy (Admin-Modus-Router) ──────────────────────────────────────

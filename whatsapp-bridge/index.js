@@ -139,6 +139,10 @@ async function refreshConfig() {
       if (jid) newRoutes.set(jid, { agent_url: route.agent_url, user_id: route.user_id });
     }
     _routes     = newRoutes;
+    for (const [lid, phoneJid] of Object.entries(data.lid_mappings || {})) {
+      _lidToPhone[lid] = phoneJid;
+      log.debug({ lid, phoneJid }, "LID→Phone (config-seed)");
+    }
     _waMode     = data.mode       || "separate";
     _selfPrefix = data.self_prefix || "!h ";
 
