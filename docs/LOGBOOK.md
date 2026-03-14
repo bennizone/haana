@@ -22,7 +22,7 @@ Chronologische Dokumentation der wichtigsten Aenderungen am HAANA-Projekt.
 **Offene Punkte:**
 - Keine
 
-**Rollback:** `git revert <hash>` (nach Commit eintragen)
+**Rollback:** `git revert a60c340`
 
 ---
 
