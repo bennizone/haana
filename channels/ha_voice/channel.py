@@ -222,6 +222,33 @@ class HAVoiceChannel(BaseChannel):
     </div>
 """
 
+    def get_connection_status(self, config: dict) -> dict | None:
+        svc = config.get("services", {})
+        ha_url = svc.get("ha_url", "").strip()
+        ha_token = svc.get("ha_token", "").strip()
+        if ha_url and ha_token:
+            return {
+                "status": "connected",
+                "label": "Konfiguriert",
+                "detail": ha_url,
+                "actions": [
+                    {"id": "test", "label": "Verbindung testen", "onclick": "testHaConnection()"}
+                ],
+            }
+        elif ha_url:
+            return {
+                "status": "error",
+                "label": "Token fehlt",
+                "detail": ha_url,
+                "actions": [
+                    {"id": "test", "label": "Verbindung testen", "onclick": "testHaConnection()"}
+                ],
+            }
+        return {
+            "status": "unconfigured",
+            "label": "Nicht konfiguriert",
+        }
+
     def get_user_config_schema(self) -> list[ConfigField]:
         """Pro-User HA Voice Konfiguration."""
         return [

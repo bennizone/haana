@@ -40,6 +40,10 @@ async def get_modules():
                 user_config_schema = [dataclasses.asdict(f) for f in ch.get_user_config_schema()]
             except Exception:
                 user_config_schema = []
+            try:
+                conn_status = ch.get_connection_status(cfg) if hasattr(ch, 'get_connection_status') else None
+            except Exception:
+                conn_status = None
             channels.append({
                 "id": ch.channel_id,
                 "display_name": ch.display_name,
@@ -49,6 +53,7 @@ async def get_modules():
                 "config_schema": config_schema,
                 "user_config_schema": user_config_schema,
                 "custom_tab_html": ch.get_custom_tab_html() if hasattr(ch, 'get_custom_tab_html') else "",
+                "connection_status": conn_status,
             })
 
         skills = []

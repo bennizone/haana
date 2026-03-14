@@ -46,6 +46,21 @@ class BaseChannel:
         Standard: leerer String (kein custom HTML)."""
         return ""
 
+    def get_connection_status(self, config: dict) -> dict | None:
+        """Optionaler Live-Status für den Config-Tab-Header.
+        Gibt None zurück wenn kein Status-Block gewünscht.
+        Gibt dict zurück:
+        {
+            "status": "connected"|"error"|"unconfigured",
+            "label": "Verbunden",
+            "detail": "http://...",  # optional
+            "actions": [             # optional
+                {"id": "test", "label": "Testen", "onclick": "testHaConnection()"}
+            ]
+        }
+        """
+        return None
+
     def get_status_info(self, config: dict) -> dict:
         """Strukturierte Status-Daten für den Status-Tab.
 

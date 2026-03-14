@@ -783,6 +783,27 @@ header h1 span { color: var(--accent2); }
 .wa-qr-container { text-align: center; margin-top: var(--sp-3); }
 .wa-qr-container img { max-width: 256px; border-radius: var(--radius-lg); border: 1px solid var(--border); }
 
+/* ── Channel Status Bar ── */
+.channel-status-bar {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4); margin-bottom: var(--sp-4);
+  border-radius: var(--radius-lg); border: 1px solid var(--border);
+  background: var(--bg);
+}
+.channel-status-bar.status-connected { border-color: rgba(74,222,128,.3); background: rgba(74,222,128,.05); }
+.channel-status-bar.status-error { border-color: rgba(248,113,113,.3); background: rgba(248,113,113,.05); }
+.channel-status-bar.status-unconfigured { border-color: var(--border); background: var(--bg); }
+.channel-status-label { font-weight: 500; font-size: 13px; }
+.channel-status-detail { color: var(--muted); font-size: 12px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.channel-status-actions { margin-left: auto; display: flex; gap: var(--sp-2); }
+.status-dot-sm {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  background: var(--muted);
+}
+.status-dot-sm.connected { background: var(--green); box-shadow: 0 0 6px rgba(74,222,128,.4); }
+.status-dot-sm.error { background: var(--red); box-shadow: 0 0 6px rgba(248,113,113,.4); }
+.status-dot-sm.unconfigured { background: var(--muted); }
+
 /* ── Progress Bar ── */
 .progress-wrap { margin-top: var(--sp-3); }
 .progress-bar-outer {

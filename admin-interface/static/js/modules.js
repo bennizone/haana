@@ -47,9 +47,17 @@ async function loadModuleConfigTabs() {
     const fieldsHtml = (ch.config_schema && ch.config_schema.length > 0)
       ? _renderModuleConfigFields(ch.id, ch.display_name, ch.config_schema, vals, false)
       : '';
-    panel.innerHTML = customHtml + fieldsHtml;
+    const statusBarHtml = ch.connection_status ? _renderChannelStatusBar(ch.connection_status) : '';
+    panel.innerHTML = statusBarHtml + customHtml + fieldsHtml;
     const parentEl = tabsEl.closest('.panel') || tabsEl.parentElement;
     parentEl.appendChild(panel);
+
+    if (ch.id === 'ha-voice') {
+      setTimeout(() => {
+        if (typeof resetSectionHa === 'function') resetSectionHa();
+        if (typeof loadSttTtsEntities === 'function') loadSttTtsEntities();
+      }, 0);
+    }
   }
 
   // Skills mit config_schema > 0
@@ -126,6 +134,21 @@ function _renderModuleConfigFields(modId, displayName, fields, vals, isSkill) {
   </div>`;
 
   return html;
+}
+
+function _renderChannelStatusBar(cs) {
+  const dotClass = cs.status === 'connected' ? 'connected' : cs.status === 'error' ? 'error' : 'unconfigured';
+  const detail = cs.detail ? `<span class="channel-status-detail">${escHtml(cs.detail)}</span>` : '';
+  const actions = (cs.actions || []).map(a =>
+    `<button class="btn btn-sm btn-secondary" onclick="${escAttr(a.onclick)}">${escHtml(a.label)}</button>`
+  ).join('');
+  const actionsHtml = actions ? `<div class="channel-status-actions">${actions}</div>` : '';
+  return `<div class="channel-status-bar status-${escAttr(dotClass)}">
+  <span class="status-dot-sm ${escAttr(dotClass)}"></span>
+  <span class="channel-status-label">${escHtml(cs.label)}</span>
+  ${detail}
+  ${actionsHtml}
+</div>`;
 }
 
 async function saveModuleConfig(modId) {

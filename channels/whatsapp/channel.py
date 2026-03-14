@@ -96,6 +96,10 @@ class WhatsAppChannel(BaseChannel):
             '</div>'
         )
 
+    def get_connection_status(self, config: dict) -> dict | None:
+        """WhatsApp hat eigenen Status-Block in custom_tab_html."""
+        return None
+
     def get_user_config_schema(self) -> list[ConfigField]:
         """Pro-User WhatsApp-Konfiguration."""
         return [
