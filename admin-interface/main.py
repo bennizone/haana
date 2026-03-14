@@ -177,8 +177,8 @@ async def lifespan(app: FastAPI):
     )
     app.include_router(ollama_router)
 
-    # Add-on Modus: Agents automatisch starten
-    if _deps.HAANA_MODE == "addon":
+    # Addon + Standalone-Modus: Agents automatisch starten
+    if _deps.HAANA_MODE in ("addon", "standalone"):
         asyncio.create_task(_autostart_agents())
 
     # System-User INST_DIRs sicherstellen

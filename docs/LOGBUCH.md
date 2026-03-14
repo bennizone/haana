@@ -5,6 +5,29 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ---
 
+## 2026-03-14 — Autostart-Fix + update.sh Container-Management
+
+**Problem:** Im Standalone-Modus (Docker) wurden Agents nach Neustart/Update nicht automatisch gestartet. WA-Bridge wurde von update.sh nicht mitgestartet.
+
+**Aenderungen:**
+- `admin-interface/main.py`: `_autostart_agents()` jetzt auch bei `HAANA_MODE == "standalone"` aufgerufen (Bedingung von `== "addon"` auf `in ("addon", "standalone")` erweitert)
+- `update.sh`: `docker compose --profile agents up -d --build` — WA-Bridge wird mitgestartet
+- `update.sh`: Neuer Block nach compose-Start: wartet auf `/health`, liest `admin_session` aus config.json, ruft `/api/instances/restart-all` auf
+
+**Entscheidungen:**
+- Standalone-Modus und Addon-Modus sollen identisches Autostart-Verhalten haben — kein Grund fuer Unterschiede
+- update.sh verwaltet Agents aktiv (restart-all via API) statt nur Container hochzufahren — stellt sicher dass Instanzen nach Updates frischen State laden
+
+**Offene Punkte:**
+- Keine bekannten offenen Punkte
+
+**Review:** Score 8/10 — keine kritischen Findings, validate.sh gruen (261 Tests)
+
+**Rollback:**
+- `git revert <hash>` (nach Commit eintragen)
+
+---
+
 ## 2026-03-13 — Dream-Status in Status-Tab migriert
 
 **Commits:** 1ffeaae

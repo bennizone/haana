@@ -129,7 +129,41 @@ echo ""
 # ── Docker Compose neu starten ────────────────────────────────────────────────
 echo -e "${YELLOW}→ Docker-Services neu starten...${NC}"
 docker compose pull
-docker compose up -d --build
+docker compose --profile agents up -d --build
+echo ""
+
+# ── Agent-Instanzen neu starten ───────────────────────────────────────────────
+echo -e "${YELLOW}→ Warte auf Admin-Interface...${NC}"
+ADMIN_PORT="${HAANA_ADMIN_PORT:-8080}"
+for i in $(seq 1 30); do
+    if curl -sf "http://localhost:${ADMIN_PORT}/health" > /dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+done
+
+CONFIG_PATH=$(docker inspect --format='{{range .Mounts}}{{if eq .Name "haana_haana-data"}}{{.Source}}{{end}}{{end}}' haana-admin-interface-1 2>/dev/null)
+CONFIG_FILE="${CONFIG_PATH}/config/config.json"
+if [ -f "$CONFIG_FILE" ]; then
+    TOKEN=$(python3 -c "
+import json, sys
+try:
+    d=json.load(open(sys.argv[1]))
+    print(d.get('admin_session',''))
+except Exception:
+    pass
+" "$CONFIG_FILE" 2>/dev/null)
+    if [ -n "$TOKEN" ]; then
+        echo -e "${YELLOW}→ Agent-Instanzen neu starten...${NC}"
+        curl -sf -X POST "http://localhost:${ADMIN_PORT}/api/instances/restart-all" \
+            -H "Authorization: Bearer $TOKEN" > /dev/null || true
+        echo -e "${GREEN}  Agents neu gestartet.${NC}"
+    else
+        warn "Kein Admin-Session gefunden — Agents ggf. manuell neu starten"
+    fi
+else
+    warn "Config nicht gefunden — Agents ggf. manuell neu starten"
+fi
 echo ""
 
 # ── Abschlussmeldung ──────────────────────────────────────────────────────────
