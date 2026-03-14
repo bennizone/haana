@@ -113,13 +113,13 @@ async function loadStatus() {
         : '';
       const controls = `
         <div style="display:flex;gap:4px;margin-top:6px;">
-          <button class="btn btn-sm btn-secondary" onclick="instanceControl('${a.inst}','restart')">↺ Restart</button>
-          <button class="btn btn-sm btn-secondary" onclick="instanceControl('${a.inst}','stop')">Stop</button>
-          <button class="btn btn-sm btn-danger"    onclick="instanceForceStop('${a.inst}')">Kill</button>
+          <button class="btn btn-sm btn-secondary" onclick="instanceControl('${escAttr(a.inst)}','restart')">↺ Restart</button>
+          <button class="btn btn-sm btn-secondary" onclick="instanceControl('${escAttr(a.inst)}','stop')">Stop</button>
+          <button class="btn btn-sm btn-danger"    onclick="instanceForceStop('${escAttr(a.inst)}')">Kill</button>
         </div>`;
       return `<div class="status-row" style="flex-direction:column;align-items:flex-start;gap:2px;">
         <div style="display:flex;justify-content:space-between;width:100%;align-items:center;">
-          <span style="font-weight:500;">${dot} ${a.inst}</span>
+          <span style="font-weight:500;">${dot} ${escHtml(a.inst)}</span>
           <div style="display:flex;gap:8px;">${queueInfo}${memInfo}</div>
         </div>
         ${controls}
@@ -127,7 +127,7 @@ async function loadStatus() {
     }).join('');
 
     const logRows = Object.entries(logs).map(([inst, info]) =>
-      `<div class="status-row"><span>${inst}</span><span>${info.days} ${t('status.days_last')} ${info.latest||'–'}</span></div>`
+      `<div class="status-row"><span>${escHtml(inst)}</span><span>${escHtml(String(info.days))} ${t('status.days_last')} ${escHtml(info.latest||'–')}</span></div>`
     ).join('');
 
     grid.innerHTML = `
@@ -138,7 +138,7 @@ async function loadStatus() {
         </h3>
         <div class="status-row">
           <span>Status</span>
-          <span class="${qdrant.ok ? 'status-ok' : 'status-err'}">${qdrant.ok ? '\u2713 ' + t('status.online') : '\u2717 ' + (qdrant.error||t('status.error'))}</span>
+          <span class="${qdrant.ok ? 'status-ok' : 'status-err'}">${qdrant.ok ? '\u2713 ' + t('status.online') : '\u2717 ' + escHtml(qdrant.error||t('status.error'))}</span>
         </div>
         ${qdrant.ok ? `<div class="status-row"><span>Collections</span><div style="display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end;">
           ${(qdrant.collections||[]).map(c => `<span class="tag" style="display:inline-flex;align-items:center;gap:4px;">${escHtml(c)}<button onclick="deleteQdrantCollection('${escAttr(c)}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:11px;padding:0;" title="${t('status.delete_label')}">\u2715</button></span>`).join('')||t('status.no_collections')}
@@ -148,7 +148,7 @@ async function loadStatus() {
         <h3>Ollama</h3>
         <div class="status-row">
           <span>Status</span>
-          <span class="${ollama.ok ? 'status-ok' : 'status-warn'}">${ollama.ok ? '\u2713 ' + t('status.online') : '\u26a0 ' + (ollama.error||t('status.not_reachable'))}</span>
+          <span class="${ollama.ok ? 'status-ok' : 'status-warn'}">${ollama.ok ? '\u2713 ' + t('status.online') : '\u26a0 ' + escHtml(ollama.error||t('status.not_reachable'))}</span>
         </div>
         ${ollama.ok ? `<div class="status-row"><span>${t('config_llm.model')}</span><div style="text-align:right;">${models||t('status.no_models')}</div></div>` : ''}
       </div>
@@ -179,7 +179,7 @@ async function loadStatus() {
     document.getElementById('header-dot').style.background = allOk ? 'var(--green)' : 'var(--red)';
     document.getElementById('header-status').textContent = allOk ? t('status.system_ok') : t('status.system_error');
   } catch(e) {
-    grid.innerHTML = `<div class="status-card"><div class="empty-state"><div class="icon">!</div><div>${e.message}</div></div></div>`;
+    grid.innerHTML = `<div class="status-card"><div class="empty-state"><div class="icon">!</div><div>${escHtml(e.message)}</div></div></div>`;
   }
 }
 
@@ -229,7 +229,7 @@ async function _renderStatusChecklist() {
     el.innerHTML = checks.map(c => `
       <div class="checklist-item ${c.ok ? 'ok' : 'warn'}">
         <span class="check-icon">${c.ok ? '&#10003;' : '&#9888;'}</span>
-        <a href="${c.link}" onclick="_checklistNav(event, '${c.link}')">${c.label}</a>
+        <a href="${escAttr(c.link)}" onclick="_checklistNav(event, '${escAttr(c.link)}')">${escHtml(c.label)}</a>
       </div>
     `).join('');
   } catch(_) {}
