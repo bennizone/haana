@@ -21,6 +21,27 @@ Claude Code darf per SSH auf dem HAANA-LXC (10.83.1.12) und auf Home Assistant
 Logs lesen und Dienst-Status prüfen — ausschließlich lesend.
 Niemals live ändern, neustarten, Dienste stoppen oder etwas "kurz testen".
 
+### HA Debugging (Lesend)
+
+Für Home Assistant Logs und Entity-States statt SSH:
+
+HA URL und Token aus config.json lesen:
+  python3 -c "import json; c=json.load(open('/data/config/config.json')); print(c['services']['ha_url'], c['services']['ha_token'])"
+
+Verfügbare Endpunkte (alle GET, read-only):
+- Logs:        {ha_url}/api/error_log
+- Alle States: {ha_url}/api/states
+- Ein State:   {ha_url}/api/states/{entity_id}
+- HA Version:  {ha_url}/api/config
+
+Header immer: Authorization: Bearer {ha_token}
+
+Beispiel:
+  curl -s -H "Authorization: Bearer TOKEN" \
+    {ha_url}/api/error_log | tail -50
+
+Niemals schreibende HA-API-Calls ohne explizite Benutzer-Freigabe.
+
 ### Was der Orchestrator (Haupt-Claude-Code) NIEMALS darf — auch nicht bei "kleinen" Fixes:
 - Dateien direkt editieren oder schreiben (Edit, Write) — außer Meta-Dateien wie CLAUDE.md, dev.md
 - Schreibende Bash-Befehle ausführen
@@ -68,13 +89,16 @@ HAANA ist ein KI-Assistenten-Stack fuer Smart Home (Home Assistant), bestehend a
 
 ## Sub-Agenten
 
-| Agent    | Zweck                                      | Wann einsetzen                         |
-|----------|--------------------------------------------|----------------------------------------|
-| `dev`    | Backend-Entwicklung (Python, Docker, API)  | Alle Backend-Aenderungen               |
-| `webdev` | Frontend-Entwicklung (HTML/CSS/JS, i18n)   | Alle UI-Aenderungen                    |
-| `docs`   | Dokumentation, Logbuch, UI-Hilfen          | Nach Meilensteinen, neue Features      |
-| `reviewer` | Code-Review, Score, Findings             | Nach jeder Implementierung vor Deploy  |
-| `memory`   | Architekturentscheidungen dokumentieren  | Wenn Entscheidung getroffen oder nachgeschlagen wird |
+| Agent        | Zweck                                      | Wann einsetzen                                  |
+|--------------|--------------------------------------------|-------------------------------------------------|
+| `dev`        | Backend-Entwicklung (Python, Docker, API)  | Uebergreifende Backend-Aenderungen              |
+| `core-dev`   | Spezialist core/ (Agent, Memory, API)      | Aenderungen ausschliesslich in core/            |
+| `channel-dev`| Spezialist channels/ + skills/             | Channel- oder Skill-Aenderungen                 |
+| `ui-dev`     | Spezialist admin-interface/ Frontend       | Frontend-Aenderungen mit strikter Regeldurchsetzung |
+| `webdev`     | Frontend-Entwicklung (HTML/CSS/JS, i18n)   | Alle UI-Aenderungen (generell)                  |
+| `docs`       | Dokumentation, Logbuch, UI-Hilfen          | Nach Meilensteinen, neue Features               |
+| `reviewer`   | Code-Review, Score, Findings               | Nach jeder Implementierung vor Deploy           |
+| `memory`     | Architekturentscheidungen dokumentieren    | Wenn Entscheidung getroffen oder nachgeschlagen wird |
 
 ## Stack
 
@@ -97,3 +121,60 @@ HAANA ist ein KI-Assistenten-Stack fuer Smart Home (Home Assistant), bestehend a
 - **Jede Datei: max 400 Zeilen**. Ausnahmen nur wenn Logik wirklich nicht trennbar ist (dokumentieren warum).
 - Neue Dateien sofort mit dieser Grenze im Kopf schreiben
 - Bei Überschreitung im Review: Finding (Warnung), ab 600 Zeilen: Finding (Kritisch)
+
+---
+
+## Bekannte Fallstricke (PFLICHT zu kennen)
+
+Aus echten Bugs dieser Installation — jeder Sub-Agent und Reviewer muss diese kennen.
+
+### Dateigröße
+- Keine Datei über 400 Zeilen (JS, Python, Shell)
+- Reviewer meldet bei ≥400 Zeilen Warnung, bei ≥600 Zeilen Kritisch
+- Gegenmaßnahme: aufteilen in Module/Router
+
+### mem0 / Memory
+- mem0 Config MUSS `"version": "v1.1"` enthalten (ohne v1.1: zwei LLM-Calls, MiniMax schlägt still fehl)
+- Memory-Scopes nie hardcoden — immer aus config.json ableiten
+- `/data/context/` braucht `haana:haana` Ownership (Permission denied Bug)
+- `save_context()` nach JEDER `/chat` Anfrage aufrufen, nicht nur beim Shutdown
+
+### Pfade
+- Immer absolute Pfade: `"/data"` nicht `"data"` (relativer Pfad landet in `/app/data` statt `/data` Volume)
+- `/data` gehört root — Unterverzeichnisse für haana-User explizit mit `chown` anlegen
+
+### Docker / Container
+- `update.sh` muss `--profile agents` nutzen damit whatsapp-bridge mitgestartet wird
+- Auto-Start im Standalone-Modus: `_autostart_agents()` für `HAANA_MODE == "standalone"` UND `"addon"` aufrufen
+- Nach Code-Änderungen in `core/`: Agent-Container neu starten (laufen sonst mit altem Image weiter)
+- `restart: unless-stopped` setzt voraus dass Container einmal gestartet wurde — neu erstellte Container brauchen expliziten Start
+
+### WhatsApp / Bridge
+- LID-Cache (`_lidToPhone`) überlebt Container-Neustart nicht — `lid_mappings` aus Backend beim `refreshConfig` vorbelegen
+- WA-Bridge startet vor Admin-Interface bereit ist → Routing-Refresh schlägt fehl → Bridge neu starten nach `update.sh`
+- Mode `"self"` erfordert Prefix (`!h `) — für Endnutzer verwirrend, `"separate"` bevorzugen
+
+### Auth / Session
+- bcrypt für Passwörter, niemals Plaintext-Token loggen
+- Session nach Passwort-Änderung invalidieren (gestohlener Cookie sonst weiter gültig)
+- `companion_token` ≠ `admin_password` (verschiedene Konzepte, nie verwechseln)
+
+### Frontend
+- `JSON.stringify` in `onclick`-Attributen → XSS-Risiko — immer `escAttr()` verwenden
+- Cache-Buster (`?v=X`) bei JEDER JS/CSS-Änderung erhöhen (sonst sieht Browser alte Version)
+- `switchTab()` vs `showTab()` — falsche Funktion führt zu silent fail
+- DOM-Elemente aus dynamisch geladenem HTML existieren erst nach dem Render — `setTimeout(..., 0)` als Fix
+
+### i18n
+- `de.json` und `en.json` müssen IMMER exakt gleich viele Keys haben (Parität)
+- Tote Keys nach Entfernen von Features sofort aufräumen
+
+### install.sh / update.sh
+- Passwörter/Keys nie als Prozessargument übergeben (sichtbar in `ps aux`) — immer via `pct push` + temp-Datei
+- Heredoc-Quoting: `'EOF'` (quoted) verhindert Variablen-Expansion im generierten File
+- `update.sh` selbst prüft ob es sich aktualisieren muss bevor es weiterläuft (`HAANA_SELF_UPDATED` Guard)
+
+### Sub-Agenten
+- docs-Agent: nach `git commit` IMMER `git status` prüfen ob wirklich alles committed wurde
+- dev-Agent: Docker-Befehle delegieren, nie direkt ausführen (CLAUDE.md Regel)
+- reviewer-Agent: findet er einen Bug, gleich fixen lassen — nicht als "akzeptabel" durchwinken

@@ -106,3 +106,13 @@ env = _build_agent_env(user, cfg, resolve_llm_fn, find_ollama_url_fn)
 - Stack: Python (FastAPI), Docker, Claude Agent SDK, Qdrant, Ollama
 - Auth: OAuth PKCE (claude setup-token), MiniMax API-Key, Ollama token-free
 - Users: benni (Admin), domi (User), ha-assist, ha-advanced (System)
+
+## Spezialisierte Sub-Agenten bevorzugen
+
+Für fokussierte Aufgaben die entsprechenden Spezialisten beauftragen:
+
+- **`core-dev`**: Für Änderungen ausschließlich in `core/` — kennt Impact-Report-Pflicht und Interface-Grenzen
+- **`channel-dev`**: Für Änderungen in `channels/` oder `skills/` — kennt BaseChannel/BaseSkill Interface
+- **`ui-dev`**: Für Admin-Interface Frontend — erzwingt i18n-Parität, Cache-Buster, XSS-Schutz
+
+**`dev` bleibt Generalist** für übergreifende Aufgaben (z.B. docker-compose.yml, install.sh, update.sh, Änderungen die mehrere Bereiche gleichzeitig betreffen).

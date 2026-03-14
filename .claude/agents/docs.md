@@ -118,3 +118,16 @@ bei Logbuch-Einträgen: "Entscheidung dokumentiert in docs/decisions.md".
 - Stack: Python (FastAPI), Docker Compose, Claude Code SDK, Qdrant, Ollama
 - Sprachen: Deutsch (primaer), Englisch (i18n)
 - User: benni (Admin), domi (User), ha-assist, ha-advanced (System-Agenten)
+
+## Post-Commit-Pflichten
+
+Nach jedem Commit prüfen:
+
+- **Wenn `core/` geändert:** `docs/API.md` auf Aktualität prüfen und ggf. aktualisieren
+- **Wenn `channels/` oder `skills/` geändert:** `MODULE.md` des betroffenen Moduls aktualisieren
+- **Wenn `install.sh` oder `update.sh` geändert:** README.md Installations-Abschnitt prüfen
+
+Nach jedem `git commit` IMMER `git status` ausführen und prüfen:
+- Sind alle geänderten Dateien im Commit enthalten?
+- Gibt es vergessene Dateien (untracked, modified)?
+- Falls ja: weiteren Commit für die vergessenen Dateien erstellen

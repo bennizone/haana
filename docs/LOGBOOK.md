@@ -4,6 +4,45 @@ Chronologische Dokumentation der wichtigsten Aenderungen am HAANA-Projekt.
 
 ---
 
+## 2026-03-14 — Spezialisierte Sub-Agenten + HA-Debugging + Fallstricke in CLAUDE.md
+
+**Aenderungen:**
+- `CLAUDE.md`: Neuer Abschnitt "HA Debugging (Lesend)" mit curl-Beispielen fuer HA-Logs und Entity-States; Sub-Agenten-Tabelle um `core-dev`, `channel-dev`, `ui-dev` erweitert; neuer Abschnitt "Bekannte Fallstricke" mit Lessons Learned aus echten Bugs (SDK Tool-Namen, i18n-Paritaet, Cache-Buster, XSS, 400-Zeilen-Limit)
+- `.claude/agents/core-dev.md`: Neuer Spezialist fuer `core/` — zustaendig fuer Agent-Logik, Memory, LLM-Provider; Impact-Report-Pflicht bei jeder Aenderung
+- `.claude/agents/channel-dev.md`: Neuer Spezialist fuer `channels/` und `skills/` — MODULE.md-Pflicht fuer jedes neue Modul
+- `.claude/agents/ui-dev.md`: Neuer Spezialist fuer `admin-interface/` — harte Regeln zu i18n-Paritaet, Cache-Buster-Pflicht und XSS-Schutz
+- `.claude/agents/reviewer.md`: Impact-Check-Checkliste ergaenzt; Lessons-Learned Pflicht-Checks hinzugefuegt
+- `.claude/agents/docs.md`: Post-Commit-Pflichten hinzugefuegt (git status nach commit, Verifikation)
+- `.claude/agents/dev.md`: Hinweis auf Spezialisten-Agenten (`core-dev`, `channel-dev`, `ui-dev`) hinzugefuegt
+
+**Entscheidungen:**
+- Generischer `dev`-Agent war zu breit — spezialisierte Agenten kennen die genauen Invarianten ihres Bereichs (i18n-Paritaet, Impact-Report, MODULE.md) und koennen diese durchsetzen
+- Fallstricke in CLAUDE.md dokumentiert damit kuenftige Agenten nicht dieselben Fehler wiederholen (PascalCase Tool-Namen, stale DOM, Cache-Buster vergessen)
+- HA-Debugging-Befehle direkt in CLAUDE.md reduzieren Recherche-Zeit bei Live-Debugging
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert <hash>` — wird nach Commit ergaenzt
+
+---
+
+## 2026-03-14 — save_context nach jeder HTTP /chat Anfrage
+
+**Aenderungen:**
+- `core/api.py`: Nach `run_async()` im `/chat`-Handler wird `agent.memory.save_context(agent._context_path)` aufgerufen
+
+**Entscheidungen:**
+- Context-Fenster wurde bisher nach HTTP-Anfragen nicht persistiert — bei Neustart ging das Sliding-Window verloren
+- Konsistentes Verhalten mit dem WebSocket-Handler und dem REPL hergestellt
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert 41cc0f6`
+
+---
+
 ## 2026-03-14 — HA-Tab Timing-Bug + einheitlicher Channel-Status-Block
 
 **Aenderungen:**
