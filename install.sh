@@ -287,8 +287,6 @@ bootstrap() {
         export DEBIAN_FRONTEND=noninteractive
         apt-get update -qq
         apt-get install -y -qq curl git ca-certificates sudo openssl
-        curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - 2>/dev/null
-        apt-get install -y -qq nodejs
     "
     msg_ok "System-Pakete installiert."
 
@@ -297,7 +295,7 @@ bootstrap() {
     msg_ok "Docker installiert."
 
     msg_info "Installiere Claude Code CLI..."
-    pct exec "$CTID" -- bash -c "npm install -g @anthropic-ai/claude-code 2>&1 | tail -3"
+    pct exec "$CTID" -- bash -c "curl -fsSL https://claude.ai/install.sh | bash 2>&1 | tail -3"
     msg_ok "Claude Code installiert."
 
     msg_info "Richte HAANA ein..."
@@ -343,7 +341,7 @@ fi
 BPEOF
         chown haana:haana /home/haana/.bash_profile
 
-        # PATH fuer haana: lokale npm/pip Binaries + Claude Code (global via /usr/local/bin)
+        # PATH fuer haana: lokale pip Binaries + Claude Code (global via /usr/local/bin)
         grep -q '/home/haana/.local/bin' /home/haana/.bashrc 2>/dev/null || \
           echo 'export PATH="/home/haana/.local/bin:/usr/local/bin:$PATH"' \
           >> /home/haana/.bashrc

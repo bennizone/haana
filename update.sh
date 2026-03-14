@@ -79,13 +79,6 @@ DEBIAN_FRONTEND=noninteractive apt-get update -qq && \
 echo -e "${GREEN}  System-Pakete aktualisiert.${NC}"
 echo ""
 
-# ── Claude Code Update ────────────────────────────────────────────────────────
-echo -e "${YELLOW}→ Claude Code aktualisieren...${NC}"
-NPM_OUT=$(npm install -g @anthropic-ai/claude-code 2>&1) || warn "Claude Code Update fehlgeschlagen"
-echo "$NPM_OUT" | tail -5
-CC_VERSION=$(claude --version 2>/dev/null || echo "n/a")
-echo -e "${GREEN}  Claude Code: $CC_VERSION${NC}"
-echo ""
 
 # ── Git Pull ──────────────────────────────────────────────────────────────────
 echo -e "${YELLOW}→ HAANA Code aktualisieren...${NC}"
