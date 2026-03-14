@@ -223,7 +223,7 @@ class HaanaAgent:
         self.memory = HaanaMemory(instance_name)
 
         # Pfad für Window-Persistenz
-        data_dir = self._env.get("HAANA_DATA_DIR", "data")
+        data_dir = self._env.get("HAANA_DATA_DIR", "/data")
         self._context_path = Path(data_dir) / "context" / f"{instance_name}.json"
 
         # MCP-Server für Custom Tools (Phase 2+: HA, Trilium, Kalender, ...)
