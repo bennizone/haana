@@ -179,13 +179,13 @@ function _hideLoginOverlay() {
 
 function loginSubmit() {
   const inp = document.getElementById('login-token-input');
-  const token = inp ? inp.value.trim() : '';
-  if (!token) return;
+  const password = inp ? inp.value.trim() : '';
+  if (!password) return;
 
   fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token }),
+    body: JSON.stringify({ password }),
   })
     .then(r => {
       if (r.ok) return r.json();

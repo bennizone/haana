@@ -5,7 +5,16 @@
     "login_btn": "Login",
     "logout": "Logout",
     "error_invalid_token": "Invalid token. Please check the token in the HAANA logs.",
-    "standalone_hint": "Find the admin token in the HAANA logs on first start (Supervisor → Logs). It starts with 'HAANA Admin Token: ...'."
+    "standalone_hint": "Find the admin token in the HAANA logs on first start (Supervisor → Logs). It starts with 'HAANA Admin Token: ...'.",
+    "password_placeholder": "Enter password...",
+    "password_hint": "Default: LXC root password. Change under Setup → Security.",
+    "error_invalid_password": "Invalid password.",
+    "change_password": "Change Password",
+    "current_password": "Current Password",
+    "new_password": "New Password",
+    "password_changed": "Password changed successfully",
+    "password_min_length": "Minimum 8 characters required",
+    "password_change_error": "Error changing password"
   },
   "app": {
     "title": "HAANA Admin",
@@ -23,7 +32,7 @@
   "chat": {
     "placeholder": "Message to HAANA... (Enter to send, Shift+Enter for new line)",
     "send": "Send",
-    "send_btn": "Send \u21b5",
+    "send_btn": "Send ↵",
     "loading": "Loading conversations...",
     "live": "Live",
     "last": "Last",
@@ -145,8 +154,13 @@
       "memory": "Memory",
       "whatsapp": "WhatsApp",
       "logs": "Logs",
-      "retention": "Retention"
+      "retention": "Retention",
+      "security": "Security"
     }
+  },
+  "config_security": {
+    "title": "Security",
+    "password_hint": "Change the admin password for the HAANA interface here."
   },
   "config_llm": {
     "title": "LLM Configuration",

@@ -16,18 +16,18 @@
       <div class="wizard-subtitle" data-i18n="auth.login_title">Anmeldung</div>
     </div>
     <div class="wizard-content" style="padding:32px 32px 24px;">
-      <p class="form-hint" style="margin-bottom:20px;" data-i18n="auth.standalone_hint">
-        Den Admin-Token findest du beim ersten Start in den HAANA-Logs.
+      <p class="form-hint" style="margin-bottom:20px;" data-i18n="auth.password_hint">
+        Standard: LXC Root-Passwort. Ändern unter Einrichtung → Sicherheit.
       </p>
       <div class="form-group" style="margin-bottom:16px;">
         <input type="password" id="login-token-input"
-               data-i18n-placeholder="auth.token_placeholder"
-               placeholder="Admin-Token eingeben..."
+               data-i18n-placeholder="auth.password_placeholder"
+               placeholder="Passwort eingeben..."
                style="width:100%;padding:10px 14px;font-size:14px;"
                onkeydown="if(event.key==='Enter') loginSubmit()">
       </div>
       <div id="login-error" style="color:var(--red);font-size:13px;margin-bottom:12px;display:none;"
-           data-i18n="auth.error_invalid_token">Ungültiger Token.</div>
+           data-i18n="auth.error_invalid_password">Ungültiges Passwort.</div>
       <button class="btn btn-primary" style="width:100%;" onclick="loginSubmit()"
               data-i18n="auth.login_btn">Anmelden</button>
     </div>
@@ -294,6 +294,7 @@
     <button class="cfg-tab-btn"        onclick="showCfgTab('embeddings')" id="cfgtab-embeddings" data-i18n="config_embeddings.title">Embeddings</button>
     <button class="cfg-tab-btn"        onclick="showCfgTab('memory')"     id="cfgtab-memory" data-i18n="config.sub_tabs.memory">Memory</button>
     <button class="cfg-tab-btn"        onclick="showCfgTab('logs')"       id="cfgtab-logs" data-i18n="config.sub_tabs.retention">Retention</button>
+    <button class="cfg-tab-btn"        onclick="showCfgTab('security')"   id="cfgtab-security" data-i18n="config.sub_tabs.security">Sicherheit</button>
   </div>
 
   <!-- ── Sub-Tab: Providers ── -->
@@ -606,6 +607,37 @@
 
   </div>
 
+  <!-- ── Sub-Tab: Sicherheit ── -->
+  <div id="cfgpanel-security" class="cfg-tab-panel" style="display:none;">
+    <div class="config-section">
+      <div class="config-section-header" data-i18n="config_security.title">Sicherheit</div>
+      <div class="config-section-body">
+        <p class="form-hint" style="margin-bottom:14px;" data-i18n="config_security.password_hint">
+          Ändere hier das Admin-Passwort für das HAANA-Interface.
+        </p>
+        <div class="form-row two" style="max-width:480px;">
+          <div class="form-group">
+            <label data-i18n="auth.current_password">Aktuelles Passwort</label>
+            <input type="password" id="sec-current-password"
+                   autocomplete="current-password"
+                   style="width:100%;">
+          </div>
+          <div class="form-group">
+            <label data-i18n="auth.new_password">Neues Passwort</label>
+            <input type="password" id="sec-new-password"
+                   autocomplete="new-password"
+                   style="width:100%;">
+            <span style="font-size:11px;color:var(--muted);" data-i18n="auth.password_min_length">Mindestens 8 Zeichen erforderlich</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="cfg-section-save-bar">
+      <button class="btn btn-primary" onclick="changePassword()" data-i18n="auth.change_password">Passwort ändern</button>
+      <span id="save-status-security" class="cfg-section-save-status"></span>
+    </div>
+  </div>
+
 
 </div>
 
@@ -803,7 +835,7 @@
 <script src="/static/js/modal.js?v=4"></script>
 
 <!-- App-Kern (globaler State, Tabs, Init) -->
-<script src="/static/js/app.js?v=13"></script>
+<script src="/static/js/app.js?v=14"></script>
 
 <!-- Setup Wizard -->
 <script src="/static/js/wizard.js?v=5"></script>
@@ -818,6 +850,7 @@
 <script src="/static/js/whatsapp.js?v=6"></script>
 <script src="/static/js/git.js?v=1"></script>
 <script src="/static/js/dev.js?v=3"></script>
+<script src="/static/js/security.js?v=1"></script>
 
 </body>
 </html>

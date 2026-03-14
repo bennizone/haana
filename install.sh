@@ -411,6 +411,32 @@ print(cfg['companion_token'])
         echo \"\$TOKEN\" > /tmp/haana_token
         chmod 600 /tmp/haana_token
     "
+    # Admin-Passwort-Hash setzen (bcrypt)
+    if [ -n "$ROOT_PASSWORD" ]; then
+        local TMPW
+        TMPW=$(mktemp)
+        printf '%s' "$ROOT_PASSWORD" > "$TMPW"
+        pct push "$CTID" "$TMPW" /tmp/haana_rootpw
+        rm -f "$TMPW"
+        pct exec "$CTID" -- bash -c '
+            pip3 install -q bcrypt 2>/dev/null || true
+            python3 -c "
+import bcrypt, json
+pw = open(\"/tmp/haana_rootpw\").read().strip()
+h = bcrypt.hashpw(pw.encode(\"utf-8\"), bcrypt.gensalt()).decode(\"utf-8\")
+path = \"/data/config/config.json\"
+try:
+    with open(path) as f: cfg = json.load(f)
+except Exception:
+    cfg = {}
+cfg[\"admin_password_hash\"] = h
+cfg.pop(\"admin_token\", None)
+with open(path, \"w\") as f: json.dump(cfg, f, indent=2)
+"
+            rm -f /tmp/haana_rootpw
+        '
+        msg_ok "Admin-Passwort-Hash gesetzt."
+    fi
     msg_ok "HAANA eingerichtet und gestartet."
 }
 
@@ -449,7 +475,7 @@ finish() {
     msg_ok "HAANA LXC erfolgreich installiert!"
     echo ""
     echo -e "${GN}  Admin UI:   http://$IP:$ADMIN_PORT${CL}"
-    echo -e "${GN}  Token:      ${TOKEN:0:16}...${CL}"
+    echo -e "${GN}  Login:      Mit LXC Root-Passwort${CL}"
     echo ""
     echo -e "${BL}  Naechste Schritte:${CL}"
     echo "  1. HAANA Companion Addon in HA installieren"

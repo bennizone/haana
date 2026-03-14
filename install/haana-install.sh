@@ -64,6 +64,28 @@ echo "$TOKEN" > /tmp/haana_token
 chmod 600 /tmp/haana_token
 msg_ok "Companion Token generiert"
 
+msg_info "Setze Admin-Passwort-Hash"
+if [ -f /tmp/haana_rootpw ]; then
+    pip3 install -q bcrypt 2>/dev/null || true
+    python3 -c "
+import bcrypt, json
+pw = open('/tmp/haana_rootpw').read().strip()
+h = bcrypt.hashpw(pw.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+path = '/data/config/config.json'
+try:
+    with open(path) as f: cfg = json.load(f)
+except Exception:
+    cfg = {}
+cfg['admin_password_hash'] = h
+cfg.pop('admin_token', None)
+with open(path, 'w') as f: json.dump(cfg, f, indent=2)
+"
+    rm -f /tmp/haana_rootpw
+    msg_ok "Admin-Passwort-Hash gesetzt"
+else
+    msg_warn "Kein Root-Passwort gefunden — Admin-Passwort muss manuell gesetzt werden"
+fi
+
 cat > /home/haana/.bash_profile << 'BPEOF'
 export PATH=$PATH:/usr/local/bin
 

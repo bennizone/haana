@@ -5,7 +5,16 @@
     "login_btn": "Anmelden",
     "logout": "Abmelden",
     "error_invalid_token": "Ungültiger Token. Bitte prüfe den Token in den HAANA-Logs.",
-    "standalone_hint": "Den Admin-Token findest du beim ersten Start in den HAANA-Logs (Supervisor → Logs). Er beginnt mit 'HAANA Admin Token: ...'."
+    "standalone_hint": "Den Admin-Token findest du beim ersten Start in den HAANA-Logs (Supervisor → Logs). Er beginnt mit 'HAANA Admin Token: ...'.",
+    "password_placeholder": "Passwort eingeben...",
+    "password_hint": "Standard: LXC Root-Passwort. Ändern unter Einrichtung → Sicherheit.",
+    "error_invalid_password": "Ungültiges Passwort.",
+    "change_password": "Passwort ändern",
+    "current_password": "Aktuelles Passwort",
+    "new_password": "Neues Passwort",
+    "password_changed": "Passwort erfolgreich geändert",
+    "password_min_length": "Mindestens 8 Zeichen erforderlich",
+    "password_change_error": "Fehler beim Ändern des Passworts"
   },
   "app": {
     "title": "HAANA Admin",
@@ -145,8 +154,13 @@
       "memory": "Memory",
       "whatsapp": "WhatsApp",
       "logs": "Logs",
-      "retention": "Retention"
+      "retention": "Retention",
+      "security": "Sicherheit"
     }
+  },
+  "config_security": {
+    "title": "Sicherheit",
+    "password_hint": "Ändere hier das Admin-Passwort für das HAANA-Interface."
   },
   "config_llm": {
     "title": "LLM-Konfiguration",

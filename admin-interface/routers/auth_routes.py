@@ -1,4 +1,4 @@
-"""Auth-Endpoints: Login, Logout, SSO, Status."""
+"""Auth-Endpoints: Login, Logout, SSO, Status, Passwort-Ändern."""
 
 import secrets
 import time
@@ -30,7 +30,7 @@ async def auth_status(request: Request):
 
 @router.post("/api/auth/login")
 async def auth_login(request: Request):
-    """Standalone-Login mit Token."""
+    """Standalone-Login mit Passwort."""
     if _auth.IS_INGRESS_MODE:
         return {"ok": True, "mode": "ingress"}
 
@@ -39,16 +39,15 @@ async def auth_login(request: Request):
     except Exception:
         raise HTTPException(400, "Ungültiger JSON-Body")
 
-    provided = body.get("token", "")
-    expected = _auth.get_admin_token()
+    password = body.get("password", "")
+    if not password or not _auth.verify_admin_password(password):
+        raise HTTPException(401, "Ungültiges Passwort")
 
-    if not provided or not secrets.compare_digest(provided, expected):
-        raise HTTPException(401, "Ungültiger Token")
-
+    session_token = _auth.generate_session_token()
     response = JSONResponse({"ok": True, "mode": "standalone"})
     response.set_cookie(
         key=_auth.COOKIE_NAME,
-        value=expected,
+        value=session_token,
         max_age=7 * 24 * 3600,
         httponly=True,
         samesite="lax",
@@ -67,11 +66,11 @@ async def auth_sso(token: str):
             raise HTTPException(status_code=401, detail="Ungültiger oder abgelaufener SSO-Token")
         del SSO_TOKENS[token]
     from starlette.responses import RedirectResponse
+    session_token = _auth.generate_session_token()
     response = RedirectResponse(url="/", status_code=302)
-    expected = _auth.get_admin_token()
     response.set_cookie(
         key=_auth.COOKIE_NAME,
-        value=expected,
+        value=session_token,
         max_age=7 * 24 * 3600,
         httponly=True,
         samesite="lax",
@@ -82,7 +81,43 @@ async def auth_sso(token: str):
 
 @router.post("/api/auth/logout")
 async def auth_logout():
-    """Löscht den Session-Cookie."""
+    """Löscht den Session-Cookie und widerruft die Server-Session."""
+    _auth.revoke_session()
     response = JSONResponse({"ok": True})
     response.delete_cookie(key=_auth.COOKIE_NAME, samesite="lax")
+    return response
+
+
+@router.post("/api/auth/change-password")
+async def auth_change_password(request: Request):
+    """Ändert das Admin-Passwort. Requires auth (Middleware)."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Ungültiger JSON-Body")
+
+    current = body.get("current_password", "")
+    new_pw = body.get("new_password", "")
+
+    if not current or not new_pw:
+        raise HTTPException(400, "current_password und new_password erforderlich")
+
+    if not _auth.verify_admin_password(current):
+        raise HTTPException(401, "Aktuelles Passwort falsch")
+
+    if len(new_pw) < 8:
+        raise HTTPException(400, "Neues Passwort muss mindestens 8 Zeichen haben")
+
+    _auth.set_admin_password(new_pw)
+    _auth.revoke_session()
+    new_token = _auth.generate_session_token()
+    response = JSONResponse({"ok": True})
+    response.set_cookie(
+        key=_auth.COOKIE_NAME,
+        value=new_token,
+        max_age=7 * 24 * 3600,
+        httponly=True,
+        samesite="lax",
+        secure=False,
+    )
     return response

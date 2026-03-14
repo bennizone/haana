@@ -2,7 +2,8 @@
 Auth-Backend für HAANA Admin-Interface
 Zwei Modi:
   - HA-Ingress:   SUPERVISOR_TOKEN Env-Var vorhanden → X-Ingress-Path Header reicht
-  - Standalone:   Token aus /data/config/config.json (admin_token), Cookie oder Bearer
+  - Standalone:   Passwort-Hash aus /data/config/config.json (admin_password_hash),
+                  Session-Token in Cookie/Bearer
 """
 
 import json
@@ -11,6 +12,7 @@ import os
 import secrets
 from pathlib import Path
 
+import bcrypt
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
@@ -23,42 +25,86 @@ IS_INGRESS_MODE: bool = bool(SUPERVISOR_TOKEN)
 
 CONF_FILE = Path(os.environ.get("HAANA_CONF_FILE", "/data/config/config.json"))
 
-# Cookie-Name
 COOKIE_NAME = "haana_session"
 
 
-# ── Token-Verwaltung (Standalone-Modus) ───────────────────────────────────────
+# ── Passwort-Verwaltung ───────────────────────────────────────────────────────
 
-def get_admin_token() -> str:
+def get_admin_password_hash() -> str:
     """
-    Liest den Admin-Token aus config.json.
-    Falls kein Token vorhanden → generiert einen neuen und speichert ihn.
-    Gibt den Token zurück.
+    Liest admin_password_hash aus config.json.
+    Gibt "" zurück wenn nicht vorhanden (kein auto-generieren).
     """
+    return _load_raw_config().get("admin_password_hash", "")
+
+
+def verify_admin_password(password: str) -> bool:
+    """
+    Prüft Passwort gegen den gespeicherten bcrypt-Hash.
+    Gibt False zurück wenn kein Hash gesetzt oder bei Fehler.
+    """
+    hash_val = get_admin_password_hash()
+    if not hash_val:
+        return False
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), hash_val.encode("utf-8"))
+    except Exception:
+        return False
+
+
+def set_admin_password(password: str) -> None:
+    """Setzt ein neues Admin-Passwort (bcrypt-Hash) und entfernt den alten Token-Key."""
     cfg = _load_raw_config()
-    token = cfg.get("admin_token", "")
-    if not token:
-        token = secrets.token_urlsafe(32)
-        cfg["admin_token"] = token
-        _save_raw_config(cfg)
-        logger.info(f"HAANA Admin Token: {token}")
+    hash_val = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    cfg["admin_password_hash"] = hash_val
+    cfg.pop("admin_token", None)
+    _save_raw_config(cfg)
+
+
+# ── Session-Verwaltung ────────────────────────────────────────────────────────
+
+def generate_session_token() -> str:
+    """Erstellt einen neuen Session-Token, speichert ihn in config.json und gibt ihn zurück."""
+    token = secrets.token_urlsafe(32)
+    cfg = _load_raw_config()
+    cfg["admin_session"] = token
+    _save_raw_config(cfg)
     return token
 
 
-def _load_raw_config() -> dict:
-    """Lädt config.json ohne Migration-Logik."""
-    if CONF_FILE.exists():
-        try:
-            return json.loads(CONF_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            pass
-    return {}
+def revoke_session() -> None:
+    """Entfernt den Session-Token aus config.json."""
+    cfg = _load_raw_config()
+    cfg.pop("admin_session", None)
+    _save_raw_config(cfg)
 
 
-def _save_raw_config(cfg: dict) -> None:
-    """Speichert config.json (Minimal-Schreiber, um Circular-Import zu vermeiden)."""
-    CONF_FILE.parent.mkdir(parents=True, exist_ok=True)
-    CONF_FILE.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+def _get_session_token() -> str:
+    """Liest den aktuellen Session-Token aus config.json."""
+    return _load_raw_config().get("admin_session", "")
+
+
+# ── Token-Prüfung (Standalone) ────────────────────────────────────────────────
+
+def _check_standalone_token(request: Request) -> bool:
+    """Prüft Cookie oder Authorization-Header gegen den gespeicherten Session-Token."""
+    expected = _get_session_token()
+    if not expected:
+        return False
+
+    # 1. Cookie prüfen
+    cookie_val = request.cookies.get(COOKIE_NAME, "")
+    if cookie_val and secrets.compare_digest(cookie_val, expected):
+        return True
+
+    # 2. Authorization: Bearer <token> Header prüfen
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        bearer = auth_header[7:]
+        if bearer and secrets.compare_digest(bearer, expected):
+            return True
+
+    return False
 
 
 # ── Auth-Check ────────────────────────────────────────────────────────────────
@@ -70,42 +116,16 @@ def is_authenticated(request: Request) -> bool:
     Im Standalone-Modus: Cookie haana_session oder Authorization: Bearer <token>.
     """
     if IS_INGRESS_MODE:
-        # HA Ingress leitet nur authentifizierte User weiter.
-        # X-Ingress-Path ist gesetzt wenn der Request über Ingress kommt.
         supervisor_token_header = request.headers.get("X-Supervisor-Token")
         if supervisor_token_header:
-            # Wenn der Header vorhanden ist, muss er mit dem SUPERVISOR_TOKEN übereinstimmen
             if SUPERVISOR_TOKEN and secrets.compare_digest(supervisor_token_header, SUPERVISOR_TOKEN):
                 return True
-            # Header vorhanden aber ungültig → verweigern
             return False
         if request.headers.get("X-Ingress-Path"):
-            # X-Ingress-Path allein reicht (HA-Proxy setzt ihn, kein normaler Browser kann das im Add-on-Kontext)
             return True
-        # Wenn kein Ingress-Header: Standalone-Prüfung als Fallback
-        # (z.B. direkter Zugriff während Entwicklung)
         return _check_standalone_token(request)
     else:
         return _check_standalone_token(request)
-
-
-def _check_standalone_token(request: Request) -> bool:
-    """Prüft Cookie oder Authorization-Header gegen den gespeicherten Admin-Token."""
-    expected = get_admin_token()
-
-    # 1. Cookie prüfen
-    cookie_val = request.cookies.get(COOKIE_NAME, "")
-    if cookie_val and secrets.compare_digest(cookie_val, expected):
-        return True
-
-    # 2. Authorization: Bearer <token> Header prüfen
-    auth_header = request.headers.get("Authorization", "")
-    if auth_header.startswith("Bearer "):
-        bearer = auth_header[len("Bearer "):]
-        if bearer and secrets.compare_digest(bearer, expected):
-            return True
-
-    return False
 
 
 # ── FastAPI Dependency ────────────────────────────────────────────────────────
@@ -123,6 +143,24 @@ async def require_auth(request: Request):
         )
 
 
+# ── Config-Hilfsfunktionen ────────────────────────────────────────────────────
+
+def _load_raw_config() -> dict:
+    """Lädt config.json ohne Migration-Logik."""
+    if CONF_FILE.exists():
+        try:
+            return json.loads(CONF_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {}
+
+
+def _save_raw_config(cfg: dict) -> None:
+    """Speichert config.json (Minimal-Schreiber, um Circular-Import zu vermeiden)."""
+    CONF_FILE.parent.mkdir(parents=True, exist_ok=True)
+    CONF_FILE.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 # ── Startup-Log ───────────────────────────────────────────────────────────────
 
 def log_startup_info() -> None:
@@ -130,7 +168,7 @@ def log_startup_info() -> None:
     if IS_INGRESS_MODE:
         logger.info("[Auth] Modus: HA-Ingress (SUPERVISOR_TOKEN vorhanden)")
     else:
-        token = get_admin_token()
         logger.info("[Auth] Modus: Standalone")
-        # Token in stdout ausgeben (einmalig lesbar im Add-on-Log)
-        print(f"HAANA Admin Token: {token}", flush=True)
+        hash_val = get_admin_password_hash()
+        if not hash_val:
+            logger.warning("[Auth] Kein Admin-Passwort gesetzt — Setup erforderlich")
