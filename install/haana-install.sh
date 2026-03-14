@@ -38,7 +38,7 @@ chown -R haana:haana /opt/haana
 msg_ok "HAANA Repository geklont"
 
 msg_info "Richte Verzeichnisse ein"
-mkdir -p /data/config /data/logs /media/haana
+mkdir -p /data/config /data/logs /data/context /media/haana
 chown -R haana:haana /data /media/haana
 if [ ! -f /opt/haana/.env ]; then
   cp /opt/haana/.env.example /opt/haana/.env

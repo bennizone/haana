@@ -130,6 +130,8 @@ echo ""
 echo -e "${YELLOW}→ Docker-Services neu starten...${NC}"
 docker compose pull
 docker compose --profile agents up -d --build
+# /data/context sicherstellen (Sliding-Window-Persistenz)
+docker exec haana-admin-interface-1 sh -c "mkdir -p /data/context && chown 1000:1000 /data/context" 2>/dev/null || true
 echo ""
 
 # ── Agent-Instanzen neu starten ───────────────────────────────────────────────
