@@ -4,6 +4,48 @@ Chronologische Dokumentation der wichtigsten Aenderungen am HAANA-Projekt.
 
 ---
 
+## 2026-03-14 — Companion v2.0.0: SSO-Gateway-Only
+
+**Aenderungen:**
+- `admin-interface/routers/companion.py`: Endpunkte `/api/companion/register`, `/api/companion/refresh-persons`, `/api/companion/ha-mcp-status`, `/api/ha-mcp-status` entfernt; Version in ping-Response auf `2.0.0` angehoben; Modulbeschreibung aktualisiert
+- `haana-addons/haana-companion/run.py`: `_detect_ha_url()`, `_fetch_ha_persons()`, `_check_ha_mcp_addon()`, `_ws_person_watcher()`, `_do_handshake()` und zugehoerige Import (`urlparse`) entfernt; Companion reduziert auf SSO-Gateway + HA-Admin-Check
+- `haana-addons/haana-companion/config.yaml`: Version auf `2.0.0` angehoben; `ha_url` Konfigurationsfeld entfernt
+- `haana-addons/haana-companion/CHANGELOG.md`: v2.0.0 Eintrag ergaenzt
+- haana-companion v2.0.0 auf `github.com/bennizone/haana-companion` (Commit 60aad04) gepusht
+
+**Entscheidungen:**
+- Companion hat zu viele HA-Interna selbst abgefragt (Personen, MCP, URL-Erkennung) — das fuehrt zu Doppelpflege und fragiler Supervisor-Abhaengigkeit
+- Neues Modell: HAANA LXC holt HA-Daten direkt via konfigurierter HA URL + Long-Lived Token
+- Companion ist nur noch SSO-Gateway (Ingress-Proxy + Einmal-Token-Ausstellung) — minimal, stabil, wartungsarm
+- validate.sh: 261/261 Tests gruen; Reviewer-Score: 9/10
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert <hash>` (nach Commit eintragen)
+
+---
+
+## 2026-03-14 — Passwort-Aendern-Formular vereinfacht
+
+**Aenderungen:**
+- `admin-interface/routers/auth_routes.py`: `current_password`-Feld aus dem Passwort-Aendern-Endpunkt entfernt — Session-Auth reicht als Authentifizierungsnachweis
+- `admin-interface/static/js/security.js`: Client-seitiger Match-Check fuer neues Passwort + Bestaetigung vor Submit; API-Body sendet nur noch `new_password`
+- `admin-interface/templates/index.html`: `current-password`-Feld entfernt, neues `sec-confirm-password`-Feld hinzugefuegt
+- `admin-interface/static/i18n/de.json`: 2 neue Keys `auth.confirm_password`, `auth.password_mismatch`
+- `admin-interface/static/i18n/en.json`: 2 neue Keys `auth.confirm_password`, `auth.password_mismatch`
+
+**Entscheidungen:**
+- `current_password` ist redundant: Wer eingeloggt ist, hat sich bereits authentifiziert — doppelte Eingabe bietet keinen Sicherheitsvorteil in dieser Architektur
+- Passwort-Bestaetigung (`sec-confirm-password`) verhindert Tippfehler clientseitig ohne Server-Round-Trip
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert 9608649`
+
+---
+
 ## 2026-03-13 — Dream-Log ohne Summary, Status-Polling, report-Felder
 
 **Aenderungen:**
