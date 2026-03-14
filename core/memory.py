@@ -288,6 +288,7 @@ def _build_mem0_config(collection_name: str, *,
         return None
 
     config = {
+        "version": "v1.1",
         "custom_fact_extraction_prompt": CUSTOM_FACT_EXTRACTION_PROMPT,
         "llm": llm_config,
         "embedder": embedder_config,
