@@ -16,6 +16,12 @@ yellow() { echo -e "\033[33m$1\033[0m"; }
 echo "=== HAANA Validation ==="
 echo ""
 
+# Erkennen ob wir im Docker-Container oder auf dem Host laufen
+IN_CONTAINER=0
+if [ -f /.dockerenv ] || grep -q docker /proc/1/cgroup 2>/dev/null; then
+    IN_CONTAINER=1
+fi
+
 # 1. Python Syntax Check
 echo -n "Python Syntax ... "
 SYNTAX_ERRORS=""
@@ -33,7 +39,9 @@ fi
 
 # 2. Tests
 echo -n "Unit Tests ... "
-if [ -d "tests" ] && ls tests/test_*.py 1>/dev/null 2>&1; then
+if [ "$IN_CONTAINER" -eq 0 ]; then
+    yellow "ÜBERSPRUNGEN (Host-Umgebung, läuft im Container)"
+elif [ -d "tests" ] && ls tests/test_*.py 1>/dev/null 2>&1; then
     if TEST_OUTPUT=$(python3 -m pytest tests/ -q --tb=short 2>&1); then
         PASSED=$(echo "$TEST_OUTPUT" | tail -1)
         green "OK ($PASSED)"
@@ -59,7 +67,9 @@ fi
 
 # 4. Import-Check core/memory.py
 echo -n "Memory-Modul Import ... "
-if python3 -c "import core.memory" 2>/dev/null; then
+if ! python3 -c "import mem0" 2>/dev/null; then
+    yellow "ÜBERSPRUNGEN (mem0 nicht installiert)"
+elif python3 -c "import core.memory" 2>/dev/null; then
     green "OK"
 else
     red "FEHLER: core.memory Import fehlgeschlagen"
@@ -68,7 +78,9 @@ fi
 
 # 5. Import-Check core/api.py
 echo -n "API-Modul Import ... "
-if python3 -c "import core.api" 2>/dev/null; then
+if [ "$IN_CONTAINER" -eq 0 ]; then
+    yellow "ÜBERSPRUNGEN (Host-Umgebung)"
+elif python3 -c "import core.api" 2>/dev/null; then
     green "OK"
 else
     red "FEHLER: core.api Import fehlgeschlagen"
@@ -77,7 +89,9 @@ fi
 
 # 6. Import-Check admin-interface
 echo -n "Admin-Interface Import ... "
-if python3 -c "import importlib.util; spec = importlib.util.spec_from_file_location('main', 'admin-interface/main.py'); mod = importlib.util.module_from_spec(spec)" 2>/dev/null; then
+if [ "$IN_CONTAINER" -eq 0 ]; then
+    yellow "ÜBERSPRUNGEN (Host-Umgebung)"
+elif python3 -c "import importlib.util; spec = importlib.util.spec_from_file_location('main', 'admin-interface/main.py'); mod = importlib.util.module_from_spec(spec)" 2>/dev/null; then
     green "OK"
 else
     yellow "WARN (ggf. fehlende Dependencies im Host)"
