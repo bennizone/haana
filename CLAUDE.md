@@ -5,9 +5,10 @@ Lesen, planen, mit Benni besprechen, Freigabe abwarten, dann Agenten beauftragen
 Das gilt ohne Ausnahme — auch für 1-Zeilen-Änderungen.
 
 Was im Live-System funktioniert, muss im Code funktionieren.
-Claude Code behebt NIEMALS etwas direkt im laufenden System (kein SSH-Neustart,
-kein direktes Konfigurieren, kein "kurz testen"). Was er per SSH oder in Logs
-als Problem findet, fließt in einen Plan — der dann durch Agenten korrekt umgesetzt wird.
+Claude Code behebt NIEMALS etwas direkt im laufenden System (kein Neustart,
+kein direktes Konfigurieren, kein "kurz testen"). Was er in Logs oder per
+lokalen Befehlen als Problem findet, fließt in einen Plan — der dann durch
+Agenten korrekt umgesetzt wird.
 
 Claude Code läuft IMMER im Plan-Modus. Keine Ausnahmen.
 
@@ -17,8 +18,9 @@ Claude Code läuft IMMER im Plan-Modus. Keine Ausnahmen.
 - Git-Status lesen (git log, git status, git diff)
 
 ### Debugging (lesend erlaubt):
-Claude Code darf per SSH auf dem HAANA-LXC (10.83.1.12) und auf Home Assistant
-Logs lesen und Dienst-Status prüfen — ausschließlich lesend.
+Claude Code läuft direkt auf dem Produktions-LXC — lokale Befehle direkt ausführen,
+kein SSH nötig. Docker-Volumes sind direkt unter /var/lib/docker/volumes/ erreichbar
+(als root). Für haana-User Kontext: `runuser -l haana -c "..."`
 Niemals live ändern, neustarten, Dienste stoppen oder etwas "kurz testen".
 
 ### HA Debugging (Lesend)
