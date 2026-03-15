@@ -199,6 +199,11 @@ async def whatsapp_config_endpoint(request: Request):
 @router.post("/api/wa-proxy/{user_id}/chat")
 async def wa_proxy_chat(user_id: str, request: Request):
     """WhatsApp-Proxy: Empfängt Nachrichten von der Bridge und routet sie."""
+    bridge_secret = BRIDGE_SECRET
+    token = request.headers.get("X-Bridge-Token", "")
+    if not token or not secrets.compare_digest(token, bridge_secret):
+        raise HTTPException(403, "Bridge-Token ungültig")
+
     import httpx
     from core import whatsapp_router as _wa_router
 
