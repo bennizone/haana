@@ -352,7 +352,10 @@ class DreamProcess:
             model=self._model,
         )
 
-    async def run(self, instance: str, scope: str) -> DreamReport:
+    async def run(
+        self, instance: str, scope: str,
+        date: Optional[str] = None, previous_summary: str = ""
+    ) -> DreamReport:
         """Führt den kompletten Dream-Prozess für eine Instanz/Scope durch."""
         report = DreamReport(instance=instance)
         start = time.monotonic()
@@ -369,7 +372,9 @@ class DreamProcess:
 
         # 2. Tages-Zusammenfassung
         try:
-            summary = await self._create_daily_summary(instance)
+            summary = await self._create_daily_summary(
+                instance, date=date, previous_summary=previous_summary
+            )
             if summary:
                 report.summarized = True
                 report.summary = summary
@@ -468,7 +473,7 @@ class DreamProcess:
         return consolidated
 
     async def _create_daily_summary(
-        self, instance: str, date: Optional[str] = None
+        self, instance: str, date: Optional[str] = None, previous_summary: str = ""
     ) -> str:
         """
         Erstellt eine Zusammenfassung der Tages-Konversationen.
@@ -512,7 +517,14 @@ class DreamProcess:
                 break
             conv_text += f"\n---\n{conv}"
 
-        prompt = _SUMMARY_PROMPT.format(date=date, conversations=conv_text.strip())
+        if previous_summary:
+            full_conv = (
+                f"Gestriger Tagebucheintrag zur Orientierung:\n{previous_summary}\n\n"
+                f"Heutige Konversationen:\n{conv_text.strip()}"
+            )
+        else:
+            full_conv = conv_text.strip()
+        prompt = _SUMMARY_PROMPT.format(date=date, conversations=full_conv)
 
         loop = asyncio.get_running_loop()
         summary = await loop.run_in_executor(None, self._llm_call, prompt)
