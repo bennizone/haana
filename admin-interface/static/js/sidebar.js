@@ -7,8 +7,8 @@
 const _PAGE_MAP = {
   'dashboard':    { panel: 'dashboard' },
   'agents':       { panel: 'status' },
-  'memory':       { panel: 'config', cfgTab: 'memory' },
-  'providers':    { panel: 'config', cfgTab: 'providers' },
+  'memory':       { panel: 'config', cfgTab: 'memory', visibleCfgTabs: ['memory'] },
+  'providers':    { panel: 'config', cfgTab: 'providers', visibleCfgTabs: ['providers', 'llms', 'embeddings'] },
   'ha':           { panel: 'config', cfgTab: 'providers' },
   'ch-whatsapp':  { panel: 'ch-whatsapp',  channelId: 'whatsapp' },
   'ch-ha_voice':  { panel: 'ch-ha_voice',  channelId: 'ha_voice' },
@@ -57,7 +57,20 @@ function navigateTo(page) {
 
   // Switch config sub-tab if needed
   if (map.cfgTab) {
-    setTimeout(function() { showCfgTab(map.cfgTab); }, 0);
+    setTimeout(function() {
+      showCfgTab(map.cfgTab);
+      if (map.visibleCfgTabs) {
+        var vis = map.visibleCfgTabs;
+        document.querySelectorAll('.cfg-tab-btn').forEach(function(btn) {
+          var id = btn.id.replace('cfgtab-', '');
+          btn.style.display = vis.indexOf(id) >= 0 ? '' : 'none';
+        });
+      } else {
+        document.querySelectorAll('.cfg-tab-btn').forEach(function(btn) {
+          btn.style.display = '';
+        });
+      }
+    }, 0);
   }
 
   // Close mobile sidebar

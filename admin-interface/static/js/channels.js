@@ -129,9 +129,15 @@ function _chStatusClass(status) {
 
 async function loadCoreTiles() {
   try {
-    var r = await fetch('/api/status');
-    if (!r.ok) return '';
-    var data = await r.json();
+    var results = await Promise.all([
+      fetch('/api/status').then(function(r) { return r.json(); }),
+      fetch('/api/users').then(function(r) { return r.json(); })
+    ]);
+    var data = results[0];
+    var users = Array.isArray(results[1]) ? results[1] : [];
+    data.agents = users.map(function(u) {
+      return { id: u.id, instance: u.id, status: u.container_status };
+    });
     return _renderCoreTiles(data);
   } catch(e) {
     return '';
