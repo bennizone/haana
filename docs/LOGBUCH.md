@@ -5,6 +5,16 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ---
 
+## 2026-03-15 — Code-Audit
+
+**Scope:** Vollständiges Projekt-Audit (core/, admin-interface/, tests/, channels/, skills/)
+**Ergebnis:** 0 Fehler in validate.sh. 1 kritischer Sicherheitsfund, 15 Dateien über 400 Zeilen.
+**Kritisch:** `/api/wa-proxy/` ohne Auth — Bridge-Token-Check fehlt in `wa_proxy_chat`
+**Offen:** host_claude_config Bug (bekannt), fehlende Tests für channels/whatsapp/ und system.py
+**Dokument:** [REVIEW-2026-03-15.md](REVIEW-2026-03-15.md)
+
+---
+
 ## 2026-03-15 — status.js und test_dream.py aufgeteilt (400-Zeilen-Regel)
 
 **Aenderungen:**
