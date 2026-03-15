@@ -411,12 +411,19 @@ header h1 span { color: var(--accent2); }
 .panel { display: none; padding: var(--sp-6); max-width: 1200px; margin: 0 auto; }
 .panel.active { display: block; }
 #panel-config.active { padding: 0; max-width: none; }
-#panel-dashboard { padding: 0; max-width: none; }
+#panel-dashboard {
+  width: 100%;
+  padding: 0;
+  max-width: none;
+  box-sizing: border-box;
+}
 #panel-dashboard .tile-grid {
+  width: 100%;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: var(--sp-4);
   padding: var(--sp-6);
+  box-sizing: border-box;
 }
 .cfg-tab-panel { max-width: 1100px; margin: 0 auto; padding: var(--sp-6); }
 

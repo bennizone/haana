@@ -285,6 +285,7 @@ function _appInit() {
   loadStatus();
   refreshWaStatus();
   initSkillsTabVisibility();
+  if (typeof _sidebarInit === 'function') _sidebarInit();
 }
 
 // ── Wizard-Shortcuts (für Header-Button) ───────────────────────────────────
@@ -348,9 +349,3 @@ async function wizardRestartFreshConfirmed() {
   await openWizardFresh();
 }
 
-// ── Sidebar Init Hook (called after _appInit; logic in sidebar.js) ───────────
-var _origAppInit = _appInit;
-function _appInit() {
-  _origAppInit();
-  if (typeof _sidebarInit === 'function') _sidebarInit();
-}
