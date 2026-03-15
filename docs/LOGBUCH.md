@@ -5,6 +5,27 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ---
 
+## 2026-03-15 — fix(ui): Tab-Visibility, Agenten-Status, Dashboard-Auto-Refresh
+
+**Aenderungen:**
+- `admin-interface/static/js/sidebar.js`: Globale `_currentVisibleCfgTabs` + `_dashboardRefreshTimer` Variablen; Tab-Visibility-Reset fuer dynamisch erstellte Buttons; Auto-Refresh Dashboard alle 30s (nur wenn Panel sichtbar)
+- `admin-interface/static/js/modules.js`: In `loadModuleConfigTabs()` nach `appendChild` wird `_currentVisibleCfgTabs` auf neue Buttons angewendet
+- `admin-interface/static/js/channels.js`: Agenten-Status normalisiert: "running" -> "online", alles andere -> "offline"
+- `admin-interface/templates/index.html`: Cache-Buster sidebar.js v7, modules.js v4, channels.js v4
+
+**Entscheidungen:**
+- Config-Tab-Visibility-Bug war Timing-Problem: `loadModuleConfigTabs()` erstellt Buttons asynchron nach dem setTimeout; Loesung via synchron gesetzter globaler Variable
+- Agenten-Status-Kachel zeigte rohen API-Wert ("running"/"unknown") statt sprechende Labels ("online"/"offline")
+- Dashboard Auto-Refresh via `_dashboardRefreshTimer` — Timer wird beim Verlassen des Panels gestoppt um unnoetige API-Calls zu vermeiden
+- Reviewer: 9/10, keine kritischen Findings
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert <hash>` (Hash nach Commit eintragen)
+
+---
+
 ## 2026-03-15 — fix(ui): Config-Tab-Visibility + Agenten-Kachel
 
 **Aenderungen:**

@@ -21,6 +21,8 @@ const _PAGE_MAP = {
 };
 
 let _currentPage = 'dashboard';
+let _currentVisibleCfgTabs = null;
+let _dashboardRefreshTimer = null;
 
 function navigateTo(page) {
   _currentPage = page;
@@ -57,6 +59,7 @@ function navigateTo(page) {
 
   // Switch config sub-tab if needed
   if (map.cfgTab) {
+    _currentVisibleCfgTabs = map.visibleCfgTabs || null;
     setTimeout(function() {
       showCfgTab(map.cfgTab);
       if (map.visibleCfgTabs) {
@@ -71,6 +74,13 @@ function navigateTo(page) {
         });
       }
     }, 0);
+  } else {
+    _currentVisibleCfgTabs = null;
+  }
+
+  if (map.panel !== 'dashboard' && _dashboardRefreshTimer) {
+    clearInterval(_dashboardRefreshTimer);
+    _dashboardRefreshTimer = null;
   }
 
   // Close mobile sidebar
@@ -170,6 +180,13 @@ async function loadDashboard() {
     }
 
     _updateSidebarDots(data);
+
+    if (!_dashboardRefreshTimer) {
+      _dashboardRefreshTimer = setInterval(function() {
+        var p = document.getElementById('panel-dashboard');
+        if (p && p.classList.contains('active')) loadDashboard();
+      }, 30000);
+    }
 
   } catch(e) {
     if (grid) grid.innerHTML =

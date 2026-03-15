@@ -162,7 +162,7 @@ function _renderCoreTiles(data) {
             + '<span>' + escHtml(a.instance || a.id || '') + '</span>'
             + '<span class="tile-metric-value" style="color:'
               + (a.status === 'running' ? 'var(--green)' : 'var(--muted)') + ';">'
-              + escHtml(a.status || '') + '</span>'
+              + (a.status === 'running' ? 'online' : 'offline') + '</span>'
             + '</div>';
         }).join('')
     + '</div>'

@@ -36,6 +36,11 @@ async function loadModuleConfigTabs() {
     btn.textContent = ch.display_name;
     btn.onclick = () => showCfgTab(tabId);
     tabsEl.appendChild(btn);
+    if (typeof _currentVisibleCfgTabs !== 'undefined' && _currentVisibleCfgTabs) {
+      var _vis = _currentVisibleCfgTabs;
+      var _btnId = btn.id.replace('cfgtab-', '');
+      btn.style.display = _vis.indexOf(_btnId) >= 0 ? '' : 'none';
+    }
 
     const panel = document.createElement('div');
     panel.id = 'cfgpanel-' + tabId;
@@ -81,6 +86,11 @@ async function loadModuleConfigTabs() {
     btn.textContent = sk.display_name;
     btn.onclick = () => showCfgTab(tabId);
     tabsEl.appendChild(btn);
+    if (typeof _currentVisibleCfgTabs !== 'undefined' && _currentVisibleCfgTabs) {
+      var _vis = _currentVisibleCfgTabs;
+      var _btnId = btn.id.replace('cfgtab-', '');
+      btn.style.display = _vis.indexOf(_btnId) >= 0 ? '' : 'none';
+    }
 
     const panel = document.createElement('div');
     panel.id = 'cfgpanel-' + tabId;
