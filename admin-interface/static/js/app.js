@@ -257,7 +257,10 @@ function _checkSetupAndInit() {
       if (d && d.needs_setup) {
         // Hide normal UI
         document.querySelector('header').style.display = 'none';
-        document.querySelector('.tabs').style.display = 'none';
+        const tabsEl = document.querySelector('.tabs');
+        if (tabsEl) tabsEl.style.display = 'none';
+        const sidebarEl = document.getElementById('sidebar');
+        if (sidebarEl) sidebarEl.style.display = 'none';
         document.querySelectorAll('.panel').forEach(p => p.style.display = 'none');
         // Show wizard
         wizardInit();
@@ -309,6 +312,8 @@ window.openWizardFresh = async function() {
   // Hide normal UI while wizard is open
   document.querySelector('header')?.style?.setProperty('display', 'none');
   document.querySelector('.tabs')?.style?.setProperty('display', 'none');
+  const _sbEl = document.getElementById('sidebar');
+  if (_sbEl) _sbEl.style.display = 'none';
   document.querySelectorAll('.panel').forEach(p => p.style.display = 'none');
   wizardInit();
 };
@@ -341,4 +346,11 @@ function wizardRestartFreshConfirm() {
 async function wizardRestartFreshConfirmed() {
   closeWizardRestartModal();
   await openWizardFresh();
+}
+
+// ── Sidebar Init Hook (called after _appInit; logic in sidebar.js) ───────────
+var _origAppInit = _appInit;
+function _appInit() {
+  _origAppInit();
+  if (typeof _sidebarInit === 'function') _sidebarInit();
 }

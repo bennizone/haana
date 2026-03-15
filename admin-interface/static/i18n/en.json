@@ -570,7 +570,8 @@
     "module_connected": "Connected",
     "module_degraded": "Degraded",
     "module_error": "Error",
-    "module_disabled": "Disabled"
+    "module_disabled": "Disabled",
+    "configure": "Configure"
   },
   "whatsapp": {
     "connected": "Connected",
@@ -788,5 +789,29 @@
   "modules": {
     "kind_skill": "Skill",
     "kind_channel": "Channel"
+  },
+  "sidebar": {
+    "dashboard": "Dashboard",
+    "group_core": "Core",
+    "agents": "Agents",
+    "memory": "Memory & Dream",
+    "providers": "Providers & LLMs",
+    "ha": "Home Assistant",
+    "group_channels": "Channels",
+    "ch_whatsapp": "WhatsApp",
+    "ch_ha_voice": "HA Voice",
+    "ch_telegram": "Telegram",
+    "group_skills": "Skills",
+    "sk_kalender": "Calendar",
+    "group_users": "Users",
+    "all_users": "All Users",
+    "group_logs": "Logs",
+    "conversations": "Conversations",
+    "logs_system": "System",
+    "settings": "Settings"
+  },
+  "dashboard": {
+    "loading": "Loading dashboard...",
+    "no_modules": "No modules configured"
   }
 }

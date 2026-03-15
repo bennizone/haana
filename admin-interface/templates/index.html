@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HAANA Admin</title>
-<link rel="stylesheet" href="/static/css/admin.css?v=11">
+<link rel="stylesheet" href="/static/css/admin.css?v=12">
 </head>
 <body>
 
@@ -85,22 +85,6 @@
   </div>
 </div>
 
-<header>
-  <div class="status-dot" id="header-dot" title="System-Status"></div>
-  <h1>HAANA <span>Admin</span></h1>
-  <span class="header-status" id="header-status">Verbinde...</span>
-  <button class="btn btn-secondary btn-sm" id="wizard-restart-btn"
-          onclick="openWizardRestartModal()"
-          data-i18n="wizard.restart_btn"
-          style="margin-left:auto;font-size:12px;padding:4px 10px;">
-    &#9881; Einrichtung
-  </button>
-  <select class="header-lang" id="lang-selector" onchange="I18n.load(this.value)">
-    <option value="de">DE</option>
-    <option value="en">EN</option>
-  </select>
-</header>
-
 <!-- ══════════════════════════════════════════ WIZARD RESTART MODAL -->
 <div id="wizard-restart-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9000;align-items:center;justify-content:center;">
   <div style="background:var(--bg-card);border-radius:var(--radius);padding:var(--sp-6);max-width:440px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.4);">
@@ -145,13 +129,136 @@
   </div>
 </div>
 
-<div class="tabs">
-  <button class="tab-btn" onclick="showTab('conversations', event)" data-i18n="tabs.conversations">Konversationen</button>
-  <button class="tab-btn" onclick="showTab('config', event)" data-i18n="tabs.config">Config</button>
-  <button class="tab-btn" onclick="showTab('users', event)" data-i18n="tabs.users">Users</button>
-  <button class="tab-btn active" onclick="showTab('status', event)" data-i18n="tabs.status">Status</button>
-  <button class="tab-btn" id="tab-btn-skills" onclick="showTab('skills', event)" data-i18n="tabs.skills" style="display:none;">Skills</button>
-  <button class="tab-btn" onclick="showTab('terminal', event); loadDevProvider()" data-i18n="dev.tab">Entwicklung</button>
+<div class="layout">
+
+<aside class="sidebar" id="sidebar">
+  <!-- Logo -->
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-name">HAANA <span>Admin</span></div>
+    <div class="sidebar-logo-sub" data-i18n="app.title">Admin Interface</div>
+  </div>
+
+  <!-- Navigation -->
+  <nav class="sidebar-nav" id="sidebar-nav">
+
+    <!-- Dashboard -->
+    <div class="sidebar-item" onclick="navigateTo('dashboard')" id="nav-dashboard" data-i18n="sidebar.dashboard">
+      Dashboard
+    </div>
+
+    <!-- Core -->
+    <div class="sidebar-group open" id="grp-core">
+      <div class="sidebar-group-title" onclick="toggleSidebarGroup('grp-core')">
+        <span data-i18n="sidebar.group_core">Core</span>
+        <span class="sidebar-group-arrow">&#9658;</span>
+      </div>
+      <div class="sidebar-group-items">
+        <div class="sidebar-subitem" onclick="navigateTo('agents')" id="nav-agents" data-i18n="sidebar.agents">Agents</div>
+        <div class="sidebar-subitem" onclick="navigateTo('memory')" id="nav-memory" data-i18n="sidebar.memory">Memory &amp; Dream</div>
+        <div class="sidebar-subitem" onclick="navigateTo('providers')" id="nav-providers" data-i18n="sidebar.providers">Provider &amp; LLMs</div>
+        <div class="sidebar-subitem" onclick="navigateTo('ha')" id="nav-ha" data-i18n="sidebar.ha">Home Assistant</div>
+      </div>
+    </div>
+
+    <!-- Channels -->
+    <div class="sidebar-group open" id="grp-channels">
+      <div class="sidebar-group-title" onclick="toggleSidebarGroup('grp-channels')">
+        <span data-i18n="sidebar.group_channels">Channels</span>
+        <span class="sidebar-group-arrow">&#9658;</span>
+      </div>
+      <div class="sidebar-group-items">
+        <div class="sidebar-subitem" onclick="navigateTo('ch-whatsapp')" id="nav-ch-whatsapp">
+          <span data-i18n="sidebar.ch_whatsapp">WhatsApp</span>
+          <span class="sidebar-dot unconfigured" id="sdot-whatsapp"></span>
+        </div>
+        <div class="sidebar-subitem" onclick="navigateTo('ch-ha_voice')" id="nav-ch-ha_voice">
+          <span data-i18n="sidebar.ch_ha_voice">HA Voice</span>
+          <span class="sidebar-dot unconfigured" id="sdot-ha_voice"></span>
+        </div>
+        <div class="sidebar-subitem" onclick="navigateTo('ch-telegram')" id="nav-ch-telegram">
+          <span data-i18n="sidebar.ch_telegram">Telegram</span>
+          <span class="sidebar-dot unconfigured" id="sdot-telegram"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Skills -->
+    <div class="sidebar-group open" id="grp-skills">
+      <div class="sidebar-group-title" onclick="toggleSidebarGroup('grp-skills')">
+        <span data-i18n="sidebar.group_skills">Skills</span>
+        <span class="sidebar-group-arrow">&#9658;</span>
+      </div>
+      <div class="sidebar-group-items">
+        <div class="sidebar-subitem" onclick="navigateTo('sk-kalender')" id="nav-sk-kalender">
+          <span data-i18n="sidebar.sk_kalender">Kalender</span>
+          <span class="sidebar-dot unconfigured" id="sdot-kalender"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Users -->
+    <div class="sidebar-group open" id="grp-users">
+      <div class="sidebar-group-title" onclick="toggleSidebarGroup('grp-users')">
+        <span data-i18n="sidebar.group_users">Users</span>
+        <span class="sidebar-group-arrow">&#9658;</span>
+      </div>
+      <div class="sidebar-group-items" id="sidebar-user-items">
+        <div class="sidebar-subitem" onclick="navigateTo('users')" id="nav-users" data-i18n="sidebar.all_users">Alle Users</div>
+      </div>
+    </div>
+
+    <!-- Logs -->
+    <div class="sidebar-group" id="grp-logs">
+      <div class="sidebar-group-title" onclick="toggleSidebarGroup('grp-logs')">
+        <span data-i18n="sidebar.group_logs">Logs</span>
+        <span class="sidebar-group-arrow">&#9658;</span>
+      </div>
+      <div class="sidebar-group-items">
+        <div class="sidebar-subitem" onclick="navigateTo('conversations')" id="nav-conversations" data-i18n="sidebar.conversations">Konversationen</div>
+        <div class="sidebar-subitem" onclick="navigateTo('logs')" id="nav-logs" data-i18n="sidebar.logs_system">System</div>
+      </div>
+    </div>
+
+  </nav>
+
+  <!-- Footer: Einstellungen -->
+  <div class="sidebar-footer">
+    <div class="sidebar-item" onclick="navigateTo('settings')" id="nav-settings" data-i18n="sidebar.settings">
+      &#9881; Einstellungen
+    </div>
+  </div>
+</aside>
+
+<!-- Overlay fuer Mobile -->
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+<main class="content">
+
+<header>
+  <button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Menu">&#9776;</button>
+  <div class="status-dot" id="header-dot" title="System-Status"></div>
+  <h1>HAANA <span>Admin</span></h1>
+  <span class="header-status" id="header-status">Verbinde...</span>
+  <button class="btn btn-secondary btn-sm" id="wizard-restart-btn"
+          onclick="openWizardRestartModal()"
+          data-i18n="wizard.restart_btn"
+          style="margin-left:auto;font-size:12px;padding:4px 10px;">
+    &#9881; Einrichtung
+  </button>
+  <select class="header-lang" id="lang-selector" onchange="I18n.load(this.value)">
+    <option value="de">DE</option>
+    <option value="en">EN</option>
+  </select>
+</header>
+
+<!-- ═══════════════════════════════════════════════ DASHBOARD -->
+<div id="panel-dashboard" class="panel active">
+  <div class="tile-grid" id="dashboard-tiles">
+    <div class="empty-state">
+      <div class="icon">&#8230;</div>
+      <div data-i18n="dashboard.loading">Dashboard wird geladen...</div>
+    </div>
+  </div>
 </div>
 
 <!-- ══════════════════════════════════════════ CONVERSATIONS (Chat + Logs) -->
@@ -201,7 +308,7 @@
   <div id="rebuild-banner" class="rebuild-banner">
     <span class="rebuild-banner-text" data-i18n="chat.rebuild_banner">Qdrant ist leer – Memory kann aus Konversations-Logs neu aufgebaut werden.</span>
     <div class="rebuild-banner-actions">
-      <button class="btn btn-sm btn-secondary" onclick="showTab('config');scrollToRebuild()" data-i18n="chat.rebuild_now">Jetzt rebuilden</button>
+      <button class="btn btn-sm btn-secondary" onclick="navigateTo('memory');scrollToRebuild()" data-i18n="chat.rebuild_now">Jetzt rebuilden</button>
       <button class="btn btn-sm btn-secondary" onclick="document.getElementById('rebuild-banner').classList.remove('active')">&#10005;</button>
     </div>
   </div>
@@ -713,7 +820,7 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════ STATUS -->
-<div id="panel-status" class="panel active">
+<div id="panel-status" class="panel">
   <div id="status-checklist" style="margin-bottom:20px"></div>
   <div class="status-grid" id="status-grid">
     <div class="status-card">
@@ -804,6 +911,9 @@
 
 <div id="toast"></div>
 
+</main><!-- /.content -->
+</div><!-- /.layout -->
+
 <!-- Log-Editor Modal -->
 <div id="log-editor-modal" class="modal-overlay">
   <div class="modal-dialog wide">
@@ -835,7 +945,10 @@
 <script src="/static/js/modal.js?v=4"></script>
 
 <!-- App-Kern (globaler State, Tabs, Init) -->
-<script src="/static/js/app.js?v=14"></script>
+<script src="/static/js/app.js?v=15"></script>
+
+<!-- Sidebar Navigation (Phase 1 Redesign) -->
+<script src="/static/js/sidebar.js?v=2"></script>
 
 <!-- Setup Wizard -->
 <script src="/static/js/wizard.js?v=5"></script>
