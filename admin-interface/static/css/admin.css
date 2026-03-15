@@ -409,7 +409,14 @@ header h1 span { color: var(--accent2); }
 /* ── Panels ── */
 .panel { display: none; padding: var(--sp-6); max-width: 1200px; margin: 0 auto; }
 .panel.active { display: block; }
-#panel-config.active, #panel-dashboard.active { padding: 0; max-width: none; }
+#panel-config.active { padding: 0; max-width: none; }
+#panel-dashboard { padding: 0; max-width: none; }
+#panel-dashboard .tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--sp-4);
+  padding: var(--sp-6);
+}
 .cfg-tab-panel { max-width: 1100px; margin: 0 auto; padding: var(--sp-6); }
 
 /* ── Instance Selector ── */

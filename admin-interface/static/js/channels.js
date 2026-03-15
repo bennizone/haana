@@ -85,7 +85,7 @@ function _renderChannelHeader(mod, statusInfo) {
   }
 
   var actionsHtml = '';
-  var actions = (statusInfo.actions || []);
+  var actions = (statusInfo.actions || []).filter(function(a) { return a.id !== 'open_config'; });
   if (actions.length) {
     actionsHtml = '<div class="channel-header-actions">'
       + actions.map(function(a) {
