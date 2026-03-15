@@ -51,8 +51,8 @@ body {
 
 .layout {
   display: flex;
-  min-height: 100vh;
-  padding-top: 0;
+  height: 100vh;
+  width: 100%;
 }
 
 .sidebar {
@@ -202,12 +202,12 @@ body {
 
 /* Content area */
 .content {
-  margin-left: var(--sidebar-width);
   flex: 1;
   min-width: 0;
+  width: calc(100% - var(--sidebar-width));
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
 }
 
 /* Page header (inside content, replaces old sticky header) */
