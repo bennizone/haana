@@ -281,6 +281,14 @@ body {
   gap: 4px;
   font-size: 12px;
   color: var(--muted);
+  overflow: hidden;
+}
+.tile-metrics span,
+.tile-metrics div {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 .tile-metric-row {
   display: flex;
