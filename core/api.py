@@ -114,6 +114,7 @@ def create_api(agent) -> FastAPI:
                 await ws.send_text(json.dumps({"type": "typing"}))
 
                 response = await agent.run_async(message, channel="webchat")
+                agent.memory.save_context(agent._context_path)
                 await ws.send_text(json.dumps({"type": "response", "text": response}))
 
         except WebSocketDisconnect:
