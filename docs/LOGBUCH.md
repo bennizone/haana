@@ -5,6 +5,34 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ---
 
+## 2026-03-15 — haana-plan-v7-final.md vollstaendig aktualisiert
+
+**Aenderungen:**
+- `haana-plan-v7-final.md`: Vollstaendige Ueberarbeitung (Stand 2026-03-15)
+  - Phasen-Status aktualisiert: Phase 2 als ✅ Abgeschlossen markiert
+  - Alle abgeschlossenen Features aus LOGBUCH.md, MEMORY.md und Code-Review in Phase 2 eingetragen
+  - Neue offene Punkte in "Fuer spaeter" eingetragen: SOUL.md, HA-Entity-Index, Hybrid Search, Inter-Agenten-Kommunikation, WA Notification, Update-Button, WS-Handler save_context, Onboarding-Flow, HA-Auth, Telegram vollstaendig, Kalender vollstaendig, zweite User-Instanz
+  - HA Add-on Abschnitt als ❄️ Auf Eis markiert (LXC-Variante ist primaer), haana-addons/haana/ als DEPRECATED gekennzeichnet
+  - Infrastruktur aktualisiert: zwei LXC-Container (Dev + Prod), keine echten IPs
+  - Companion App v2.0.0 (SSO + Admin-Check) dokumentiert
+  - 8 Sub-Agenten Tabelle ergaenzt
+  - Technische Schuld aus Code-Review 2026-03-14 in "Fuer spaeter" eingetragen
+  - Docker-Stack Hinweis auf `--profile agents` ergaenzt
+  - "Zuletzt aktualisiert: 2026-03-15" als erstes Element
+
+**Entscheidungen:**
+- Plan-Datei ist Single-Source-of-Truth fuer Projekt-Status — daher vollstaendige Ueberarbeitung statt inkrementeller Updates
+- alice/bob als Privacy-Platzhalter beibehalten (keine echten Namen auf GitHub)
+- Technische Schuld aus Code-Review explizit als eigene Kategorie in "Fuer spaeter" — sichtbar aber nicht blockierend
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:**
+- `git revert <hash>` (nach Commit)
+
+---
+
 ## 2026-03-14 — Autostart-Fix + update.sh Container-Management
 
 **Problem:** Im Standalone-Modus (Docker) wurden Agents nach Neustart/Update nicht automatisch gestartet. WA-Bridge wurde von update.sh nicht mitgestartet.

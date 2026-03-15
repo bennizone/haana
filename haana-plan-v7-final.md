@@ -1,6 +1,8 @@
 # HAANA – Implementierungsplan v7
 ## Home Assistant Advanced Nano Assistant
 
+**Zuletzt aktualisiert: 2026-03-15**
+
 ---
 
 ## Vision
@@ -28,14 +30,12 @@ Langfristiges Ziel: Home Assistant Add-on das jeder mit ein paar Klicks installi
 
 ## Aktuelle Infrastruktur
 
-### HAANA-Container (läuft)
+### HAANA-Container
+
+Zwei LXC-Container auf Proxmox: ein Entwicklungs-LXC und ein Produktions-LXC. Keine echten IPs werden im Plan dokumentiert.
 
 | Parameter | Wert |
 |---|---|
-| Proxmox Node | pve2 |
-| LXC ID | 1011 |
-| Hostname | haana |
-| IP | 10.83.1.11/23 |
 | OS | Debian 13 |
 | Docker | 29.2.1 |
 | RAM | 8 GB |
@@ -44,8 +44,7 @@ Langfristiges Ziel: Home Assistant Add-on das jeder mit ein paar Klicks installi
 
 ### GPU-Server (läuft, Ollama bereit)
 
-**Hardware:** Lenovo Tiny, Intel i5 8th Gen (T), 32 GB RAM, GTX 1080Ti (11 GB VRAM), Ubuntu 24.04 LTS, IP: 10.83.1.110/23
-
+**Hardware:** Lenovo Tiny, Intel i5 8th Gen (T), 32 GB RAM, GTX 1080Ti (11 GB VRAM), Ubuntu 24.04 LTS
 
 | Modell | VRAM | Aufgabe | Ladestrategie |
 |---|---|---|---|
@@ -76,7 +75,7 @@ Langfristiges Ziel: Home Assistant Add-on das jeder mit ein paar Klicks installi
 | Trilium Next | ✅ Läuft | LXC + Caddy (Platzhalter, siehe Phase 6) |
 | GPU-Server | ✅ Läuft | Bare Metal, GTX 1080Ti, Ollama bereit |
 | Pangolin (Hetzner VPS) | ✅ Läuft | Externer Zugang, eigene Auth |
-| HAANA LXC | ✅ Phase 1 abgeschlossen | Memory, Scope-Erkennung, Extraktion laufen |
+| HAANA LXC | ✅ Phase 2 abgeschlossen | Vollbetrieb, alle Core-Features aktiv |
 
 ---
 
@@ -136,7 +135,7 @@ response = agent.run(message, context=memory.get_relevant(message))
 HAANA stellt für HA **drei Fake-Modelle** bereit. HA sieht sie wie normale LLM-Endpunkte – in der HA App oder am Voice Satellite wählt man das passende Modell, HAANA weiß sofort welche Instanz und welches Memory aktiv ist:
 
 ```
-HAANA-Alice   → Anfragen von Alicees Geräten → alice_memory + household_memory
+HAANA-Alice   → Anfragen von Alices Geräten → alice_memory + household_memory
 HAANA-Bob    → Anfragen von Bobs Geräten   → bob_memory + household_memory
 HAANA-HA      → generische HA-Anfragen       → nur household_memory
 ```
@@ -203,7 +202,9 @@ bob_memory:   Bobs persönlicher Kalender
 
 ### Mem0 Inference-Strategie
 
-**`infer=True` mit ministral-3-32k:3b + Custom Prompt (aktiv seit Phase 1):** ministral-3-32k:3b analysiert die Konversation und extrahiert strukturierte Fakten. Läuft async nach der Antwort an den User, blockiert nichts. Custom Extraction Prompt ersetzt Mem0-Default und berücksichtigt beide Gesprächsseiten (User + Assistant).
+**`infer=True` mit ministral-3-32k:3b + Custom Prompt + `"version": "v1.1"` (aktiv seit Phase 1):** ministral-3-32k:3b analysiert die Konversation und extrahiert strukturierte Fakten. Läuft async nach der Antwort an den User, blockiert nichts. Custom Extraction Prompt ersetzt Mem0-Default und berücksichtigt beide Gesprächsseiten (User + Assistant).
+
+> **Wichtig:** mem0 Config MUSS `"version": "v1.1"` enthalten — ohne v1.1 werden zwei LLM-Calls gemacht und MiniMax schlägt still fehl.
 
 ```
 mem.add(text, infer=True, llm=ministral-3-32k:3b)
@@ -227,16 +228,17 @@ Async Extraktion (im Hintergrund):
     → erst dann: Nachricht fällt aus dem aktiven Context
     → schlägt Extraktion fehl: Nachricht bleibt im Context (kein Datenverlust)
 
-Beim Embedden gleichzeitig:
-    → Anonymisierer-Wörterbuch aktualisieren
-      (neue Namen, Orte, Personen erkannt → Liste automatisch ergänzen)
+Context-Persistenz:
+    → /data/context/{instance}.json speichert Window-State
+    → überlebt Container-Restarts
+    → save_context() wird nach JEDER /chat Anfrage aufgerufen
 ```
 
 ### Wann wird wo geschrieben?
 
 ```
 "Ich mag morgens keinen Kaffee"      → alice_memory
-"Bob schläft gerne lange"           → alice_memory (Alicees Aussage über Bob)
+"Bob schläft gerne lange"           → alice_memory (Alices Aussage über Bob)
 "Wir wollen abends warmweißes Licht" → household_memory
 "Unser WLAN-Passwort ist..."         → household_memory
 "Meine Mutter heißt..."              → alice_memory
@@ -417,7 +419,7 @@ Config-Struktur: getrennte `providers[]` + `llms[]` Listen (nicht mehr `llm_prov
 ```
 providers[] – Verbindungen zu LLM-Diensten:
   Anthropic Claude (OAuth via Claude Code CLI)
-  Ollama GPU-Server (openai-kompatibel, http://10.83.1.110:11434)
+  Ollama GPU-Server (openai-kompatibel)
   MiniMax (anthropic-kompatibel, custom URL + Key)
   OpenAI (API-Key)
   Gemini (API-Key)
@@ -466,7 +468,7 @@ TTS: Text → POST /api/tts_proxy an HA → Audio → WhatsApp / Lautsprecher
 ```
 haana/
 ├── skills/
-│   ├── kalender/              ← CalDAV, user-spezifisch (3 Kalender)
+│   ├── kalender/              ← CalDAV, user-spezifisch (3 Kalender) — Stub implementiert
 │   ├── [home-assistant/]       ← via MCP (89 Tools): Entities, Automationen, Shopping, Backup
 │   ├── ha-subscriptions/      ← Entity-Abonnements, Webhooks, proaktive Reaktionen
 │   ├── morning-brief/         ← Daily Brief (Termine, Wetter, Erinnerungen)
@@ -479,14 +481,27 @@ haana/
 │   └── bob/CLAUDE.md         ← User: eingeschränkt, kein System-Zugriff
 ├── voice-backend/
 │   └── (integriert in core/ollama_compat.py — drei Fake-Modelle, kein Agent)
+├── channels/                  ← Channel/Skill Framework (Phase 2+3 abgeschlossen)
+│   ├── base.py                ← BaseChannel Abstrakt-Klasse
+│   ├── whatsapp/channel.py    ← vollständige Implementierung + custom_tab_html
+│   ├── ha_voice/channel.py    ← vollständige Implementierung (3-Tier-Architektur)
+│   └── telegram/channel.py   ← Stub (noch nicht produktiv)
+├── common/
+│   └── types.py               ← ConfigField (Single-Source-of-Truth)
 ├── core/
 │   ├── agent.py               ← Claude Code SDK Agent Basis
 │   ├── memory.py              ← Mem0 + Qdrant Wrapper + Sliding Window
-│   ├── ollama_compat.py       ← WhatsApp/Webchat/HA Routing + LLM-Proxy (channels.py → hier)
-│   ├── whatsapp_router.py     ← WhatsApp-Routing + Admin-Modus (channels.py → hier)
-│   ├── (cascade.py → LLM-Failover Logik inline in core/agent.py)
+│   ├── api.py                 ← FastAPI pro Agent-Instanz
+│   ├── ollama_compat.py       ← WhatsApp/Webchat/HA Routing + LLM-Proxy
+│   ├── whatsapp_router.py     ← WhatsApp-Routing + Admin-Modus
 │   ├── dream.py               ← Traumprozess: Chunked Processing, Clustering
+│   ├── process_manager.py     ← DockerAgentManager + InProcessAgentManager
 │   └── logger.py              ← Strukturiertes Logging aller Operationen
+├── admin-interface/
+│   ├── main.py                ← App-Init, Middleware, Router-Includes (263 Z.)
+│   ├── routers/               ← 16 fachliche Router-Module
+│   ├── module_registry.py     ← Auto-Discovery für Channel/Skill-Module
+│   └── static/js/             ← Vanilla JS Module (app, chat, config, status, ...)
 └── docker-compose.yml
 ```
 
@@ -506,66 +521,50 @@ haana/
 
 ## Admin-Webinterface
 
-Erreichbar unter `http://10.83.1.11:8080`. Nur im LAN. Kein externer Zugang über Pangolin geplant. Simple Auth (Username/Password) oder zunächst offen – beides akzeptabel.
+Erreichbar im LAN. Kein externer Zugang über Pangolin geplant.
 
-### Chat-Tab
+### Auth
 
-Echter gemeinsamer Chatverlauf über alle Kanäle. Eine Session, mehrere Eingabekanäle.
+- bcrypt-Passwort-Hashing, Session-basiert
+- Session-Invalidierung nach Passwort-Änderung
+- Companion-Token separat (`companion_token` ≠ `admin_password`)
+- SSO via HA Companion Addon (Ingress-Proxy)
 
-**User-Dropdown:** Alice (Admin) / Bob (simuliert für Tests)
+### Tabs
 
-**Kanalindikator:** 📱 WhatsApp / 🖥️ Webchat / 🏠 HA App
+- **Status-Tab** (Standard): Channel-Karten (WhatsApp, HA Voice, Telegram, Kalender), Fake-Ollama-Status, Dream-Status aller Instanzen, Instanz-Steuerung (Start/Stop/Restart)
+- **Chat-Tab**: kanalübergreifend, SSE Live-Updates, Agent-Online/Offline-Status
+- **Config-Tab**: Provider-Liste, LLM-Liste, LLM-Zuordnung per User, Modules (dynamisch aus Channel/Skill Framework)
+- **Users-Tab**: User CRUD, CLAUDE.md Inline-Editor, HA Person-Entity Dropdown, WhatsApp LID (readonly, auto)
+- **Logs-Tab**: Übersicht, Download, Archivstatus
+- **Entwicklung-Tab**: Claude Code Provider-Auswahl, Session-Löschen
+- **Setup-Wizard**: wiederholbar (extend/fresh Modus)
 
-**Jede Nachricht aufklappbar:**
-```
-► [10:34] "Mach das Licht im Wohnzimmer warm"    📱 WhatsApp
-   ▼ aufklappen:
-   [Memory geladen]     3 Treffer aus household_memory: "Wohnzimmer-Vorlieben", ...
-   [Tool aufgerufen]    ha_control(entity="light.wohnzimmer", color_temp=2700K)
-   [HA Antwort]         OK, Zustand: an, 2700K, 80%
-   [Memory gespeichert] household_memory: "Abends warmweißes Licht Wohnzimmer"
-   [Antwort]            "Wohnzimmer auf warmweiß gedimmt."
-```
+### Channel/Skill Framework (Modulares Admin-Interface)
 
-### Config-Tab
+Module registrieren sich selbst im Admin-Interface via `module_registry.py`. Das Interface generiert Tabs und Config-Felder dynamisch:
 
-**Nutzer:**
-- Hinzufügen, bearbeiten, Memory zurücksetzen, löschen
-- Pro User: Name, WhatsApp-Nummer, Typ (Admin/User), HA Person-Entity (Dropdown aus HA API), HA Focus Mode Entity
-- Persönliche Dienste: CalDAV, IMAP, SMTP
+- `GET /api/modules` – liefert Channel/Skill-Metadaten (id, display_name, enabled, config_fields)
+- Channels mit komplexer UI liefern ihr Tab-HTML via `get_custom_tab_html()` selbst
+- `config_root` ermöglicht channel-spezifische Config-Pfade ohne Spezialfall-Logik im Router
+- Derzeit registriert: WhatsApp, HA Voice, Telegram (Stub), Kalender (Stub)
 
-**CLAUDE.md:** Direkt im Browser editieren, Syntax-Highlighting, sofort aktiv ohne Neustart
+---
 
-**Skills:** Aktivieren/Deaktivieren pro Instanz, Status + letzter Fehler
+## Sub-Agenten (8 spezialisierte Agenten)
 
-**LLM-Konfiguration:**
-- Provider-Liste: Typ / URL / Key (beliebig viele, typspezifische Formulare)
-- LLM-Liste: Name / Modell-ID / Provider-Referenz (beliebig viele)
-- Pro User: primary_llm / fallback_llm / extraction_llm (String-IDs)
-- "Teste Verbindung" Button pro Provider
+Alle Sub-Agenten sind unter `.claude/agents/` definiert. Der Hauptagent (Orchestrator) arbeitet ausschließlich im Plan-Modus.
 
-**Memory + Sliding Window:**
-- Anzahl Nachrichten im Context Window (Standard: 20, Minimum: 5)
-- Zeitfenster (Standard: 60 Minuten)
-- Async Extraktion: Status, letzte Ausführung, Fehlerzähler
-
-**Traumprozess:**
-- LLM: Dropdown (ministral-3:3b / ministral-3:8b / Sonnet / ...)
-- Cluster-Größe: 10–100 Einträge pro Batch
-- Trigger: HA Subscription (Schlaf-Focus) + Fallback-Zeit (Standard: 03:00)
-- Manuell auslösen: [Button]
-- Letzter Lauf: Zeitstempel + Zusammenfassung (was zusammengeführt, was markiert)
-- Protokoll: aufklappbar
-
-**Dienste global:** HA URL + Token (Ollama URL entfernt – wird aus Providern abgeleitet)
-
-**Backup:** HA-eigene Backup-Routine (Config in `/data` → automatisch, Logs in `/media` → optional). SMB/CIFS auf TrueNAS optional für Standalone-Betrieb.
-
-**Anonymisierer:** Aktivieren/Deaktivieren, bekannte Namen verwalten, automatisch erkannte anzeigen
-
-**HA Subscriptions:** Aktive Abonnements mit Entity / Bedingung / Aktion, pausieren / löschen
-
-**Logs:** Übersicht letzte Einträge pro Kategorie, Download, Archivstatus
+| Agent | Zweck | Wann einsetzen |
+|---|---|---|
+| `dev` | Backend-Entwicklung (Python, Docker, API) | Übergreifende Backend-Änderungen |
+| `core-dev` | Spezialist core/ (Agent, Memory, API) | Änderungen ausschließlich in core/ |
+| `channel-dev` | Spezialist channels/ + skills/ | Channel- oder Skill-Änderungen |
+| `ui-dev` | Spezialist admin-interface/ Frontend | Frontend-Änderungen mit strikter Regeldurchsetzung |
+| `webdev` | Frontend-Entwicklung (HTML/CSS/JS, i18n) | Alle UI-Änderungen (generell) |
+| `docs` | Dokumentation, Logbuch, UI-Hilfen | Nach Meilensteinen, neue Features |
+| `reviewer` | Code-Review, Score, Findings | Nach jeder Implementierung vor Deploy |
+| `memory` | Architekturentscheidungen dokumentieren | Wenn Entscheidung getroffen oder nachgeschlagen wird |
 
 ---
 
@@ -575,23 +574,19 @@ Echter gemeinsamer Chatverlauf über alle Kanäle. Eine Session, mehrere Eingabe
 /opt/haana/data/
 ├── qdrant/          ← alle Memory-Collections (Index, rekonstruierbar aus Logs)
 ├── config/          ← API-Keys, User-Settings, Credentials (Plaintext, nur LAN)
-├── claude-md/       ← CLAUDE.md aller Instanzen (versioniert via Git)
+├── claude-auth/     ← OAuth Credentials pro Provider-ID
+├── context/         ← Sliding-Window-State pro Instanz (haana:haana Ownership!)
 └── logs/
     ├── conversations/alice/     ← täglich rotiert, nie gelöscht
     ├── conversations/bob/
     ├── llm-calls/
     ├── memory-ops/
     ├── tool-calls/
-    └── dream-process/
-
-Backup (HA Add-on Modus):
-    → Config + Qdrant + Context in /data → automatisch im HA-Backup
-    → Logs in /media/haana/logs → optional im HA Media-Backup
-    → Restore: HA-Backup wiederherstellen → Add-on startet
+    └── dream/                   ← Tages-Tagebuch pro Instanz (YYYY-MM-DD.jsonl)
 
 Backup (Standalone-Modus):
-    → Optional: SMB/CIFS → TrueNAS (nicht priorisiert)
     → /data zurückkopieren → docker compose up -d → fertig
+    → Optional: SMB/CIFS → TrueNAS (nicht priorisiert)
 ```
 
 **Zugangsdaten:** Plaintext in `config/`, nur auf dem LXC, kein externer Zugang. Authentik/Vault kommt auf die "für später"-Liste wenn sowieso ein einheitliches Auth-System für alle Self-Hosted-Dienste kommt.
@@ -618,28 +613,27 @@ API-Keys und Passwörter gehen grundsätzlich nie ans LLM – separate, immer ak
 ## Docker-Stack
 
 ```
-## Standalone (Entwicklung)
+## Standalone (Entwicklung + Produktion)
 docker-compose.yml
 ├── admin-interface        (Web-UI, Port 8080, nur LAN)
-├── whatsapp-bridge        (Baileys, Node.js)
+├── whatsapp-bridge        (Baileys, Node.js) — Profil: agents
 └── qdrant                 (Vector Store, Port 6333)
 
-Hinweis: Agent-Instanzen (instanz-alice, instanz-bob, ha-assist, ha-advanced) werden
-dynamisch via DockerAgentManager gestartet — nicht als statische docker-compose-Eintraege.
+Hinweis: Agent-Instanzen werden dynamisch via DockerAgentManager gestartet
+— nicht als statische docker-compose-Einträge.
+update.sh nutzt --profile agents damit whatsapp-bridge mitgestartet wird.
 
-## HA Add-on (Produktion)
-haana-addons/              (Multi-Add-on Repository im selben Git-Repo)
-├── haana/                 (Haupt-Add-on: Admin + In-Process Agents + Qdrant via S6)
-├── haana-ollama-cpu/      (Optional: CPU-only Ollama, auswählbare Modelle)
+## HA Add-on (Produktion) ❄️ Auf Eis — LXC-Variante ist primär
+haana-addons/
+├── haana-companion/       (Primär: Minimales Addon ~5MB, SSO-Gateway + Admin-Check)
+│                           Token-Auth, Ingress-Proxy zu HAANA-LXC
+├── haana/                 (DEPRECATED — vollständiger HAANA-Stack als Addon)
+│                           Docker-Images unkomprimiert: 5GB → ~21GB auf Disk
 └── haana-whatsapp/        (Optional: WhatsApp Bridge)
 
 AgentManager-Abstraktion (core/process_manager.py):
 ├── DockerAgentManager     → Standalone: Container via Docker SDK
 └── InProcessAgentManager  → Add-on: Agents als Python-Objekte im selben Prozess
-
-Nicht im Stack (extern, bereits laufend):
-├── Ollama GPU-Server      (GTX 1080Ti, alle Modelle geladen)
-└── Trilium                (eigener LXC + Caddy)
 ```
 
 ---
@@ -668,7 +662,7 @@ Schritt 4: LLM pro Use Case
 → Dropdowns mit verfügbaren Modellen (Cloud + Ollama kombiniert)
 
 Schritt 5: Home Assistant
-→ HA URL + Long-Lived Access Token
+→ HA URL + Long-Lived Access Token (LLAT, manuell eintragen)
 → Verbindung testen → Entities + Persons abrufen
 → Nabu Casa vorhanden? (STT/TTS)
 
@@ -678,11 +672,11 @@ Schritt 6: Backup
 Schritt 7: Privacy
 → Anonymisierer aktivieren?
 
-→ Fertig: docker-compose.yml generiert, docker compose up -d
-→ Admin-Interface: http://10.83.1.11:8080
+→ Fertig: docker-compose.yml generiert, docker compose up -d --build
+→ Admin-Interface: http://<haana-ip>:8080
 ```
 
-**Als HA Add-on (zukünftig):** Schritt 5 entfällt.
+**Wiederholbar:** Wizard hat `extend`-Modus (bestehende Config erweitern) und `fresh`-Modus (Neustart).
 
 ---
 
@@ -702,7 +696,7 @@ Schritt 7: Privacy
 - Extraktion: ministral-3-32k:3b mit `infer=True`, async nach Antwort, blockiert nichts
 - Sliding Window (20 Nachrichten / 60 min): non-blocking async Extraktion im Hintergrund
 - `flush_all()` beim Shutdown: alle Window-Einträge zu Qdrant extrahieren (kein Datenverlust)
-- Context-File (`data/context/alice.json`): Window-State überlebt Container-Restarts
+- Context-File (`/data/context/alice.json`): Window-State überlebt Container-Restarts
 - Pending-Extraktion beim Startup: unfertige Einträge aus letzter Session werden nachgeholt
 - Scope-Erkennung: 1) Regex aus Agent-Antwort → 2) LLM-Klassifikation via Ollama (personal vs. household) → 3) Fallback persönlicher Scope
 - Custom Fact Extraction Prompt für Mem0: berücksichtigt User- UND Assistant-Nachrichten (Mem0 Default ignoriert Assistant)
@@ -713,6 +707,7 @@ Schritt 7: Privacy
 - `POST /chat` → `{"message": "...", "channel": "webchat|whatsapp|..."}` → `{"response": "..."}`
 - `WS /ws` → WebSocket bidirektional
 - `GET /health` → Instanz-Status
+- `save_context()` wird nach JEDER `/chat` Anfrage aufgerufen
 
 **Logging (`core/logger.py`):**
 - 4 JSONL-Kategorien mit Daily Rotation, nie gelöscht:
@@ -723,33 +718,28 @@ Schritt 7: Privacy
 
 **Admin-Interface (`admin-interface/`):**
 - FastAPI + Jinja2 + Vanilla JS, Port 8080
-- Tabs: Chat, Logs (inkl. Log-Dateien), Config (Sub-Tabs: LLMs / Memory / Services / Retention / CLAUDE.md), Users, Status
-- Config → LLMs: Provider-Liste + LLM-Liste (getrennt), LLM-Zuordnung per User via String-IDs
-- Config → Services: HA REST API + Test-Button, HA MCP-Konfiguration + Test, WhatsApp Bridge, STT/TTS, Infrastruktur
-- Config → Retention: Log-Aufbewahrungsfristen konfigurierbar
-- Users-Tab: Expandierbare Karten, CLAUDE.md Inline-Editor pro User, Dropdown HA Person-Entity
-- Chat-Tab: kanalübergreifend, SSE Live-Updates, Agent-Online/Offline-Status
-- i18n: Key-basiertes Übersetzungssystem (de.json + en.json, 388 Keys), `t()` Funktion, `data-i18n` Attribute, Sprachauswahl im Header, alle JS-Module vollständig konvertiert
-- Design: Modernisiert mit Glassmorphism, Gradient-Buttons, CSS Custom Properties, Dark Theme
+- 263-Zeilen main.py (nach Router-Refactoring aus 4585 Zeilen)
+- 16 fachliche Router-Module unter `admin-interface/routers/`
+- i18n: Key-basiertes Übersetzungssystem (de.json + en.json, 728 Leaf-Keys, Parität Pflicht), `t()` Funktion, `data-i18n` Attribute
+- Design: Glassmorphism, Gradient-Buttons, CSS Custom Properties, Dark Theme
 - Responsive: Mobile-first CSS, Breakpoints bei 640px und 1024px
-- Modular: CSS extrahiert (admin.css), JS-Utilities extrahiert (i18n.js, utils.js, modal.js)
 - Modal-System: Callback-basiert, ersetzt alle `confirm()`-Dialoge
-- Restart-Detection: Erkennt welche Config-Änderungen Container-Neustarts erfordern, bietet Restart an
+- Restart-Detection: Erkennt welche Config-Änderungen Container-Neustarts erfordern
 
 **Docker Compose:**
 - `qdrant`, `admin-interface` immer aktiv
-- `instanz-alice` (Port 8001), `instanz-bob` (Port 8002), `whatsapp-bridge` unter Profil `agents`
-- `instanz-ha-assist`, `instanz-ha-advanced` vorbereitet (System-Instanzen, nicht user-erstellbar)
+- `whatsapp-bridge` unter Profil `agents`
+- Agent-Instanzen dynamisch via DockerAgentManager
+- TZ=Europe/Berlin in allen Containern
 
 **WhatsApp-Bridge (`whatsapp-bridge/`):**
 - Baileys + Node.js, Routing via Admin-Interface `/api/whatsapp-config`
 - JID-Allowlist: Bridge ignoriert Nachrichten von unbekannten Nummern stillschweigend
 - Routing-Tabelle: Bridge pollt `/api/whatsapp-config` alle 5 Min. → kein Neustart bei neuem User
-- WhatsApp-Modus global konfiguriert (Separate Nummer / An mich selbst + Prefix)
-- HTTP-API (Port 3001): `/status`, `/qr` (Base64-PNG), `/logout`
-- LID-Handling: Neuere WhatsApp-Versionen senden LID statt Phone-JID → `translateJid()` mit lokalem Cache + `signalRepository`-Fallback (nach NanoClaw-Strategie), pro User optionales `whatsapp_lid` Feld als Routing-Fallback
-- QR-Code Linking/Unlinking im Admin-Interface (Dienste-Tab): Status-Anzeige, QR-Code scanbar, Trennen-Button, Auto-Polling
-- `makeCacheableSignalKeyStore` für besseres Key-Caching (NanoClaw-Strategie)
+- LID-Cache: `lid_mappings` aus Backend beim `refreshConfig` vorbelegen (überlebt Container-Neustart)
+- Auto-LID-Learning: LID wird beim ersten Eingang automatisch via `POST /api/users/whatsapp-lid` persistiert
+- QR-Code Linking/Unlinking im Admin-Interface: Status-Anzeige, QR-Code scanbar, Start/Stop-Buttons
+- Voice Text-First: Text wird sofort gesendet, TTS-Audio folgt danach
 
 ---
 
@@ -757,176 +747,84 @@ Schritt 7: Privacy
 
 **Ziel:** Alice hört auf SSH. Erster echter Alltagskanal.
 
-**Bereits in Phase 1 vorgezogen ✅:**
-- Sliding Window + Async Extraktion
-- Logging-Infrastruktur (alle 4 Kategorien)
-- Admin-Interface inkl. Config-Tab, Users-Tab, CLAUDE.md-Editor
-- LLM-Provider-Slots (4x Akkordeon), LLM-Zuordnung per User
-- WhatsApp-Bridge komplett inkl. JID-Allowlist, Config-Polling, LID-Handling, QR-Code im Admin-Interface
+**Erledigte Aufgaben (vollständig):**
 
-**Bereits in Phase 2 erledigt ✅:**
-- WhatsApp-Bridge: QR-Code Linking/Unlinking im Admin-Interface
-- WhatsApp-Bridge: Inbetriebnahme, Alice chattet per WhatsApp mit Agent
-- LID→Phone-Auflösung (NanoClaw-Strategie), Dual-Routing (Phone-JID + LID)
-- STT: WhatsApp Sprachnachrichten (.ogg) → Baileys `downloadMediaMessage` → `POST /api/stt/stt.home_assistant_cloud` an HA (Nabu Casa) → Transkription → `[Sprachnachricht: ...]` an Agent
-- STT-Konfiguration (Entity, Sprache) dynamisch via `/api/whatsapp-config` aus Admin-Interface
-- Memory Scope-Klassifikation: LLM-basiert (Ollama) für automatische personal/household Zuordnung
-- Custom Mem0 Extraction Prompt: berücksichtigt beide Gesprächsseiten (User + Assistant)
-- TTS: Antwort → `POST /api/tts_proxy` an HA → OGG Opus Audio → WhatsApp, Voice-Auswahl im Admin-Interface, sprachoptimierter Prompt
-- TTS auch als Text: Antwort wahlweise zusätzlich als Textnachricht (neben Sprachnachricht)
-- Admin-Interface modernisiert: CSS/JS extrahiert, i18n-System, Modal-System, Responsive Design, Design-Modernisierung, Restart-Detection
+- WhatsApp-Bridge in Betrieb, Alice chattet per WhatsApp (Text + Sprache, bidirektional)
+- STT: WhatsApp Sprachnachrichten (.ogg) → Baileys `downloadMediaMessage` → `POST /api/stt/stt.home_assistant_cloud` an HA → Transkription
+- TTS: Antwort → `POST /api/tts_proxy` an HA → OGG Opus Audio → WhatsApp (Voice Text-First: Text sofort, Audio danach)
+- Admin-Interface: Auth als Middleware (bcrypt, Session-basiert), kein Token-Auth mehr
+- Admin-Interface: main.py God-File (4585 Z.) in 16 fachliche Router-Module aufgeteilt
+- Universeller LLM-Proxy (Fake-Ollama-API): `core/ollama_compat.py`, alle Provider, Tool-Calling
+- Multi-Provider Memory Extraction + Context Enrichment, Smart Rebuild mit Pre-Filtering + Pause/Resume
+- Traumprozess: Memory-Konsolidierung, Tages-Tagebuch (`/data/logs/dream/`), Dream-Status im Status-Tab
+- Proaktive Benachrichtigungen via Webhook
+- Fallback-LLM Kaskade bei Auth-/Connection-Fehlern
+- Explicit Memory Write: `_is_explicit_memory_request()` erkennt Befehle, `add_immediate()` schreibt sofort
+- Sprache pro User: `users[].language`, `{{RESPONSE_LANGUAGE}}` in CLAUDE.md Templates
+- OAuth setup-token, Credential-Watcher, zentraler Token-Store (`/data/claude-auth/{provider-id}/`)
+- Delegation-Feedback (Transition-Satz vor [DELEGATE]), Fortschritts-Feedback ("Moment, ich suche...")
+- Nachrichten-Debounce 500ms + AbortController in whatsapp-bridge/index.js
+- Admin-Modus via WhatsApp (`/admin` Command, 30-Min-Timeout, `haana-admin` Instanz)
+- Minimax MCP: Web-Suche + Bildanalyse als optionale Checkboxen
+- Timezone Europe/Berlin in allen Containern, `{{TIMEZONE}}` Platzhalter in System-Prompts
+- mem0 v1.1 Fix: `"version": "v1.1"` in Config (ohne: zwei LLM-Calls, MiniMax schlägt still fehl)
+- LID-Cache Fix: `lid_mappings` aus Backend beim `refreshConfig` vorbelegen
+- Context-Persistenz: `/data/context/` mit `haana:haana` Ownership, `save_context()` nach jeder `/chat` Anfrage
+- Auto-Start Standalone-Modus: `_autostart_agents()` für `HAANA_MODE in ("addon", "standalone")`
+- update.sh vollständig: HAANA_SELF_UPDATED-Guard, `--profile agents`, `/data/context` anlegen, restart-all
+- install.sh vollständig: haana-User-Setup, `.bash_profile`, `.bashrc`, `.claude_provider.env` Template, native Claude Code Installation
+- validate.sh Host-Detection: überspringt Container-Tests auf Host-Umgebung (261 Tests grün)
+- 8 spezialisierte Sub-Agenten: dev, core-dev, channel-dev, ui-dev, webdev, docs, reviewer, memory
+- Lessons Learned / Fallstricke in CLAUDE.md dokumentiert
+- Channel/Skill Framework Phase 1–3: `channels/base.py`, `skills/base.py`, `common/types.py`, `module_registry.py`, dynamisches Admin-Interface
+- WhatsApp-Tab und HA-Tab dynamisch (custom_tab_html Pattern, config_root)
+- Status-Tab Redesign: Channel-Karten, Dream-Status, Fake-Ollama-Status
+- Cleanup-Sprint: haana-addons/haana/ (DEPRECATED) entfernt, Terminal-Tab entfernt, Altlasten bereinigt
+- Code-Review System: REVIEW-2026-03-14.md vollständiges Projekt-Audit (Score 8/10)
+- XSS-Fix: escHtml/escAttr für API-Daten in status.js innerHTML
 
-**Weitere erledigte Aufgaben ✅:**
-- JS-Extraktion: ~1700 Zeilen inline JS in 7 separate Module extrahiert (app.js, chat.js, config.js, users.js, status.js, logs.js, whatsapp.js)
-- HA MCP Integration: Dual-Support für Built-in (6 Tools, SSE) und Extended ha-mcp Add-on (89 Tools, HTTP). Typ-Auswahl im Admin-Interface
-- Config-Tabs umstrukturiert: Services → Home Assistant / WhatsApp / Infra (logische Gruppierung)
-- HA Auto-Backup: Konfigurierbar im Admin-Interface, Agent erstellt HA-Backup vor Automations-/Script-Änderungen
-- MCP-Typ-Auswahl: Admin kann zwischen Built-in (SSE, 6 Tools) und Extended (HTTP, 89 Tools) MCP wählen
-- Test-Suite: 81 Unit-Tests (test_config: 42, test_agent: 16, test_memory: 15, test_i18n: 8) → jetzt 94
-- Integration-Test: Automatisierter End-to-End-Test, 16/16 PASS (User-CRUD, Chat, MiniMax, MCP, Memory, User-Setup-Verifizierung)
-- Multi-Agent Development: 4 spezialisierte Agenten (Webinterface, Review, Test, Docs) mit Briefing-Dokumenten
+**MS7 Proxmox Installer + HA Companion Addon:**
+- `install.sh`: interaktiver Proxmox LXC Installer (Community-Scripts-Stil)
+- `update.sh`: System + Stack Update-Script für den HAANA-LXC
+- `haana-addons/haana-companion/`: minimales HA Addon (~5MB) mit Ingress-Proxy, Token-Auth, SSO-Gateway
+- Companion App v2.0.0: vereinfacht auf SSO + Admin-Check (tote Endpoints entfernt)
 
-**Weitere erledigte Aufgaben (Session 2025-03-07) ✅:**
-- i18n vollständig: 388 Keys pro Sprache (de.json + en.json), alle JS-Module konvertiert (chat.js, config.js), keine hardcoded Strings mehr
-- Claude Code OAuth im Admin-Interface: Zwei Auth-Optionen (API-Key direkt + OAuth Login Flow), PTY-basierter OAuth-Flow mit /proc/net/tcp Port-Detection, kein Shell-Zugriff nötig
-- Docker Image Optimierung: 10.5 GB → 327 MB (sentence-transformers + PyTorch/CUDA entfernt, CPU-only)
-- Integration-Test: 16/16 PASS (User-CRUD, Chat, MiniMax, MCP, Memory, User-Setup)
-- MiniMax Provider: Env-Var-Mapping (MINIMAX_API_KEY, MINIMAX_BASE_URL), Auto-Detection
-- Provider-Redesign: Typspezifische Formulare (Anthropic, Ollama, MiniMax, OpenAI, Gemini, Custom), OAuth pro Provider mit eigenen Credential-Pfaden, `services.ollama_url` entfernt (wird aus Providern abgeleitet), Infra-Tab nur noch Qdrant, OpenAI/Gemini API-Keys in Container-Start
-
-**Weitere erledigte Aufgaben (HA Add-on Vorbereitung) ✅:**
-- AgentManager-Abstraktion: `core/process_manager.py` mit DockerAgentManager (Standalone) + InProcessAgentManager (Add-on), Auto-Detection via Docker-Socket
-- Docker-SDK Code aus `main.py` extrahiert, alle Endpoints nutzen `_agent_manager.*`
-- HA Add-on Repository: `haana-addons/` mit 3 Add-ons (haana, haana-ollama-cpu, haana-whatsapp)
-- S6 Overlay Services: Qdrant + HAANA als longrun Services mit Dependencies
-- CPU-Only Ollama Add-on: Auswählbare Modelle (Embedding: nomic/minilm/bge-m3, LLM: qwen3 0.6b/1.7b)
-- Datenpfade: Config in `/data` (HA-Backup automatisch), Logs in `/media/haana/logs` (HA Media-Backup optional)
-- Backup-Strategie: HA-eigene Backup-Routine statt SMB/CIFS (SMB nach hinten verschoben als optional)
-- Test-Suite: 83 Unit-Tests (44 test_config, 16 test_agent, 15 test_memory, 8 test_i18n) → jetzt 94
-
-**Weitere erledigte Aufgaben (Session 2026-03-07) ✅:**
-- Ollama als Primary LLM: `core/process_manager.py` neuer `ollama` Provider-Handler, OpenAI-kompatibler `/v1/` Endpoint
-- Leere Antworten Fix: `core/agent.py` nutzt `ResultMessage.result` als Fallback, Logging bei leerer Antwort
-- CLI-Model Fix: `_cli_model = None` bei Drittanbietern (Ollama, MiniMax, etc.), Env-Vars statt `--model` Flag
-- OAuth Credentials Fix: `HAANA_OAUTH_DIR` Env-Var + Symlink `~/.claude` im Container statt Host-Mount, Doppelklick-Szenario behoben
-- Image-Auswahl Fix: `_get_image(instance)` sucht instanz-spezifisches Docker-Image
-- Modell-Identität: Alle CLAUDE.md (4 Instanzen + 4 Templates) bereinigt, Agent behauptet nicht mehr bestimmtes Modell zu sein
-- Chat-UI Erweiterung: Model-Badge in Konversationsliste, aufklappbare Memories/Tools in Konversationsdetails
-- Conversation Log erweitert: `model` und `memory_results` Felder in `logger.py` + `agent.py`
-- i18n Fix: `I18n.load()` wird beim Seitenstart automatisch aufgerufen (fehlte vorher)
-
-**Weitere erledigte Aufgaben (Session 2026-03-08) ✅:**
-- Provider/LLM-Trennung: Config-Struktur umgebaut von `llm_providers[]` auf getrennte `providers[]` + `llms[]` Listen. User-Felder `primary_llm`/`fallback_llm`/`extraction_llm` sind jetzt String-IDs statt Integer-Slots
-- Provider-Umbenennung: Live-Sync in `cfg.providers` bei Umbenennung eines Providers
-- Restart-Feedback: LLM-Änderung im Users-Tab zeigt Restart-Hinweis
-- LLM-Provider-Routing: Korrekte Env-Var-Kette für alle Provider-Typen (Anthropic, Ollama, OpenAI, Gemini, MiniMax, Custom)
-- Env-Isolation (InProcess-Modus): `agent.py` snapshots `os.environ` bei Init (`self._env`), `memory.py` speichert URLs bei Init (`self._ollama_url`, `self._qdrant_url`), InProcessAgentManager setzt Env temporaer um Init und restored danach
-- Embedding-Mismatch-Detection: Erkennt wenn Embedding-Modell gewechselt wurde, warnt vor inkompatibler Collection
-- Addon-Autostart: `_autostart_agents()` startet alle User-Agents bei Add-on-Startup
-- WhatsApp-Config Addon-Modus: `HAANA_MODE == "addon"` nutzt `http://localhost:8080/agent/{uid}` statt Container-URL
-- core/ Volume Mount: `admin-interface` Container mounted `core/` als Volume fuer InProcessAgentManager
-- Test-Suite: 94 Unit-Tests (49 test_config, 20 test_agent, 17 test_memory, 8 test_i18n)
-
-**Weitere erledigte Aufgaben (Session 2026-03-08, Abend) ✅:**
-- Multi-Provider Memory Extraction: Jeder konfigurierte LLM nutzbar (Ollama/Anthropic/MiniMax/OpenAI/Gemini)
-- Context Enrichment: Optionale Pronomen-Aufloesung via LLM vor Mem0 (`HAANA_CONTEXT_ENRICHMENT`)
-- Konfigurierbares Kontext-Fenster: `context_before` (default 3) / `context_after` (default 2)
-- Smart Memory Rebuild: Pre-Filtering (triviale Eintraege ueberspringen), Rate-Limiting, Pause/Resume
-- Persistenter Rebuild-Fortschritt (save/load in `LOG_ROOT/.rebuild-progress/`)
-- Verwerfen-Button fuer pausierten Rebuild (`DELETE /api/rebuild-progress/{instance}`)
-- Multi-Provider Embeddings: Ollama/OpenAI/Gemini, google-genai Dependency
-- Rate-Limiter pro LLM: Token-Bucket, shared Registry ueber Instanzen
-- OAuth-Extraction via Claude CLI Subprocess (kein API-Key noetig)
-- Ollama Thinking-Support: Monkeypatch auf `client.chat`, `num_predict=8192` bei think=true
-- MiniMax ThinkingBlock Workaround: `_call_anthropic_direct()` statt Mem0-interne Verarbeitung
-- Mem0 LLM-Antworten sanitizen (MiniMax Dict/String Kompatibilitaet)
-- Qualitaetsvergleich Extraction-Modelle durchgefuehrt (Haiku CLI und MiniMax M2.5 beste Ergebnisse)
-- Test-Suite: 187 Unit-Tests (59 config, 23 agent, 31 memory, 8 i18n, 64 ollama-compat, 2 integration)
-
-**Weitere erledigte Aufgaben (Session 2026-03-09) ✅:**
-- Universeller LLM-Proxy (Fake-Ollama-API): `core/ollama_compat.py` unterstuetzt ALLE Provider (Ollama, Anthropic, MiniMax, OpenAI, Gemini)
-- Tool-Calling: Bidirektionale Format-Translation Ollama↔Anthropic↔OpenAI
-- Memory-Enrichment: Lightweight Qdrant-Query (Ollama Embedding, kein mem0) beim ersten Turn
-- Agent-Routing: Alle User-Agents automatisch als Ollama-Modelle exponiert
-- Delegation: `[DELEGATE]`-Marker loest Weiterleitung an konfigurierten Agent aus (ha-assist → ha-advanced)
-- ha_voice Channel: TTS-freundlich, keine Emojis/Markdown, keine automatische Memory-Extraktion
-- ha_voice Memory: Nur explizite Befehle ("merke dir", "vergiss nicht") loesen Extraktion aus
-- Explicit Memory Write: FERTIG — `_is_explicit_memory_request()` erkennt Befehle, `add_immediate()` schreibt sofort in Mem0, Log-Flag `memory_extracted: true`
-- ha_voice Instruktionen in alle CLAUDE.md Templates integriert
-- Log-Download (ZIP) und Loesch-Funktion im Admin-Interface (`/api/logs-download`, `/api/logs-delete`)
-- Sub-Agenten eingerichtet: Review (`validate.sh`), Webinterface, Test, Dokumentation
-- Initiale Dokumentation erstellt: `docs/LOGBOOK.md`, `docs/API.md`, `docs/CONFIG.md`, `docs/UI-HELP.md`
-- Test-Suite: 187 total (59 config, 23 agent, 31 memory, 8 i18n, 64 ollama-compat, 2 integration)
-
-**Weitere erledigte Aufgaben (Session 2026-03-09, Sprach-Feature) ✅:**
-- `users[].language` Feld: Antwortsprache pro User konfigurierbar (`de`/`en`/`tr`/`fr`/`es`/`it`, Default `"de"`)
-- CLAUDE.md Templates auf Englisch umgestellt, `{{RESPONSE_LANGUAGE}}` Platzhalter fuer Antwortsprache
-- Sprach-Dropdown im Users-Tab des Admin-Interface
-- i18n: Keys `users.language` + `users.language_hint` in de.json + en.json ergaenzt
-- i18n/Mehrsprachigkeit (Agenten-Antwortsprache): FERTIG
-
-**Weitere erledigte Aufgaben (Session 2026-03-09, Traumprozess) ✅:**
-- Traumprozess implementiert: Memory-Konsolidierung (Duplikate zusammenfuehren, Widersprueche aufloesen) via `_run_dream()` in `admin-interface/main.py`
-- Tages-Zusammenfassungen als durchsuchbares Tagebuch: `/data/logs/dream/{instance}/YYYY-MM-DD.jsonl`, geschrieben via `core/logger.py` `log_dream_summary()`
-- Konfigurierbarer Zeitplan (APScheduler), LLM-Auswahl und Enable/Disable-Toggle im Admin-Interface
-- "Dream Now"-Button fuer sofortigen manuellen Trigger (`POST /api/dream/trigger`)
-- 4 neue API-Endpunkte: `GET /api/dream/status`, `POST /api/dream/trigger`, `GET /api/dream/config`, `POST /api/dream/config`
-- Dream-Diary-Integration in `core/agent.py`: Agent beantwortet Datums-Fragen ("was habe ich am 1.2. gemacht?") durch automatisches Laden der Tages-Zusammenfassung als Context
-- Datums-Referenz-Extraktion: `_extract_date_references()` erkennt "gestern", "vorgestern", "yesterday", DD.MM.YYYY — laedt passende JSONL-Dateien via `_load_dream_summaries()`
-- Dream-UI-Abschnitt in `admin-interface/static/js/config.js` und `admin-interface/templates/index.html`
-
-**Weitere erledigte Aufgaben (Session 2026-03-09, Proaktive Benachrichtigungen) ✅:**
-- Proaktive Benachrichtigungen via Webhook: Admin-Interface empfaengt Events, loest Agent-Nachrichten aus
-
-**Weitere erledigte Aufgaben (Session 2026-03-09, Fallback-Kaskade) ✅:**
-- Fallback-LLM Kaskade bei Auth-/Connection-Fehlern: automatischer Wechsel auf naechsten LLM bei Fehler
-
-**Weitere erledigte Aufgaben (Session 2026-03-09, OAuth-Haertung) ✅:**
-- OAuth Login Flow auf `claude setup-token` umgestellt (`admin-interface/main.py`): langlebiger Token (~1 Jahr) statt kurzlebigem Session-Token
-- PTY-Spawn mit `TERM=dumb` + `NO_COLOR=1` + 500-Zeichen-Terminalbreite (gegen URL-Umbruch)
-- Token-Extraktion aus PTY-Output als Fallback (`sk-ant-...` Regex) wenn keine Credentials-Datei geschrieben wird
-- Zentraler Token-Store: `/data/claude-auth/{provider-id}/.credentials.json`; Agenten symlinken beim Start
-- Docker-Mount Fix: `/home/haana/.claude` (statt `/root/.claude`) → `/claude-auth` im admin-interface Container
-- Credential-Watcher in `core/agent.py`: ueberwacht `mtime`, setzt Fallback automatisch zurueck bei Token-Rotation — kein Container-Restart noetig
-- Status-Endpunkt `GET /api/claude-auth/status/{provider_id}`: "Token gueltig (langlebig)" bei `expiresAt=0`
-- Fallback-LLM bei Auth-Fehler automatisch nutzen: FERTIG (als Teil der Fallback-Kaskade)
-
-**Noch offen:**
-- HA Add-on in Test-HA installieren und testen
-- Backup auf TrueNAS (SMB/CIFS) → optional, nachrangig
-- i18n-Key fuer "Token gueltig (langlebig)" in admin-interface JS ergaenzen
-- `{{RESPONSE_LANGUAGE}}` Platzhalter in allen CLAUDE.md-Varianten pruefen und ggf. nachpflegen
-
-**Ergebnis:** Alice chattet per WhatsApp (Text + Sprache, bidirektional). Agent kennt ihn bereits (Phase 1 Memory). STT + TTS via Nabu Casa. Admin-Interface unter `http://10.83.1.11:8080` zugaenglich, responsiv, vollstaendig mehrsprachig. Claude OAuth pro Provider ohne SSH moeglich — `setup-token` mit langlebigen Tokens. 6 Provider-Typen mit typspezifischen Formularen. Provider/LLM-Trennung (`providers[]` + `llms[]`). HA Add-on Packaging vorbereitet (3 Add-ons, Dual-Mode Architektur). Env-Isolation fuer InProcess-Modus. Embedding-Mismatch-Detection. Ollama als Primary LLM nutzbar. Chat-UI mit Model-Badge und aufklappbaren Memory/Tool-Details. Universeller LLM-Proxy (Fake-Ollama-API) mit Tool-Calling und Agent-Routing/Delegation. Multi-Provider Memory Extraction + Context Enrichment. Smart Rebuild mit Pre-Filtering und Pause/Resume. Log-Management (Download/Loesch-Funktion). Traumprozess: Memory-Konsolidierung, Tages-Tagebuch (`/data/logs/dream/`), Datums-Referenz-Extraktion ("gestern", DD.MM.YYYY), Dream-Diary als Agent-Context. Proaktive Benachrichtigungen via Webhook. Fallback-LLM Kaskade. Dokumentation in `docs/`. Credential-Watcher fuer automatischen Fallback-Reset bei Token-Rotation.
+**Bekannte offene Punkte (technische Schuld aus Code-Review):**
+- core/memory.py (1548 Z.), config.js (2373 Z.), agent.py (1028 Z.), wizard.js (1028 Z.) — massiv über 400-Zeilen-Limit
+- /api/wa-proxy/ weiterhin ohne Auth-Prüfung
+- tts_also_text Config-Feld: Zombie-Feld (Feature entfernt, Feld bleibt)
+- localhost:11434 Fallback: 7 Stellen hardcodiert statt Konstante
+- LOGBOOK.md (EN) parallel zu LOGBUCH.md (DE) — doppelter Wartungsaufwand
 
 ---
 
-### Phase 3 – Kalender + Bob einladen
+### Phase 3 – Kalender + Bob einladen 📋 Geplant
 
 **Ziel:** Kalender integriert. Bob bekommt Zugang mit echtem Mehrwert gegenüber ChatGPT.
 
 **Aufgaben:**
-- CalDAV-Skill: Familien-Kalender (geteilt), Alices Kalender, Bobs Kalender
+- CalDAV-Skill vollständig implementieren (derzeit Stub): Familien-Kalender (geteilt), Alices Kalender, Bobs Kalender
 - Termine lesen, eintragen, Kalender-Übersicht
 - Daily Brief Skill: morgens automatisch, Termine des Tages + Wetter
 - Bob-Instanz freischalten: WhatsApp + HA App
 - Multi-Agent Kommunikation: interne `/message` API, beide werden benachrichtigt
 - household_memory Feedback-Loop für Kalender
-- Admin-Interface: Nutzer-Verwaltung, Bob anlegen, Memory-Einstellungen
+- Zweite User-Instanz einrichten (nach Planungs-Session)
 
 **Ergebnis:** Bob hat vom ersten Tag Kalender + Memory + gemeinsamer Kontext. Kein Voice-Zwang – tippen reicht.
 
 ---
 
-### Phase 4 – Home Assistant Integration
+### Phase 4 – Home Assistant Integration 📋 Geplant
 
 **Ziel:** HA-Steuerung per Chat, HAANA in Voice Pipeline, proaktive Benachrichtigungen.
 
 **HA Chat-Steuerung (großteils durch MCP abgedeckt ✅):**
 - ~~HA-Skill: Entities steuern, Status abfragen, Szenen aktivieren~~ → MCP Tools (89 Tools via ha-mcp Add-on)
-- ~~HA-Skill: Automationen per Chat erstellen~~ → MCP Tools + Auto-Backup (konfigurierbar im Admin-Interface)
+- ~~HA-Skill: Automationen per Chat erstellen~~ → MCP Tools + Auto-Backup
 - ~~Einkaufsliste-Skill: HA Shopping List~~ → MCP Tools (todo/shopping list)
 - Monitoring-Skill: Proxmox, TrueNAS, OPNsense Uptime (nicht HA, separater Skill nötig)
+- HA-Entity-Index in Qdrant: Nachtprozess, Bereich→Entity-Zuordnung, Morgenbrief-Integration
 
 **HAANA Voice Backend:**
 - Drei Fake-Modelle: HAANA-Alice, HAANA-Bob, HAANA-HA
@@ -943,13 +841,12 @@ Schritt 7: Privacy
 **Traumprozess:**
 - Schlaf-Subscription: beide Focus Mode "Schlafen" > 30min → Trigger
 - Fallback: täglich 03:00 Uhr
-- Admin-Interface: Traumprozess-Konfiguration, Protokoll
 
 **Ergebnis:** "Alexa kann weg." Chat-Steuerung, Voice per Hand-Trigger, proaktive Alerts, HA bleibt zuverlässiger Kern.
 
 ---
 
-### Phase 5 – Voice Satellites
+### Phase 5 – Voice Satellites 📋 Geplant
 
 **Ziel:** Hands-free Sprachsteuerung wenn HA Beta-Probleme gelöst sind.
 
@@ -967,7 +864,7 @@ Schritt 7: Privacy
 
 ---
 
-### Phase 6 – Wissensbasis
+### Phase 6 – Wissensbasis 📋 Geplant
 
 **Ziel:** Gemeinsame durchsuchbare Wissensbasis für Rezepte, Dokumente, Haushaltswissen.
 
@@ -981,21 +878,34 @@ Schritt 7: Privacy
 
 ---
 
-### Phase 7 – Optimierung + Community
+### Phase 7 – Optimierung + Community 📋 Geplant
 
 - OLLAMA_KEEP_ALIVE und OLLAMA_NUM_PARALLEL tunen
 - Vision-Modell evaluieren: ministral-3-32k:3b vs ministral-3:8b vs qwen3-vl:8b im echten Betrieb
 - Daily Brief persönlicher, kontextsensitiver
 - Setup-Wizard polieren, README für Community
 - GitHub Repo public
-- HA Add-on Paketierung: ✅ Grundstruktur fertig (3 Add-ons, S6 Services, Dual-Mode AgentManager, Env-Isolation, Autostart). Noch zu testen in HA.
-- Dokumentation: ✅ Initiale Docs erstellt (`docs/LOGBOOK.md`, `docs/API.md`, `docs/CONFIG.md`, `docs/UI-HELP.md`)
+- HA Add-on Paketierung: Grundstruktur fertig (haana-companion, Dual-Mode AgentManager). Noch zu testen in HA.
+- Dokumentation: ✅ Initiale Docs erstellt (`docs/LOGBUCH.md`, `docs/API.md`, `docs/CONFIG.md`, `docs/UI-HELP.md`)
 
 ---
 
 ## Für später – Offene Punkte
 
-**Features:**
+### Neue Features (📋 Geplant)
+
+- **SOUL.md pro User-Instanz**: Persönlichkeit vom Agent selbst gepflegt, Interview beim ersten Start
+- **HA-Entity-Index in Qdrant**: Nachtprozess, Bereich→Entity-Zuordnung, Morgenbrief-Integration
+- **Hybrid Search**: BM25 + Vector in Qdrant
+- **Inter-Agenten-Kommunikation**: Agenten können sich gegenseitig beauftragen
+- **WhatsApp unverarbeitete Nachrichten Notification**: im Admin-Interface anzeigen
+- **Update-Button eigene Logik**: nutzt eigene API statt Aufruf von update.sh
+- **WS-Handler save_context**: WebSocket-Handler speichert Kontext bei Disconnect (derzeit nur /chat)
+- **Onboarding-Flow**: Git SSH-Key Setup, Fork-Anleitung im Admin-Interface
+- **HA-Auth als zweite Login-Option**: alternativ zu Passwort-Auth
+- **Telegram-Channel vollständig implementieren**: derzeit Stub
+- **Kalender-Skill vollständig implementieren**: derzeit Stub (Tool-Definitionen vorhanden)
+- **Zweite User-Instanz einrichten**: nach Planungs-Session
 - Bring! Integration: Rezepte → konsolidierte Zutatenliste → Bring! API → Abgleich mit Vorrat
 - Kamera-Skill: "Zeig mir die Haustür" per WhatsApp (Vision-Modell bereit, Kamera fehlt noch)
 - Paperless-NGX Integration: Dokumente ablegen, Assistent kann darin nachschlagen
@@ -1004,19 +914,32 @@ Schritt 7: Privacy
 - Graph-Memory (Neo4j) für komplexere Zusammenhänge zwischen Erinnerungen
 - Wyoming Whisper + Piper einrichten als HA-Fallback STT/TTS
 
-**Infrastruktur:**
-- LLM-Fallback für Memory-Operationen: Scope-Klassifikation + Extraktion nutzen konfigurierte Provider-Slots (Primär → Fallback, z.B. Ollama → MiniMax). Failover-Logik ist inline in `core/agent.py` (kein separates cascade.py)
+### Infrastruktur
+
+- LLM-Fallback für Memory-Operationen: Scope-Klassifikation + Extraktion nutzen konfigurierte Provider-Slots
 - Authentik oder Keycloak als einheitliches Auth-System für alle Self-Hosted-Dienste
 - Multi-User-Wissensbasis (Outline/AppFlowy) wenn Auth-System steht
 - MariaDB direkter HA-Zugriff (fragil wegen undokumentiertem Schema, vorerst Webhook-Weg)
 - HA Add-on Store Veröffentlichung (Phase 7)
-- Backup auf TrueNAS via SMB/CIFS (optional, nachrangig – HA-Backup-Routine reicht für Add-on-Modus)
+- Backup auf TrueNAS via SMB/CIFS (optional, nachrangig – HA-Backup-Routine reicht)
 
-**Evaluation:**
+### Technische Schuld (aus Code-Review 2026-03-14)
+
+- core/memory.py (1548 Z.) aufteilen: `memory_types.py`, `memory_config.py`, `memory.py`
+- config.js (2373 Z.) aufteilen — kritisch
+- core/agent.py (1028 Z.) aufteilen — kritisch
+- admin-interface/static/js/wizard.js (1028 Z.) aufteilen — kritisch
+- /api/wa-proxy/ Auth: BRIDGE_SECRET prüfen analog zu /api/whatsapp-config/
+- localhost:11434 Fallback: Konstante in core/constants.py (7 Stellen)
+- tts_also_text Zombie-Feld aus whatsapp.py Config-Response entfernen
+- LOGBOOK.md (EN) oder LOGBUCH.md (DE): nur eine Datei pflegen
+
+### Evaluation
+
 - bge-m3 + ministral-3-32k:3b als lokaler Stack: Extraktion und Voice bestätigt, Vision noch zu evaluieren
 - Vision-Qualität: ministral-3-32k:3b vs ministral-3:8b vs qwen3-vl:8b im echten Betrieb
 - Traumprozess-Qualität: ministral-3-32k:3b ausreichend oder größeres Modell nötig?
-- HA MCP vs REST API: ✅ Evaluiert – Extended ha-mcp Add-on (89 Tools) als Standard, Built-in (6 Tools) als Fallback. MCP macht viele geplante Skills obsolet (ha-automations, einkaufsliste, HA-Steuerung)
+- HA MCP vs REST API: ✅ Evaluiert – Extended ha-mcp Add-on (89 Tools) als Standard
 
 ---
 
@@ -1054,3 +977,6 @@ Schritt 7: Privacy
 - **Kein Vendor-Lock-in** – Provider-Abstraktion von Anfang an, API-Keys nie hardcoden
 - **Docker-first** – alles im Container, Ports dokumentiert
 - **Git für alles** – CLAUDE.md, Skills, Konfiguration versioniert
+- **Keine Dateien über 400 Zeilen** – max 400 Zeilen pro Datei, bei Überschreitung aufteilen
+- **Keine userspezifischen Daten im Code** – User-Instanzen immer aus config.json, nie hardcodiert
+- **4-Augen-Prinzip** – Hauptagent plant und delegiert, Sub-Agenten implementieren, reviewer prüft
