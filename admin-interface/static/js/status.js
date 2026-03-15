@@ -326,6 +326,13 @@ async function openDreamDiary(inst) {
     if (r.ok) entries = await r.json();
   } catch(e) { /* still show modal */ }
 
+  // Deduplizieren: pro Datum nur neuesten Eintrag behalten (API liefert absteigend)
+  const byDate = new Map();
+  for (const e of entries) {
+    if (!byDate.has(e.date || '')) byDate.set(e.date || '', e);
+  }
+  entries = Array.from(byDate.values());
+
   if (!entries || entries.length === 0) {
     Modal.showAlert(t('config_memory.dream_diary_empty'));
     return;

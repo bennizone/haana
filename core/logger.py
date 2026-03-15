@@ -158,7 +158,7 @@ def log_dream_summary(
     """
     root = _log_root()
     path = root / "dream" / instance / f"{date}.jsonl"
-    record = {
+    new_record = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "instance": instance,
         "date": date,
@@ -169,8 +169,38 @@ def log_dream_summary(
     }
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        existing_lines: list[dict] = []
+        existing_entry: dict | None = None
+        if path.exists():
+            for raw in path.read_text(encoding="utf-8").splitlines():
+                raw = raw.strip()
+                if not raw:
+                    continue
+                try:
+                    parsed = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+                if parsed.get("date") == date:
+                    existing_entry = parsed
+                else:
+                    existing_lines.append(parsed)
+        if existing_entry is not None:
+            merged = {
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "instance": instance,
+                "date": date,
+                "summary": summary if summary else existing_entry.get("summary", ""),
+                "consolidated": existing_entry.get("consolidated", 0) + consolidated,
+                "contradictions": existing_entry.get("contradictions", 0) + contradictions,
+                "duration_s": round(existing_entry.get("duration_s", 0.0) + duration_s, 2),
+            }
+            existing_lines.append(merged)
+            with path.open("w", encoding="utf-8") as f:
+                for entry in existing_lines:
+                    f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        else:
+            with path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(new_record, ensure_ascii=False) + "\n")
     except Exception as e:
         _logger.error(f"[HaanaLogger] Dream-Log schreiben nach {path} fehlgeschlagen: {e}")
 
