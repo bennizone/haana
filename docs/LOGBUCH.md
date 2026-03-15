@@ -5,6 +5,24 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ---
 
+## 2026-03-15 — fix(ui): Config-Tab-Visibility + Agenten-Kachel
+
+**Aenderungen:**
+- `admin-interface/static/js/sidebar.js`: `navigateTo()` blendet Config-Tab-Buttons per `visibleCfgTabs` aus — Memory-Seite zeigt nur Memory-Tab, Provider-Seite nur Provider/LLMs/Embeddings
+- `admin-interface/static/js/channels.js`: `loadCoreTiles()` fetcht parallel `/api/users` und normalisiert `container_status` → `status` fuer `_renderCoreTiles()`; Dashboard-Kachel zeigt korrekte Agenten-Anzahl statt immer "0 aktiv"
+- `admin-interface/templates/index.html`: Cache-Buster sidebar.js v6, channels.js v3
+
+**Entscheidungen:**
+- Reviewer Score 8/10
+- Commit: `90036fe`
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert 90036fe`
+
+---
+
 ## 2026-03-15 — Code-Audit
 
 **Scope:** Vollständiges Projekt-Audit (core/, admin-interface/, tests/, channels/, skills/)
