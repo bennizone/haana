@@ -22,7 +22,7 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 **Offene Punkte:**
 - Keine
 
-**Rollback:** `git revert <hash>` (Hash nach Commit eintragen)
+**Rollback:** `git revert 87ca071`
 
 ---
 
