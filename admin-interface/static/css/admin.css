@@ -177,16 +177,21 @@ body {
 
 /* Status dot in sidebar */
 .sidebar-dot {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
   margin-left: auto;
 }
-.sidebar-dot.connected { background: var(--green); }
-.sidebar-dot.degraded  { background: var(--yellow); }
-.sidebar-dot.error     { background: var(--red); }
-.sidebar-dot.unconfigured { background: var(--muted); }
+.sidebar-dot.active   { background: #00e676; }
+.sidebar-dot.warning  { background: #ff9800; }
+.sidebar-dot.error    { background: #ff5252; }
+.sidebar-dot.inactive {
+  background: transparent;
+  border: 2px solid #666;
+  width: 8px;
+  height: 8px;
+}
 
 /* Sidebar footer (Einstellungen) */
 .sidebar-footer {

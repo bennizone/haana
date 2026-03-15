@@ -172,9 +172,9 @@ function _updateSidebarDots(data) {
     var el = document.getElementById(dotId);
     if (!el) return;
     el.className = 'sidebar-dot ' + (
-      m.status === 'connected' ? 'connected' :
-      m.status === 'degraded'  ? 'degraded'  :
-      m.status === 'error'     ? 'error'      : 'unconfigured'
+      m.status === 'connected' ? 'active'   :
+      m.status === 'degraded'  ? 'warning'  :
+      m.status === 'error'     ? 'error'    : 'inactive'
     );
   });
 }
