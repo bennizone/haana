@@ -294,9 +294,13 @@ async def system_update():
 
     async def _do_update():
         import asyncio as _asyncio
+        import httpx as _httpx
         loop = _asyncio.get_running_loop()
         _docker_client = getattr(agent_manager, "_client", None)
+        admin_port = os.environ.get("HAANA_ADMIN_PORT", "8080")
+
         try:
+            # 1. Git update (als root im Container, kein su nötig)
             p1 = await _asyncio.create_subprocess_exec(
                 "git", "-C", host_path, "fetch", "origin",
                 stdout=_asyncio.subprocess.DEVNULL, stderr=_asyncio.subprocess.DEVNULL,
@@ -308,6 +312,7 @@ async def system_update():
             )
             await p2.wait()
 
+            # 2. Docker-Images bauen via SDK
             if _docker_client:
                 await loop.run_in_executor(
                     None,
@@ -322,12 +327,57 @@ async def system_update():
                         tag="haana-admin-interface:latest", rm=True, decode=True
                     )),
                 )
+
+            # 3. docker compose --profile agents up -d --build (startet auch WA-Bridge)
+            p3 = await _asyncio.create_subprocess_exec(
+                "docker", "compose", "--project-directory", host_path,
+                "--profile", "agents", "up", "-d", "--build",
+                stdout=_asyncio.subprocess.DEVNULL, stderr=_asyncio.subprocess.DEVNULL,
+            )
+            await p3.wait()
+
+            # 4. /data/context sicherstellen (Sliding-Window-Persistenz)
+            data_context = Path("/data/context")
+            data_context.mkdir(parents=True, exist_ok=True)
+            try:
+                os.chown(data_context, 1000, 1000)
+            except Exception:
+                pass
+
+            # 5. Agenten neu starten (vor Admin-Interface-Restart, da Container sich sonst selbst beendet)
+            await _asyncio.sleep(5)
+            for _ in range(30):
+                try:
+                    async with _httpx.AsyncClient(timeout=2.0) as client:
+                        r = await client.get(f"http://localhost:{admin_port}/health")
+                        if r.status_code == 200:
+                            break
+                except Exception:
+                    pass
                 await _asyncio.sleep(1)
+
+            cfg = load_config()
+            token = cfg.get("admin_session", "")
+            if token:
+                try:
+                    async with _httpx.AsyncClient(timeout=10.0) as client:
+                        await client.post(
+                            f"http://localhost:{admin_port}/api/instances/restart-all",
+                            headers={"Authorization": f"Bearer {token}"},
+                        )
+                    logger.info("[system/update] Agenten neu gestartet")
+                except Exception as e:
+                    logger.warning(f"[system/update] Agent-Restart fehlgeschlagen: {e}")
+
+            # 6. Admin-Interface neu starten (letzter Schritt — beendet diesen laufenden Code)
+            await _asyncio.sleep(2)
+            if _docker_client:
                 try:
                     c = _docker_client.containers.get("haana-admin-interface-1")
                     c.restart()
                 except Exception:
                     pass
+
         except Exception as e:
             logger.error(f"[system/update] Fehler: {e}")
 
