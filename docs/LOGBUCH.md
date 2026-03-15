@@ -33,6 +33,109 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ---
 
+## 2026-03-14 — Spezialisierte Sub-Agenten + HA-Debugging + Fallstricke in CLAUDE.md
+
+**Aenderungen:**
+- `CLAUDE.md`: Neuer Abschnitt "HA Debugging (Lesend)" mit curl-Beispielen fuer HA-Logs und Entity-States; Sub-Agenten-Tabelle um `core-dev`, `channel-dev`, `ui-dev` erweitert; neuer Abschnitt "Bekannte Fallstricke" mit Lessons Learned aus echten Bugs (SDK Tool-Namen, i18n-Paritaet, Cache-Buster, XSS, 400-Zeilen-Limit)
+- `.claude/agents/core-dev.md`: Neuer Spezialist fuer `core/` — zustaendig fuer Agent-Logik, Memory, LLM-Provider; Impact-Report-Pflicht bei jeder Aenderung
+- `.claude/agents/channel-dev.md`: Neuer Spezialist fuer `channels/` und `skills/` — MODULE.md-Pflicht fuer jedes neue Modul
+- `.claude/agents/ui-dev.md`: Neuer Spezialist fuer `admin-interface/` — harte Regeln zu i18n-Paritaet, Cache-Buster-Pflicht und XSS-Schutz
+- `.claude/agents/reviewer.md`: Impact-Check-Checkliste ergaenzt; Lessons-Learned Pflicht-Checks hinzugefuegt
+- `.claude/agents/docs.md`: Post-Commit-Pflichten hinzugefuegt (git status nach commit, Verifikation)
+- `.claude/agents/dev.md`: Hinweis auf Spezialisten-Agenten (`core-dev`, `channel-dev`, `ui-dev`) hinzugefuegt
+
+**Entscheidungen:**
+- Generischer `dev`-Agent war zu breit — spezialisierte Agenten kennen die genauen Invarianten ihres Bereichs (i18n-Paritaet, Impact-Report, MODULE.md) und koennen diese durchsetzen
+- Fallstricke in CLAUDE.md dokumentiert damit kuenftige Agenten nicht dieselben Fehler wiederholen (PascalCase Tool-Namen, stale DOM, Cache-Buster vergessen)
+- HA-Debugging-Befehle direkt in CLAUDE.md reduzieren Recherche-Zeit bei Live-Debugging
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert da3aeb6`
+
+---
+
+## 2026-03-14 — save_context nach jeder HTTP /chat Anfrage
+
+**Aenderungen:**
+- `core/api.py`: Nach `run_async()` im `/chat`-Handler wird `agent.memory.save_context(agent._context_path)` aufgerufen
+
+**Entscheidungen:**
+- Context-Fenster wurde bisher nach HTTP-Anfragen nicht persistiert — bei Neustart ging das Sliding-Window verloren
+- Konsistentes Verhalten mit dem WebSocket-Handler und dem REPL hergestellt
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert 41cc0f6`
+
+---
+
+## 2026-03-14 — HA-Tab Timing-Bug + einheitlicher Channel-Status-Block
+
+**Aenderungen:**
+- `channels/base.py`: `get_connection_status()` als optionale Methode mit Default `None` eingefuehrt
+- `channels/ha_voice/channel.py`: `get_connection_status()` implementiert — gibt `connected`, `error` oder `unconfigured` zurueck
+- `channels/whatsapp/channel.py`: `get_connection_status()` gibt `None` zurueck (WhatsApp hat eigenen Status-Block in `custom_tab_html`)
+- `admin-interface/routers/modules.py`: `connection_status` Feld in `GET /api/modules` Response ergaenzt
+- `admin-interface/static/js/modules.js`: `setTimeout` nach DOM-Einfuegung fuer ha-voice behebt leere Felder beim ersten Oeffnen (Timing-Bug); `_renderChannelStatusBar()` rendert kompakten Status-Bar vor Custom-HTML
+- `admin-interface/static/css/admin.css`: neue Klassen `.channel-status-bar` und `.status-dot-sm` (v11)
+- `admin-interface/templates/index.html`: Cache-Buster auf v11/v3 angehoben
+
+**Entscheidungen:**
+- HA-Tab lud Felder beim ersten Oeffnen leer, weil DOM noch nicht fertig gerendert war — `setTimeout(0)` reicht als Fix
+- Status-Block wird jetzt einheitlich via `_renderChannelStatusBar()` generiert statt je Channel individuell
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert 637e1b4`
+
+---
+
+## 2026-03-14 — Companion v2.0.0: SSO-Gateway-Only
+
+**Aenderungen:**
+- `admin-interface/routers/companion.py`: Endpunkte `/api/companion/register`, `/api/companion/refresh-persons`, `/api/companion/ha-mcp-status`, `/api/ha-mcp-status` entfernt; Version in ping-Response auf `2.0.0` angehoben; Modulbeschreibung aktualisiert
+- `haana-addons/haana-companion/run.py`: `_detect_ha_url()`, `_fetch_ha_persons()`, `_check_ha_mcp_addon()`, `_ws_person_watcher()`, `_do_handshake()` und zugehoerige Import (`urlparse`) entfernt; Companion reduziert auf SSO-Gateway + HA-Admin-Check
+- `haana-addons/haana-companion/config.yaml`: Version auf `2.0.0` angehoben; `ha_url` Konfigurationsfeld entfernt
+- `haana-addons/haana-companion/CHANGELOG.md`: v2.0.0 Eintrag ergaenzt
+- haana-companion v2.0.0 auf `github.com/bennizone/haana-companion` (Commit 60aad04) gepusht
+
+**Entscheidungen:**
+- Companion hat zu viele HA-Interna selbst abgefragt (Personen, MCP, URL-Erkennung) — das fuehrt zu Doppelpflege und fragiler Supervisor-Abhaengigkeit
+- Neues Modell: HAANA LXC holt HA-Daten direkt via konfigurierter HA URL + Long-Lived Token
+- Companion ist nur noch SSO-Gateway (Ingress-Proxy + Einmal-Token-Ausstellung) — minimal, stabil, wartungsarm
+- validate.sh: 261/261 Tests gruen; Reviewer-Score: 9/10
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert a60c340`
+
+---
+
+## 2026-03-14 — Passwort-Aendern-Formular vereinfacht
+
+**Aenderungen:**
+- `admin-interface/routers/auth_routes.py`: `current_password`-Feld aus dem Passwort-Aendern-Endpunkt entfernt — Session-Auth reicht als Authentifizierungsnachweis
+- `admin-interface/static/js/security.js`: Client-seitiger Match-Check fuer neues Passwort + Bestaetigung vor Submit; API-Body sendet nur noch `new_password`
+- `admin-interface/templates/index.html`: `current-password`-Feld entfernt, neues `sec-confirm-password`-Feld hinzugefuegt
+- `admin-interface/static/i18n/de.json`: 2 neue Keys `auth.confirm_password`, `auth.password_mismatch`
+- `admin-interface/static/i18n/en.json`: 2 neue Keys `auth.confirm_password`, `auth.password_mismatch`
+
+**Entscheidungen:**
+- `current_password` ist redundant: Wer eingeloggt ist, hat sich bereits authentifiziert — doppelte Eingabe bietet keinen Sicherheitsvorteil in dieser Architektur
+- Passwort-Bestaetigung (`sec-confirm-password`) verhindert Tippfehler clientseitig ohne Server-Round-Trip
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert 9608649`
+
+---
+
 ## 2026-03-14 — Autostart-Fix + update.sh Container-Management
 
 **Problem:** Im Standalone-Modus (Docker) wurden Agents nach Neustart/Update nicht automatisch gestartet. WA-Bridge wurde von update.sh nicht mitgestartet.
@@ -53,6 +156,173 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 **Rollback:**
 - `git revert 0efec6a`
+
+---
+
+## 2026-03-13 — Dream-Log ohne Summary, Status-Polling, report-Felder
+
+**Aenderungen:**
+- `admin-interface/routers/dream.py`: `_run_dream()` — `log_dream_summary` wird jetzt auch aufgerufen wenn kein textuelles Summary vorhanden, aber `total_consolidated > 0` oder `total_cleaned > 0`
+- `admin-interface/static/js/status.js`: `runDreamNow()` — Status-Polling alle 3s nach Dream-Start (max. 10 Versuche / 30s); Button wird erst nach Abschluss reaktiviert; `loadDreamStatus()` — Felder korrekt aus `d.report?.consolidated`, `d.report?.contradictions`, `d.report?.duration_s` gelesen statt flacher `d.*`-Felder
+- `admin-interface/templates/index.html`: Cache-Buster `status.js?v=14`
+
+**Entscheidungen:**
+- Log-Eintrag auch ohne LLM-Summary sinnvoll, sobald Konsolidierungen oder Bereinigungen stattgefunden haben — verhindert stille Dream-Laeufe ohne Spur im Tagebuch
+- Polling-Mechanismus noetig, da Dream asynchron laeuft und der Button sonst dauerhaft disabled bleibt
+- API liefert `report` als verschachteltes Objekt — Flat-Field-Zugriffe im Frontend waren fehlerhaft (immer `null`)
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert 32b37f4`
+
+---
+
+## 2026-03-13 — Defensive Null-Checks in status.js und whatsapp.js
+
+**Aenderungen:**
+- `admin-interface/static/js/status.js`: `cfg.dream?.schedule` zu `cfg?.dream?.schedule` geaendert — verhindert TypeError wenn `cfg` noch null ist (z.B. beim ersten Tab-Laden vor der Config-Antwort)
+- `admin-interface/static/js/whatsapp.js`: Early-Return Guard in `refreshWaStatus()` auf alle 6 Pflicht-Elemente erweitert (`dot`, `txt`, `offl`, `info`, `qrBox`, `logoutBtn`) — verhindert Fehler wenn WA-Sektion noch nicht im DOM ist
+- `admin-interface/templates/index.html`: Cache-Buster `status.js?v=12` und `whatsapp.js?v=6` gesetzt
+
+**Entscheidungen:**
+- Optional chaining auf `cfg` selbst notwendig, da `cfg` beim initialen Tab-Render noch null sein kann
+- Vollstaendiger Guard auf alle 6 WA-Elemente statt nur 3 verhindert partielle DOM-Fehler bei fruehzeitigen Polling-Aufrufen
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert ba908da`
+
+---
+
+## 2026-03-13 — Status-Tab als Standard, Modal.showAlert fuer leeres Dream-Tagebuch
+
+**Aenderungen:**
+- `admin-interface/static/js/status.js`: `openDreamDiary()` — leere Eintraege zeigen jetzt `Modal.showAlert()` statt einem leeren Modal-Body; fruehzeitiger `return` verhindert unnoetige `showModal()`-Aufrufe
+- `admin-interface/static/js/modal.js`: neue Funktion `showAlert(message)` implementiert und exportiert; nutzt `hideCancel: true` + leerer `onConfirm`-Handler; XSS-safe via `escHtml`
+- `admin-interface/templates/index.html`: `active`-Klasse von `conversations`-Tab und `panel-conversations` auf `status`-Tab und `panel-status` verschoben — Status ist jetzt Standard-Tab beim Laden; Cache-Buster `modal.js?v=4` und `status.js?v=11` erhoht
+
+**Entscheidungen:**
+- `Modal.showAlert()` als wiederverwendbare Convenience-Funktion statt inline showModal mit hartcodiertem HTML verbessert Konsistenz und Lesbarkeit
+- Status-Tab als Standard sinnvoll da er den Systemzustand auf einen Blick zeigt — Conversations werden seltener direkt beim Oeffnen des Admin-UIs benoetigt
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert 522be8e`
+
+---
+
+## 2026-03-13 — Status-Tab Redesign: Modul-Integration
+
+**Aenderungen:**
+- `channels/base.py`: neue `get_status_info(self, config) -> dict` Methode mit Default-Return `{"status": "unconfigured", "label": "Nicht konfiguriert"}`
+- `skills/base.py`: analoge `get_status_info()` Default-Methode
+- `channels/whatsapp/channel.py`: `get_status_info()` — "connected" wenn User mit Phone konfiguriert (Details: "Bridge-Status nicht geprueft"), Metrik: Modus
+- `channels/ha_voice/channel.py`: `get_status_info()` — "connected" bei URL+Token, "degraded" bei nur URL, "unconfigured" sonst; Metriken: MCP-Status, STT/TTS-Entities
+- `channels/telegram/channel.py`: `get_status_info()` — "connected" wenn Bot-Token gesetzt, sonst "unconfigured"; Details: Stub-Hinweis
+- `admin-interface/routers/modules.py`: neuer `GET /api/modules/status` Endpoint aggregiert `get_status_info()` aller registrierten Channels/Skills, einzeln try/except abgesichert
+- `admin-interface/templates/index.html`: Fake-Ollama `.cfg-section` entfernt; zwei neue Sektionen: `.status-section-title` + `#status-channels-grid` und `#status-skills-grid`
+- `admin-interface/static/js/status.js`: `loadOllamaCompatStatus()` zu no-op Stub; neue `loadModuleStatus()` rendert Channels/Skills in jeweilige Grids; `moduleAction()` Placeholder; XSS-safe via escHtml/escAttr
+- `admin-interface/static/css/admin.css`: neue Klassen `.status-dot-connected/degraded/error/disabled/unconfigured`, `.status-section-title`, `.module-metrics`, `.module-metric`
+- `admin-interface/static/i18n/de.json` + `en.json`: 7 neue Keys (`status.channels_title`, `status.skills_title`, `status.module_unconfigured/connected/degraded/error/disabled`); Paritaet 714 Keys
+
+**Entscheidungen:**
+- Einheitliche `get_status_info()` Methode in Base-Klassen erlaubt erweiterbare Status-Aggregation ohne Aenderung am Endpoint
+- Fake-Ollama-Sektion im Status-Tab war redundant mit HA Voice Channel — Entfernung reduziert Duplizierung
+- try/except pro Modul im Endpoint verhindert, dass ein fehlerhaftes Modul den gesamten Status-Abruf unterbricht
+
+**Offene Punkte:**
+- `moduleAction()` ist noch ein Placeholder — konkrete Aktionen pro Modul koennen spaeter ergaenzt werden
+
+**Review:** Score 9/10 — keine kritischen Findings, alle Warnungen behoben
+
+**Rollback:** `git revert a5a7b87`
+
+---
+
+## 2026-03-13 — HA-Tab dynamisch — custom_tab_html Pattern + config_root
+
+**Commits:** 22de6e9
+
+**Aenderungen:**
+- `channels/ha_voice/channel.py`: `config_root = "services"`, `get_config_schema()` → `[]`, `get_custom_tab_html()` mit vollstaendigem HTML-Block (22 Element-IDs)
+- `admin-interface/templates/index.html`: Hardcodierter `cfgtab-ha` Button und `cfgpanel-ha` Block entfernt
+- `admin-interface/static/js/modules.js`: Condition erweitert — Tabs werden auch bei leerem `config_schema` erstellt wenn `custom_tab_html` vorhanden; `_renderModuleConfigFields` wird uebersprungen wenn Schema leer
+- `admin-interface/static/js/app.js`: `showCfgTab('mod-ha_voice')` → `resetSectionHa()` Callback
+- `admin-interface/static/i18n/{de,en}.json`: Toter Key `config.sub_tabs.home_assistant` entfernt
+- Pattern etabliert: Channels mit komplexer UI koennen `config_schema=[]` + `get_custom_tab_html()` nutzen
+
+**Entscheidungen:**
+- Vollstaendig dynamischer Tab vermeidet Synchronisierungsprobleme zwischen hardcodiertem HTML und Python-Channel-Klasse
+- `config_root = "services"` stellt sicher dass save/load den richtigen Config-Bereich adressieren
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert 22de6e9`
+
+---
+
+## 2026-03-13 — Fix: VALID_SCOPES-Check entfernt — User-Memory-Scopes werden nicht mehr blockiert
+
+**Aenderungen:**
+- `core/memory.py`: `VALID_SCOPES`-Konstante (`{"household_memory", "admin_memory"}`) entfernt
+- `core/memory.py`: `if scope not in VALID_SCOPES`-Check in `add()` (ehemals Zeilen 1019–1021) entfernt
+
+**Entscheidungen:**
+- Der Check blockierte faelschlicherweise alle dynamischen User-spezifischen Scopes (`{instance}_memory`) mit dem Fehler "Ungültiger Scope"
+- Der nachgelagerte `self.write_scopes`-Check ist das korrekte und ausreichende Sicherheitsnetz
+- Review: Score 9/10, validate.sh 261/261 Tests bestanden
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert bef9835`
+
+---
+
+## 2026-03-13 — Fix: channels/skills/common im Admin-Interface Container
+
+**Aenderungen:**
+- `docker-compose.yml`: drei Read-Only Volume-Mounts beim `admin-interface` Service ergaenzt:
+  - `./channels:/app/channels:ro`
+  - `./skills:/app/skills:ro`
+  - `./common:/app/common:ro`
+- Analog zum bestehenden `./core:/app/core:ro` Mount
+
+**Entscheidungen:**
+- `module_registry.py` importiert channels/skills/common beim Start; ohne diese Mounts war `ModuleNotFoundError: No module named 'channels'` die Folge
+- Read-Only-Mount genuegt, da admin-interface diese Verzeichnisse nur liest
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert 8039f61`
+
+---
+
+## 2026-03-13 — Phase 3: Dynamisches Admin-Interface
+
+**Aenderungen:**
+- `admin-interface/main.py`: `GET /api/modules` gibt vollstaendige `config_schema` + `user_config_schema` zurueck; `GET /api/modules/config` liest Modul-Konfiguration aus `config.services.{id}.*`; `POST /api/modules/config` speichert Modul-Konfiguration
+- `admin-interface/static/js/modules.js` (neu): `loadModuleConfigTabs`, `saveModuleConfig`, `loadSkillsTab`, `loadModuleUserFields`
+- Config-Tab: neue Channel/Skill-Sub-Tabs erscheinen automatisch per JS
+- Skills-Haupttab: sichtbar wenn mindestens ein Skill registriert
+- User-Karten: dynamische Modul-Felder werden beim Ausklappen nachgeladen
+- `channels/telegram/channel.py`: `is_enabled()` liest jetzt aus `config.services.telegram.*`
+- `admin-interface/static/i18n/de.json` + `en.json`: `skills.*`-Block (6 Keys) + `tabs.skills` ergaenzt — Paritaet gewahrt (708 Keys)
+- XSS-Fix: `JSON.stringify(u)` in `onclick` jetzt korrekt durch `escAttr()` escaped
+
+**Entscheidungen:**
+- Ein neues Modul erscheint automatisch in der UI nach: (1) `channel.py`/`skill.py` schreiben, (2) in `module_registry.py` registrieren, (3) Admin-Interface neu starten — kein HTML/JS-Anfassen noetig
+- Konfigurationswerte unter `config.services.{id}.*` gespeichert: klar separiert von bestehenden Top-Level-Config-Feldern
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert 31030fc`
 
 ---
 
@@ -409,6 +679,87 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 - Status-Tab: neue Sektion "Fake-Ollama-Server (HA Voice)" mit Agent-Liste + Fehlergrund
 - i18n: 9 neue status.ollama_* Keys + status.no_agents (700 Keys, paritätisch)
 - Reviewer Score: 8/10 (1 Finding gefixt: fehlender no_agents Key)
+
+---
+
+## 2026-03-12 — Ollama-Compat-Endpoints aus Auth-Middleware ausgenommen
+
+**Aenderungen:**
+- `admin-interface/main.py`: `/api/tags`, `/api/chat`, `/api/version`, `/api/ps`, `/api/show` zu `_AUTH_EXEMPT_EXACT` hinzugefuegt
+
+**Entscheidungen:**
+- HA Voice Pipeline spricht den Fake-Ollama-Proxy ohne Auth-Header an — alle fuenf Ollama-kompatiblen Endpunkte muessen auth-frei sein, damit der Proxy erreichbar ist
+- Authentifizierung bleibt fuer alle anderen Endpunkte unveraendert aktiv
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert 5856cf5`
+
+---
+
+## 2026-03-12 — System-Prompts auf direkte Nutzeransprache umgestellt
+
+**Aenderungen:**
+- `instanzen/templates/user.md`: Identity-Sektion auf direkte Ansprache umgestellt ("You are currently speaking with {{DISPLAY_NAME}}"); Memory-Warnung als eigener Block in `## Memory Behavior`
+- `instanzen/templates/admin.md`: Time & Timezone und Web Search Sektionen ergaenzt (Paritaet mit user.md)
+- `instanzen/ha-assist/CLAUDE.md`, `instanzen/ha-advanced/CLAUDE.md`, `instanzen/haana-admin/CLAUDE.md`: Aus aktualisierten Templates regeneriert
+
+**Entscheidungen:**
+- "You are currently speaking with X" statt "You are HAANA's instance for X": direktere Formulierung vermeidet Dritte-Person-Selbstbeschreibung, wirkt natuerlicher in Konversationen
+- "I'm your HAANA assistant" statt Dritte-Person bei Model-Identity-Antworten: konsistenter Ich-Stil
+- Memory-Warnung als eigener Block: hoehere Sichtbarkeit, verhindert versehentliche Tool-Nutzung fuer Memory-Writes
+- admin.md Paritaet mit user.md: Admin-Instanz hat jetzt dieselben Zeitzone- und Web-Search-Instruktionen
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert 359380c`
+
+---
+
+## 2026-03-12 — Log-Verzeichnisse beim Startup anlegen
+
+**Commits:** 0afa2b4
+
+**Aenderungen:**
+- `admin-interface/main.py`: Im `lifespan`-Handler werden beim Start automatisch die Verzeichnisse `logs/conversations`, `logs/memory-ops`, `logs/dream` und `logs/errors` unterhalb von `HAANA_MEDIA_DIR` (Default `/media/haana`) angelegt. Eigentuemerschaft wird per `os.chown` auf `HAANA_UID` (Default `1000`) gesetzt. Fehler werden als WARNING geloggt, nicht als Exception.
+
+**Entscheidungen:**
+- Verhindert Permission-Fehler bei Neuinstallation und neuen Usern ohne manuelle Vorbereitung der Verzeichnisstruktur
+- `HAANA_UID` als Env-Variable statt Hardcoding, damit der Container flexibel auf unterschiedliche Host-UIDs reagiert
+
+**Offene Punkte:**
+- Kein offener Punkt.
+
+**Rollback:** `git revert 0afa2b4`
+
+---
+
+## 2026-03-12 — Embedding-Refactoring, HA Users Sync, UI-Fixes
+
+**Commits:** b6967f8
+
+**Aenderungen:**
+- `admin-interface/main.py`: Embedding-Config als benannte Liste (`embeddings[]`) statt einzelner Inline-Config; `process_manager.py` liest benanntes Embedding aus der Liste; HA-Companion-Registrierung gibt Personen-Liste zurueck und wird gecacht
+- `admin-interface/static/js/config.js`: Memory-Tab auf Dropdown-Auswahl des konfigurierten Embeddings vereinfacht; LLM/Provider Unsaved-State-Fix (DOM wird vor Re-Render synchronisiert); stale-DOM-Fix in `saveSectionLlms`; `resetSectionMemory` laed Embeddings neu vom Server
+- `admin-interface/static/js/users.js`: User-Formular: HA-Selector an Anfang verschoben, fuellt Anzeigename + ID automatisch aus; `claude.md`-Template-Feld entfernt (wird aus Rolle abgeleitet)
+- `admin-interface/templates/index.html`: HTML fuer neues Embedding-Dropdown + HA-User-Selector
+- `haana-addons/haana-companion/run.py`: Supervisor-Proxy-Call zum Abrufen der Personen-Liste bei Registrierung; Liste wird an HAANA uebergeben
+- `core/process_manager.py`: Liest benanntes Embedding aus `embeddings[]`-Liste; keine Inline-Config mehr
+- `admin-interface/static/i18n/de.json` + `en.json`: i18n-Keys fuer Embedding-Dropdown + HA-User-Selector ergaenzt
+- `tests/test_config.py`: Tests fuer neue Embedding-Listen-Struktur angepasst
+
+**Entscheidungen:**
+- Embedding als benannte Liste statt Inline-Config: ermoeglicht mehrere Embeddings (z.B. lokal + cloud), einfachere Auswahl im UI per Dropdown
+- Empty Default (kein vorkonfiguriertes fastembed): verhindert unbeabsichtigte Modell-Downloads bei Erstinstallation
+- HA-Personen-Liste vom Companion gecacht: HAANA kennt HA-Entitaeten ohne separaten API-Call; bleibt aktuell bei jedem Companion-Neustart
+- `claude.md`-Template aus User-Formular entfernt: Template wird vollstaendig aus der Rolle abgeleitet — weniger Redundanz, weniger Fehlerquellen
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert b6967f8`
 
 ---
 

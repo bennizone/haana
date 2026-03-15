@@ -10,6 +10,7 @@ Base-URL: `http://<host>:8080`
 | Bereich | Endpunkte |
 |---|---|
 | HTML | 1 |
+| Auth | 1 |
 | Instanzen | 6 |
 | Konversationen | 5 |
 | Logs | 4 |
@@ -21,7 +22,9 @@ Base-URL: `http://<host>:8080`
 | Verbindungstests | 3 |
 | HA Integration | 3 |
 | WhatsApp | 4 |
+| Dream | 1 |
 | User-Management | 5 |
+| Modul-Status | 1 |
 | Claude Auth | 8 |
 | SSE Events | 1 |
 | LLM-Modelle | 3 |
@@ -33,6 +36,17 @@ Base-URL: `http://<host>:8080`
 ### GET /
 **Beschreibung:** Liefert die SPA-Hauptseite (index.html).
 **Response:** HTML
+
+---
+
+## Auth
+
+### POST /api/auth/change-password
+**Beschreibung:** Aendert das Admin-Passwort. Die aktuelle Session wird als Authentifizierungsnachweis genutzt — `current_password` ist nicht erforderlich.
+**Auth:** Session required
+**Body:** `{"new_password": "..."}`
+**Response:** `{"ok": true}`
+**Hinweis:** Passwort-Bestaetigung erfolgt clientseitig (`sec-confirm-password`-Feld) vor dem Submit. Nach erfolgreichem Aendern sollte die Session invalidiert und neu eingeloggt werden.
 
 ---
 
@@ -288,16 +302,19 @@ Base-URL: `http://<host>:8080`
 
 ### GET /api/whatsapp-config
 **Beschreibung:** Liefert WhatsApp-Routing-Konfiguration fuer die Bridge (intern, wird von Bridge gepollt).
+**Auth:** Session required
 **Response:**
 ```json
 {
   "mode": "separate",
   "self_prefix": "!h ",
   "routes": [{"jid": "491234@s.whatsapp.net", "agent_url": "http://...", "user_id": "alice"}],
+  "lid_mappings": {"491234567890@lid": "491234567890"},
   "stt": {"ha_url": "...", "ha_token": "...", "stt_entity": "...", "stt_language": "de-DE"},
   "tts": {"ha_url": "...", "ha_token": "...", "tts_entity": "...", "tts_voice": "DeAmala"}
 }
 ```
+**Hinweis zu `lid_mappings`:** Mapping von WhatsApp LID (Linked Device ID) auf Telefonnummer. Wird beim `refreshConfig` der Bridge vorbelegt damit eingehende LID-Nachrichten sofort geroutet werden koennen. Der Cache ueberlebt keinen Container-Neustart — neue LIDs werden durch Auto-LID-Learning (bei erster eingehender Nachricht) automatisch ergaenzt und via `POST /api/users/whatsapp-lid` persistiert.
 
 ---
 
@@ -314,6 +331,18 @@ Base-URL: `http://<host>:8080`
 ### POST /api/whatsapp-logout
 **Beschreibung:** Proxy: WhatsApp-Session trennen.
 **Response:** `{"ok": true}`
+
+---
+
+## Dream
+
+### POST /api/dream/run/{instance}
+**Beschreibung:** Startet den Dream-Prozess (Memory-Konsolidierung + Tages-Zusammenfassung) fuer eine Instanz, optional fuer ein bestimmtes Datum.
+**Auth:** Session required
+**Parameter:** `instance` (Path) — Instanz-ID
+**Query-Parameter:** `date` (optional) — Format `YYYY-MM-DD`, Default: heute
+**Response:** `{"ok": true, "report": {"consolidated": 12, "contradictions": 2, "duration_s": 4.3}}`
+**Hinweis:** Der Dream-Prozess laeuft asynchron. Status kann via `GET /api/dream/status` abgefragt werden. Der Button im UI pollt alle 3s nach Abschluss (max. 30s). Ein Eintrag wird ins Tages-Tagebuch unter `/data/logs/dream/{instance}/YYYY-MM-DD.jsonl` geschrieben, auch wenn kein LLM-Summary erzeugt wurde (sofern `consolidated > 0` oder `cleaned > 0`).
 
 ---
 
@@ -358,6 +387,38 @@ Base-URL: `http://<host>:8080`
 ### POST /api/users/{user_id}/stop
 **Beschreibung:** Agent fuer einen User stoppen.
 **Response:** `{"ok": true}`
+
+---
+
+## Modul-Status
+
+### GET /api/modules/status
+**Beschreibung:** Aggregierter Status aller geladenen Module (Channels und Skills). Ruft `get_status_info()` jedes registrierten Moduls auf. Fehler in einzelnen Modulen werden abgefangen und als `"status": "error"` zurueckgegeben.
+**Auth:** Session required
+**Response:**
+```json
+[
+  {
+    "id": "whatsapp",
+    "display_name": "WhatsApp",
+    "type": "channel",
+    "status": "connected",
+    "label": "Verbunden",
+    "details": "Bridge-Status nicht geprueft",
+    "metrics": {"mode": "separate"}
+  },
+  {
+    "id": "ha_voice",
+    "display_name": "HA Voice",
+    "type": "channel",
+    "status": "connected",
+    "label": "Verbunden",
+    "details": "",
+    "metrics": {"mcp": "builtin", "stt": "stt.cloud", "tts": "tts.cloud"}
+  }
+]
+```
+**Status-Werte:** `connected` | `degraded` | `error` | `unconfigured` | `disabled`
 
 ---
 
