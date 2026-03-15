@@ -813,5 +813,9 @@
   "dashboard": {
     "loading": "Dashboard wird geladen...",
     "no_modules": "Keine Module konfiguriert"
+  },
+  "channel_page": {
+    "config_title": "Konfiguration",
+    "no_config": "Keine Konfigurationsfelder verfügbar."
   }
 }

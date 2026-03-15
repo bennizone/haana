@@ -10,10 +10,10 @@ const _PAGE_MAP = {
   'memory':       { panel: 'config', cfgTab: 'memory' },
   'providers':    { panel: 'config', cfgTab: 'providers' },
   'ha':           { panel: 'config', cfgTab: 'providers' },
-  'ch-whatsapp':  { panel: 'config', cfgTab: 'providers' },
-  'ch-ha_voice':  { panel: 'config', cfgTab: 'providers' },
-  'ch-telegram':  { panel: 'config', cfgTab: 'providers' },
-  'sk-kalender':  { panel: 'skills' },
+  'ch-whatsapp':  { panel: 'ch-whatsapp',  channelId: 'whatsapp' },
+  'ch-ha_voice':  { panel: 'ch-ha_voice',  channelId: 'ha_voice' },
+  'ch-telegram':  { panel: 'ch-telegram',  channelId: 'telegram' },
+  'sk-kalender':  { panel: 'sk-kalender',  channelId: 'kalender' },
   'users':        { panel: 'users' },
   'conversations':{ panel: 'conversations' },
   'logs':         { panel: 'conversations' },
@@ -53,6 +53,7 @@ function navigateTo(page) {
   if (map.panel === 'skills')        loadSkillsTab();
   if (map.panel === 'conversations') initConversationsView();
   if (map.panel === 'terminal')      loadDevProvider();
+  if (map.channelId)                 loadChannelPage(map.channelId);
 
   // Switch config sub-tab if needed
   if (map.cfgTab) {
@@ -122,6 +123,8 @@ async function loadDashboard() {
       return t('status.unconfigured') || 'Inaktiv';
     };
 
+    var channelIds = (data.channels || []).map(function(c) { return c.id; });
+
     var renderTile = function(m) {
       var sc = statusClass(m.status);
       var metrics = (m.metrics || []).slice(0, 3).map(function(x) {
@@ -130,13 +133,14 @@ async function loadDashboard() {
           '<span class="tile-metric-value">' + escHtml(x.value) + '</span>' +
           '</div>';
       }).join('');
+      var tileNav = channelIds.indexOf(m.id) >= 0 ? 'ch-' + m.id : 'sk-' + m.id;
       return '<div class="tile">' +
         '<div class="tile-header">' +
           '<span class="tile-title">' + escHtml(m.display_name) + '</span>' +
           '<span class="tile-status ' + sc + '">' + statusLabel(m.status) + '</span>' +
         '</div>' +
         (metrics ? '<div class="tile-metrics">' + metrics + '</div>' : '') +
-        '<button class="tile-action" onclick="navigateTo(\'providers\')"' +
+        '<button class="tile-action" onclick="navigateTo(\'' + escAttr(tileNav) + '\')"' +
           ' title="' + escAttr(t('status.configure') || 'Konfigurieren') + '">&#9881;</button>' +
         '</div>';
     };
@@ -147,6 +151,9 @@ async function loadDashboard() {
         ' data-i18n="dashboard.no_modules">Keine Module konfiguriert</div></div>';
     } else {
       grid.innerHTML = allModules.map(renderTile).join('');
+      loadCoreTiles().then(function(coreHtml) {
+        if (coreHtml) grid.innerHTML = coreHtml + grid.innerHTML;
+      });
     }
 
     _updateSidebarDots(data);
