@@ -5,6 +5,31 @@ Dieses Logbuch wird vom `docs`-Agenten gepflegt.
 
 ---
 
+## 2026-03-15 — status.js und test_dream.py aufgeteilt (400-Zeilen-Regel)
+
+**Aenderungen:**
+- `admin-interface/static/js/status.js` (413 Z.) aufgeteilt in:
+  - `status.js` (213 Z.) — Kern-Initialisierung, Metriken, Charts
+  - `status-dream.js` (139 Z.) — Dream-Prozess-UI (Status, Fortschritt, Logs)
+  - `status-agents.js` (64 Z.) — Agenten-Status-Anzeige
+- `admin-interface/templates/index.html`: Cache-Buster status.js v17 → v18, neue Script-Tags fuer status-dream.js + status-agents.js
+- `tests/test_dream.py` (476 Z.) aufgeteilt in:
+  - `tests/test_dream_process.py` (264 Z.) — Dream-Prozess-Tests
+  - `tests/test_dream_utils.py` (221 Z.) — Utility-Funktionen-Tests
+- Toter Import `core.dream` aus `test_dream_utils.py` entfernt
+
+**Entscheidungen:**
+- Aufteilung strikt nach 400-Zeilen-Regel aus CLAUDE.md
+- Logische Trennung: Dream-UI separat, Agenten-UI separat, Core separat
+- Commit: `c8fc2af`
+
+**Offene Punkte:**
+- Keine
+
+**Rollback:** `git revert c8fc2af`
+
+---
+
 ## 2026-03-15 — haana-plan-v7-final.md vollstaendig aktualisiert
 
 **Aenderungen:**
