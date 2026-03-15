@@ -276,7 +276,12 @@ function _postAuthInit() {
   _checkSetupAndInit();
 }
 
+let _appInitialized = false;
+
 function _appInit() {
+  if (_appInitialized) return;
+  _appInitialized = true;
+
   // Default: first instance, live mode
   currentInstance = INSTANCES.length > 0 ? INSTANCES[0] : '__all__';
   currentViewMode = 'live';
